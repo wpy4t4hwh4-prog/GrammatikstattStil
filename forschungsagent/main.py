@@ -52,6 +52,9 @@ Regeln (ANTI-HALLUZINATION, strikt einzuhalten):
 - Wenn ein Tool einen Fehler liefert oder ein Fakt nicht belegt ist: sage ausdruecklich "Das kann ich nicht belegen" bzw. "Das Tool hat einen Fehler gemeldet" - nie eine plausible Erklaerung erfinden.
 - Rufe Tools tatsaechlich aus, bevor du antwortest. Eine Antwort ohne Tool-Call ist nur zulaessig, wenn die Frage rein aus dem Gespraechskontext beantwortbar ist.
 - Zitiere Tool-Ergebnisse wörtlich, wenn du IDs/Status nennst.
+- VERPFLICHTENDE ARBEITSWEISE FUER WORTLICHE ZITATE: Bevor du einen Text als wörtliches Zitat ausgibst, MUSST du zitat_pruefen aufrufen und found=True erhalten. Ohne found=True darfst du NICHTS als wörtlich zitieren - dann paraphrasieren und als Paraphrase kennzeichnen oder in offene_punkte aufnehmen.
+- Zitate aus PDFs/Dokumenten immer gegen den exakten Volltext (text_content) prüfen, nie gegen RAG-Zusammenfassungen oder das Gedaechtnis.
+- Wörtliche Zitate landen im Feld verbatim_zitate (mit quelle + geprueft_mit), nie inline als erfundenes Zitat.
 
 Regeln:
 - Antworte auf Deutsch.
@@ -106,6 +109,13 @@ class ResearchAnswer(BaseModel):
     belegte_aussagen: list[BelegteAussage] = Field(default_factory=list, description="Alle faktischen Aussagen mit Pflichtquelle.")
     deutungen: list[str] = Field(default_factory=list, description="Eigene Einordnungen, klar als Deutung markiert.")
     offene_punkte: list[str] = Field(default_factory=list, description="Ungeklaerte Fragen / nicht belegbare Punkte.")
+    verbatim_zitate: list[VerbatimZitat] = Field(default_factory=list, description="Alle wörtlichen Zitate, jeweils per zitat_pruefen verifiziert. Leer lassen, wenn keins verifiziert ist.")
+
+
+class VerbatimZitat(BaseModel):
+    text: str = Field(description="WORTLICHES Zitat - ausschliesslich Copy-Paste aus einem Tool-Ergebnis (zitat_pruefen/text_content), niemals aus dem Gedaechtnis.")
+    quelle: str = Field(description="Dokumentname + Dokument-ID oder Titel + URL.")
+    geprueft_mit: str = Field(description="Name des Tools, mit dem das Zitat verifiziert wurde (z. B. zitat_pruefen).")
 
 
 @agents.tool
@@ -219,9 +229,27 @@ async def research_note_ablegen(
     }
 
 
+@agents.tool
+async def zitat_pruefen(
+    library_id: Annotated[str, Field(description="ID der Library, z. B. 01a1843c-f463-71db-a3fe-ae8b3814f155 (Grammatik statt Stil) oder 01a182d2-0a6f-762d-9fc3-a4150e53e3be (Katalogstadt).")],
+    document_id: Annotated[str, Field(description="Dokument-ID in dieser Library.")],
+    zitat: Annotated[str, Field(description="Das angebliche wörtliche Zitat, das geprueft werden soll.")],
+) -> dict:
+    """PFLICHT vor jedem wörtlichen Zitat: prueft per Substring-Suche im exakten Dokument-Volltext (text_content), ob das Zitat dort vorkommt. Ergebnis: found True/False + Fundstelle. NIEMALS ein Zitat als wörtlich ausgeben ohne found=True."""
+    client = _client()
+    content = await client.beta.libraries.documents.text_content_async(library_id=library_id, document_id=document_id)
+    text = getattr(content, "text", None) or str(content)
+    import re
+    norm = lambda s: re.sub(r"\s+", " ", s).strip()
+    found = norm(zitat) in norm(text)
+    idx = norm(text).find(norm(zitat))
+    kontext = norm(text)[max(0, idx-120): idx+len(norm(zitat))+120] if found else None
+    return {"found": found, "zitat": zitat, "kontext": kontext}
+
+
 agent = agents.Agent(
     model="mistral-large-latest",
-    temperature=0.1,
+    temperature=0.0,
     tool_errors="show",
     output_type=ResearchAnswer,
     name="grammatik-statt-stil-research",
@@ -236,6 +264,7 @@ agent = agents.Agent(
         projektquellen_suchen,
         ablage_durchsuchen,
         projektdateien_auflisten,
+        zitat_pruefen,
         research_note_ablegen,
     ],
     max_iterations=40,
