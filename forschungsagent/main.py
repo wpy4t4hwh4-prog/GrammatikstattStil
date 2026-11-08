@@ -86,7 +86,7 @@ def _client():
     key = os.environ.get("MISTRAL_API_KEY")
     if key:
         return get_mistral_client(api_key=key)
-    return _client()
+    return get_mistral_client(run_as="auto")
 
 
 @agents.tool
