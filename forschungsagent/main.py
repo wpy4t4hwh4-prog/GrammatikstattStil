@@ -222,7 +222,6 @@ async def research_note_ablegen(
 agent = agents.Agent(
     model="mistral-large-latest",
     temperature=0.1,
-    reasoning_effort="medium",
     tool_errors="show",
     output_type=ResearchAnswer,
     name="grammatik-statt-stil-research",
