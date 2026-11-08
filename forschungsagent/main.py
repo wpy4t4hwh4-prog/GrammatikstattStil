@@ -96,6 +96,18 @@ def _client():
     return get_mistral_client(run_as="auto")
 
 
+class BelegteAussage(BaseModel):
+    aussage: str = Field(description="Faktische Aussage, die ausschliesslich auf einem Tool-Ergebnis oder einer Quelle beruht.")
+    quelle: str = Field(description="Konkrete Quelle: Dokumentname/ID oder Titel + URL. Nie leer, nie erfunden.")
+
+
+class ResearchAnswer(BaseModel):
+    zusammenfassung: str = Field(description="Praegnanate Zusammenfassung der Antwort.")
+    belegte_aussagen: list[BelegteAussage] = Field(default_factory=list, description="Alle faktischen Aussagen mit Pflichtquelle.")
+    deutungen: list[str] = Field(default_factory=list, description="Eigene Einordnungen, klar als Deutung markiert.")
+    offene_punkte: list[str] = Field(default_factory=list, description="Ungeklaerte Fragen / nicht belegbare Punkte.")
+
+
 @agents.tool
 async def web_recherche(
     query: Annotated[str, Field(description="Präzise Such-/Recherchefrage auf Deutsch oder Englisch.")],
@@ -210,6 +222,9 @@ async def research_note_ablegen(
 agent = agents.Agent(
     model="mistral-large-latest",
     temperature=0.1,
+    reasoning_effort="medium",
+    tool_errors="show",
+    output_type=ResearchAnswer,
     name="grammatik-statt-stil-research",
     description=(
         "Forschungsagent für das TU-Wien-Projekt „Grammatik statt Stil“: recherchiert Quellen, "
