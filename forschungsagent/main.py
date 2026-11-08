@@ -4,7 +4,7 @@ from typing import Annotated
 from mistralai import agents
 from mistralai.client.models import File
 from mistralai.workflows.client import get_mistral_client
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 PROJECT_LIBRARY_ID = "01a1843c-f463-71db-a3fe-ae8b3814f155"
 CATALOG_LIBRARY_ID = "01a182d2-0a6f-762d-9fc3-a4150e53e3be"
