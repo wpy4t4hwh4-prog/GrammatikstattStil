@@ -209,6 +209,7 @@ async def research_note_ablegen(
 
 agent = agents.Agent(
     model="mistral-large-latest",
+    temperature=0.1,
     name="grammatik-statt-stil-research",
     description=(
         "Forschungsagent für das TU-Wien-Projekt „Grammatik statt Stil“: recherchiert Quellen, "
