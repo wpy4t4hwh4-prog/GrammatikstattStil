@@ -83,7 +83,7 @@ def _extract_conversation(response) -> dict:
 
 def _client():
     """Mistral client: explicit workspace API key (user identity) wins over the worker SA token."""
-    key = os.environ.get("MISTRAL_API_KEY")
+    key = os.environ.get("PROJECT_MISTRAL_API_KEY")
     if key:
         return get_mistral_client(api_key=key)
     return get_mistral_client(run_as="auto")
