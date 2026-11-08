@@ -104,18 +104,17 @@ class BelegteAussage(BaseModel):
     quelle: str = Field(description="Konkrete Quelle: Dokumentname/ID oder Titel + URL. Nie leer, nie erfunden.")
 
 
+class VerbatimZitat(BaseModel):
+    text: str = Field(description="WORTLICHES Zitat - ausschliesslich Copy-Paste aus einem Tool-Ergebnis (zitat_pruefen/text_content), niemals aus dem Gedaechtnis.")
+    quelle: str = Field(description="Dokumentname + Dokument-ID oder Titel + URL.")
+    geprueft_mit: str = Field(description="Name des Tools, mit dem das Zitat verifiziert wurde (z. B. zitat_pruefen).")
+
 class ResearchAnswer(BaseModel):
     zusammenfassung: str = Field(description="Praegnanate Zusammenfassung der Antwort.")
     belegte_aussagen: list[BelegteAussage] = Field(default_factory=list, description="Alle faktischen Aussagen mit Pflichtquelle.")
     deutungen: list[str] = Field(default_factory=list, description="Eigene Einordnungen, klar als Deutung markiert.")
     offene_punkte: list[str] = Field(default_factory=list, description="Ungeklaerte Fragen / nicht belegbare Punkte.")
     verbatim_zitate: list[VerbatimZitat] = Field(default_factory=list, description="Alle wörtlichen Zitate, jeweils per zitat_pruefen verifiziert. Leer lassen, wenn keins verifiziert ist.")
-
-
-class VerbatimZitat(BaseModel):
-    text: str = Field(description="WORTLICHES Zitat - ausschliesslich Copy-Paste aus einem Tool-Ergebnis (zitat_pruefen/text_content), niemals aus dem Gedaechtnis.")
-    quelle: str = Field(description="Dokumentname + Dokument-ID oder Titel + URL.")
-    geprueft_mit: str = Field(description="Name des Tools, mit dem das Zitat verifiziert wurde (z. B. zitat_pruefen).")
 
 
 @agents.tool
