@@ -95,7 +95,7 @@ async def web_recherche(
         "Fasse die wichtigsten Befunde stichpunktartig zusammen (max. 15 Punkte), nenne "
         "dabei stets die Quelle. Liste am Ende alle verwendeten Quellen als „Titel — URL“."
     )
-    client = get_mistral_client(run_as="AUTO")
+    client = get_mistral_client(run_as="auto")
     response = await client.beta.conversations.start_async(
         model=SUBMODEL,
         inputs=[{"role": "user", "content": prompt}],
@@ -109,7 +109,7 @@ async def projektquellen_suchen(
     query: Annotated[str, Field(description="Frage oder Suchbegriff, der in den Projekt-Dokumenten (Essay, Entwurf, Reports, Literaturliste) gesucht werden soll.")],
 ) -> dict:
     """Durchsucht die beiden Projekt-Libraries („Grammatik statt Stil Bibliothek" und „Katalogstadt – Emerging Fields in Architecture“) per RAG und beantwortet quellenbasiert mit Dokument-Angaben."""
-    client = get_mistral_client(run_as="AUTO")
+    client = get_mistral_client(run_as="auto")
     response = await client.beta.conversations.start_async(
         model=SUBMODEL,
         instructions=(
@@ -133,7 +133,7 @@ async def ablage_durchsuchen(
     query: Annotated[str, Field(description="Wonach in den bereits vom Agenten abgelegten Research-Notizen gesucht werden soll.")],
 ) -> dict:
     """Durchsucht die Ablage-Library mit den bisherigen Research-Notizen des Agenten (Research-Ablage), um frühere Ergebnisse wiederzuverwenden."""
-    client = get_mistral_client(run_as="AUTO")
+    client = get_mistral_client(run_as="auto")
     response = await client.beta.conversations.start_async(
         model=SUBMODEL,
         instructions=(
@@ -149,7 +149,7 @@ async def ablage_durchsuchen(
 @agents.tool
 async def projektdateien_auflisten() -> dict:
     """Listet die Dokumente der beiden Projekt-Libraries mit Namen, ID und Verarbeitungsstatus auf."""
-    client = get_mistral_client(run_as="AUTO")
+    client = get_mistral_client(run_as="auto")
     result: dict[str, list[dict]] = {}
     for label, library_id in (
         ("grammatik_statt_stil_bibliothek", PROJECT_LIBRARY_ID),
@@ -177,7 +177,7 @@ async def research_note_ablegen(
     """Legt eine Research-Notiz systematisch in der Ablage-Library „Grammatik statt Stil – Research-Ablage (Agent)“ ab und gibt die Dokument-ID zurück."""
     slug = "".join(ch if ch.isalnum() else "-" for ch in titel.lower()).strip("-")
     filename = f"{slug[:80] or 'notiz'}.md"
-    client = get_mistral_client(run_as="AUTO")
+    client = get_mistral_client(run_as="auto")
     header = f"# {titel}\n\n- Thema: {thema}\n- Ablage: Research-Agent „Grammatik statt Stil“\n\n"
     document = await client.beta.libraries.documents.upload_async(
         library_id=NOTES_LIBRARY_ID,
