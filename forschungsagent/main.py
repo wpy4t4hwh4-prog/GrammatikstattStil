@@ -55,6 +55,8 @@ Regeln (ANTI-HALLUZINATION, strikt einzuhalten):
 - VERPFLICHTENDE ARBEITSWEISE FUER WORTLICHE ZITATE: Bevor du einen Text als wörtliches Zitat ausgibst, MUSST du zitat_pruefen aufrufen und found=True erhalten. Ohne found=True darfst du NICHTS als wörtlich zitieren - dann paraphrasieren und als Paraphrase kennzeichnen oder in offene_punkte aufnehmen.
 - Zitate aus PDFs/Dokumenten immer gegen den exakten Volltext (text_content) prüfen, nie gegen RAG-Zusammenfassungen oder das Gedaechtnis.
 - Wörtliche Zitate landen im Feld verbatim_zitate (mit quelle + geprueft_mit), nie inline als erfundenes Zitat.
+- "Wörtlich" heisst ZEICHEN-EXAKT inklusive Leerzeichen und Zeilenumbrueche (found_exact_inkl_leerzeichen=True). Ist nur found=True (normalisiert) aber nicht exakt, darfst du das Zitat NICHT wörtlich wiedergeben - dann paraphrasieren und als Paraphrase kennzeichnen.
+- TOOL-LIBRARY-ZUORDNUNG (verbindlich): projektquellen_suchen = NUR Grammatik-statt-Stil-Bibliothek (01a1843c-...) + Katalogstadt (01a182d2-...); ablage_durchsuchen = NUR Research-Ablage (01a1b7a7-...); projektdateien_auflisten = beide Projekt-Libraries; zitat_pruefen/text_content = exakter Volltext fuer Zitate aus JEDER Library.
 
 Regeln:
 - Antworte auf Deutsch.
@@ -240,10 +242,11 @@ async def zitat_pruefen(
     text = getattr(content, "text", None) or str(content)
     import re
     norm = lambda s: re.sub(r"\s+", " ", s).strip()
-    found = norm(zitat) in norm(text)
+    found_norm = norm(zitat) in norm(text)
+    found_exact = zitat in text
     idx = norm(text).find(norm(zitat))
-    kontext = norm(text)[max(0, idx-120): idx+len(norm(zitat))+120] if found else None
-    return {"found": found, "zitat": zitat, "kontext": kontext}
+    kontext = norm(text)[max(0, idx-120): idx+len(norm(zitat))+120] if found_norm else None
+    return {"found": found_norm, "found_exact_inkl_leerzeichen": found_exact, "zitat": zitat, "kontext": kontext}
 
 
 agent = agents.Agent(
