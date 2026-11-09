@@ -321,12 +321,23 @@ class QuoteAuditHook(agents.Hook):
     async def pre_agent_turn(self, ctx, request):
         self.verified = []
         self.tools_called = []
+        self.tool_texts = []
         self.retries = 0
         return None
+
+    tool_texts: list[str] = Field(default_factory=list)
 
     async def post_tool_call(self, ctx, result):
         name = getattr(result, "tool_name", "")
         self.tools_called = self.tools_called + [name]
+        tr = getattr(result, "tool_result", None)
+        txt = ""
+        content = getattr(tr, "content", None) or []
+        for b in content:
+            txt += getattr(b, "text", "") or ""
+        if not txt:
+            txt = str(tr)
+        self.tool_texts = self.tool_texts + [txt[:20000]]
         if name in ("zitat_pruefen", "web_zitat_pruefen"):
             tr = getattr(result, "tool_result", None)
             txt = ""
@@ -365,6 +376,12 @@ class QuoteAuditHook(agents.Hook):
         neg_words = ["nicht gefunden", "nicht lesbar", "nicht existiert", "nicht auffindbar", "keine treffer"]
         if any(w in all_text.lower() for w in neg_words) and not (set(self.tools_called) & search_tools):
             problems.append("Negativbefund ohne Such-Tool-Call im selben Turn")
+        ids_in_answer = set(_re.findall(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", all_text))
+        tool_blob = _norm(" ".join(self.tool_texts))
+        if any(w in all_text.lower() for w in neg_words):
+            for i in ids_in_answer:
+                if _norm(i) in tool_blob:
+                    problems.append("Widerspruch: ID " + i + " im Tool-Ergebnis vorhanden, aber als nicht gefunden gemeldet")
         if not problems:
             return None
         feedback = ("VERBOTEN: " + " | ".join(problems) +
