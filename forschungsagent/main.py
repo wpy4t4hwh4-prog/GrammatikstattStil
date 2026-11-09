@@ -228,7 +228,7 @@ async def _resolve_library(client, library_id: str, document_id: str) -> str:
 
 @agents.tool
 async def web_recherche(
-    query: Annotated[str, Field(description="Präzise Such-/Recherchefrage auf Deutsch oder Englisch.")],
+    query: Annotated[str, Field(description="Präzise Such-/Recherchefrage.")] = "",
     kontext: Annotated[str, Field(description="Kontext aus dem Projekt, damit die Suche zielgerichtet ist.")] = "",
 ) -> dict:
     """Recherchiert eigenständig im Web zu einer Frage zum Projekt „Grammatik statt Stil" und liefert Befunde mit Quellen (Titel + URL)."""
@@ -318,11 +318,13 @@ async def projektdateien_auflisten() -> dict:
 
 @agents.tool
 async def research_note_ablegen(
-    titel: Annotated[str, Field(description="Titel der Notiz (kurz, eindeutig).")],
-    thema: Annotated[str, Field(description="Thema/Stichwort, z. B. Shape Grammars Stiny, Haussmann Paris, K4-Blocker.")],
-    markdown: Annotated[str, Field(description="Vollständiger Notiztext als Markdown mit den Abschnitten: Fragestellung, Quellen, Befunde, Analyse/Kontext, Vergleich, Synthese, Offene Punkte.")],
+    titel: Annotated[str, Field(description="Titel der Notiz (kurz, eindeutig).")] = "",
+    thema: Annotated[str, Field(description="Thema/Stichwort.")] = "",
+    markdown: Annotated[str, Field(description="Vollständiger Notiztext als Markdown.")] = "",
 ) -> dict:
     """Legt eine Research-Notiz systematisch in der Ablage-Library „Grammatik statt Stil – Research-Ablage (Agent)“ ab und gibt die Dokument-ID zurück."""
+    if not titel or not markdown:
+        return {"fehler": "titel/markdown fehlen - beide aus der Aufgabe entnehmen, nie leer lassen."}
     slug = "".join(ch if ch.isalnum() else "-" for ch in titel.lower()).strip("-")
     filename = f"{slug[:80] or 'notiz'}.md"
     client = _client()
@@ -342,7 +344,7 @@ async def research_note_ablegen(
 @agents.tool
 async def zitat_pruefen(
     document_id: Annotated[str, Field(description="Dokument-ID.")],
-    zitat: Annotated[str, Field(description="Das angebliche wörtliche Zitat, das geprueft werden soll.")],
+    zitat: Annotated[str, Field(description="Das angebliche wörtliche Zitat, das geprueft werden soll.")] = "",
     library_id: Annotated[str, Field(description="Optional: Library-ID aus bibliotheken_auflisten. Wenn leer, automatische Aufloesung ueber alle 4 Libraries.")] = "",
 ) -> dict:
     """PFLICHT vor jedem wörtlichen Zitat: prueft per Substring-Suche im exakten Dokument-Volltext (text_content), ob das Zitat dort vorkommt. Ergebnis: found True/False + Fundstelle. NIEMALS ein Zitat als wörtlich ausgeben ohne found=True."""
@@ -374,7 +376,7 @@ async def dokument_lesen(
 
 @agents.tool
 async def web_zitat_pruefen(
-    url: Annotated[str, Field(description="URL der Quelle, aus der zitiert werden soll.")],
+    url: Annotated[str, Field(description="URL der Quelle, aus der zitiert werden soll.")] = "",
     zitat: Annotated[str, Field(description="Das angebliche wörtliche Zitat.")],
 ) -> dict:
     """PFLICHT vor jedem wörtlichen Zitat aus einer WEBQUELLE: laedt die Seite und prueft per Substring-Suche, ob das Zitat dort vorkommt. found=True erforderlich, sonst nicht als wörtlich ausgeben."""
@@ -437,6 +439,13 @@ class QuoteAuditHook(agents.Hook):
         ids = _re.findall(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", txt)
         import hashlib
         self.tool_texts = (self.tool_texts + ids + [hashlib.sha256(txt.encode()).hexdigest()[:16]])[:200]
+        m403 = _re.search(r"no access on library ([0-9a-f-]{36})", txt)
+        if m403 and m403.group(1) not in {"01a1843c-f463-71db-a3fe-ae8b3814f155", "01a182d2-0a6f-762d-9fc3-a4150e53e3be", "01a1b7a7-d3b3-7603-9601-7efb317d38ee", "01a1c18b-fe93-75a4-8c2b-871c9f112cd9"}:
+            try:
+                from mistralai.vibe_agents.sdk.authoring import hooks as _h
+                return _h.PostToolCallHookContinue(tool_result=type(tr)(content=[type(b)(type="text", text="FEHLER: Library-ID " + m403.group(1) + " unbekannt. Nutze bibliotheken_auflisten fuer echte Library-IDs oder dokument_finden zur Aufloesung der Dokument-ID.") for b in (getattr(tr, "content", None) or [])]))
+            except Exception:
+                pass
         if name in ("zitat_pruefen", "web_zitat_pruefen"):
             tr = getattr(result, "tool_result", None)
             txt = ""
@@ -519,7 +528,7 @@ class QuoteAuditHook(agents.Hook):
 
 @agents.tool
 async def doi_pruefen(
-    doi: Annotated[str, Field(description="DOI, z. B. 10.1016/j.autcon.2008.09.006. Muss aus einer Tool-Quelle stammen, nie getippt.")],
+    doi: Annotated[str, Field(description="DOI, z. B. 10.1016/j.autcon.2008.09.006.")] = "",
 ) -> dict:
     """PFLICHT vor jeder DOI-Angabe: loest den DOI ueber doi.org auf und liefert Titel/Autoren/Jahr. Falsch transkribierte DOIs (z. B. vertauschte Ziffern) werden so erkannt."""
     import httpx
@@ -555,10 +564,12 @@ async def url_status_pruefen(
 @agents.tool
 async def in_dokument_suchen(
     document_id: Annotated[str, Field(description="Dokument-ID.")],
-    begriff: Annotated[str, Field(description="Suchbegriff (Substring, case-insensitive).")],
+    begriff: Annotated[str, Field(description="Suchbegriff (Substring, case-insensitive).")] = "",
     library_id: Annotated[str, Field(description="Optional: Library-ID. Wenn leer, automatische Aufloesung.")] = "",
 ) -> dict:
     """Grep-aehnliche Suche im exakten Volltext eines Library-Dokuments. Liefert alle Treffer mit Kontext. Deterministisch - nutze das statt RAG fuer exakte Nachweise."""
+    if not begriff or not document_id:
+        return {"fehler": "begriff und document_id fehlen - beide aus der Aufgabe/Tool-Ausgabe entnehmen."}
     client = _client()
     library_id = await _resolve_library(client, library_id, document_id)
     content = await client.beta.libraries.documents.text_content_async(library_id=library_id, document_id=document_id)
@@ -584,9 +595,11 @@ async def bibliotheken_auflisten() -> dict:
 
 @agents.tool
 async def dokument_finden(
-    document_id: Annotated[str, Field(description="Dokument-ID (UUID) - wird automatisch ueber ALLE Libraries aufgeloest.")],
+    document_id: Annotated[str, Field(description="Dokument-ID (UUID) - wird automatisch ueber ALLE Libraries aufgeloest.")] = "",
 ) -> dict:
     """Loest eine Dokument-ID automatisch ueber alle 4 Libraries auf (Apparat, Grammatik-statt-Stil, Katalogstadt, Research-Ablage) und liefert die korrekte library_id + Name. IMMER vor dokument_lesen/zitat_pruefen mit einer Dokument-ID verwenden (E7/E3)."""
+    if not document_id:
+        return {"fehler": "document_id fehlt - nur echte Dokument-IDs aus Tool-Ausgaben verwenden (dokument_finden/projektdateien_auflisten), nie raten."}
     client = _client()
     libs = [APPARAT_LIBRARY_ID, PROJECT_LIBRARY_ID, CATALOG_LIBRARY_ID, NOTES_LIBRARY_ID]
     for lib in libs:
