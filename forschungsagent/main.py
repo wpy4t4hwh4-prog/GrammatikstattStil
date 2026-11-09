@@ -309,22 +309,24 @@ def _norm(s: str) -> str:
 
 
 class QuoteAuditHook(agents.Hook):
-    """Sichert wörtliche Zitate ab: sammelt in post_tool_call die mit zitat_pruefen/web_zitat_pruefen
-    verifizierten Zitate (found=True) und prueft in post_agent_turn jedes verbatim_zitate-Eintrag.
-    Unverifiziertes Zitat -> Retry mit Feedback (max 2), dann Reject. Abrufsperren (403/fehler)
-    gelten als 'nicht pruefbar', nicht als Widerlegung."""
+    """Sichert Zitate UND Negativbefunde ab. Pro Turn (State wird in pre_agent_turn zurueckgesetzt):
+    - sammelt verifizierte Zitate (zitat_pruefen/web_zitat_pruefen found=True) und alle Tool-Calls
+    - post_agent_turn: unverifizierte verbatim_zitate ODER Negativbefund ("nicht gefunden"/"nicht lesbar"/
+      "nicht existiert") ohne Such-Tool-Call im selben Turn -> Retry mit Feedback (max 2), dann Reject."""
 
     verified: list[dict] = Field(default_factory=list)
+    tools_called: list[str] = Field(default_factory=list)
     retries: int = 0
 
     async def pre_agent_turn(self, ctx, request):
-        # State pro Turn zuruecksetzen: deterministisch, keine Turn-Grenzen-Ueberdauer
         self.verified = []
+        self.tools_called = []
         self.retries = 0
         return None
 
     async def post_tool_call(self, ctx, result):
         name = getattr(result, "tool_name", "")
+        self.tools_called = self.tools_called + [name]
         if name in ("zitat_pruefen", "web_zitat_pruefen"):
             tr = getattr(result, "tool_result", None)
             txt = ""
@@ -349,26 +351,30 @@ class QuoteAuditHook(agents.Hook):
         try:
             data = _json.loads(text)
         except Exception:
-            return None
+            data = None
         if not isinstance(data, dict):
             return None
+        problems = []
         quotes = data.get("verbatim_zitate") or []
-        bad = []
         for q in quotes:
             qt = _norm(str(q.get("text", "")))
-            if not qt:
-                continue
-            if not any(qt == v["text"] for v in self.verified):
-                bad.append(q.get("text", "")[:120])
-        if not bad:
+            if qt and not any(qt == v["text"] for v in self.verified):
+                problems.append("unverifiziertes Zitat: " + qt[:100])
+        search_tools = {"dokument_lesen", "zitat_pruefen", "web_zitat_pruefen", "ablage_durchsuchen", "projektquellen_suchen", "projektdateien_auflisten", "web_recherche"}
+        all_text = _norm(str(data.get("zusammenfassung", "")) + " " + str(data.get("offene_punkte", "")) + " " + str(data.get("belegte_aussagen", "")))
+        neg_words = ["nicht gefunden", "nicht lesbar", "nicht existiert", "nicht auffindbar", "keine treffer"]
+        if any(w in all_text.lower() for w in neg_words) and not (set(self.tools_called) & search_tools):
+            problems.append("Negativbefund ohne Such-Tool-Call im selben Turn")
+        if not problems:
             return None
-        feedback = ("VERBOTEN: wörtliche Zitate ohne Verifikation: " + " | ".join(bad) +
-                    ". Regel: Jedes verbatim_zitate muss mit zitat_pruefen/web_zitat_pruefen in DIESEM Turn found=True erhalten. "
-                    "Nicht verifizierte Zitate entfernen oder in offene_punkte verschieben.")
+        feedback = ("VERBOTEN: " + " | ".join(problems) +
+                    ". Regeln: wörtliche Zitate nur mit zitat_pruefen/web_zitat_pruefen found=True in DIESEM Turn; "
+                    "Negativbefunde nur nach dokument_lesen/ablage_durchsuchen/projektquellen_suchen/projektdateien_auflisten-Call mit dokumentiertem Ergebnis in double_check.")
         if self.retries < 2:
             self.retries = self.retries + 1
             return agents.PostAgentTurnHookRetry(feedback=[agents.TextContentBlock(text=feedback)])
         return agents.PostAgentTurnHookReject(reason=[agents.TextContentBlock(text="Turn abgelehnt: " + feedback)])
+
 
 
 agent = agents.Agent(
