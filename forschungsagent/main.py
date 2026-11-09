@@ -390,6 +390,14 @@ class QuoteAuditHook(agents.Hook):
     tools_called: list[str] = Field(default_factory=list)
     retries: int = 0
 
+    KNOWN_TOOLS = {"web_recherche", "projektquellen_suchen", "ablage_durchsuchen", "projektdateien_auflisten", "bibliotheken_auflisten", "dokument_finden", "research_note_ablegen", "zitat_pruefen", "web_zitat_pruefen", "dokument_lesen", "doi_pruefen", "url_status_pruefen", "in_dokument_suchen"}
+
+    async def pre_tool_call(self, ctx, call):
+        name = getattr(call, "tool_name", "")
+        if name and name not in self.KNOWN_TOOLS:
+            return _authoring_hooks.skip("Dieses Tool existiert nicht: " + name + ". Verfügbare Tools: " + ", ".join(sorted(self.KNOWN_TOOLS)))
+        return None
+
     async def pre_agent_turn(self, ctx, request):
         self.verified = []
         self.tools_called = []
@@ -557,6 +565,22 @@ async def bibliotheken_auflisten() -> dict:
     return {"bibliotheken": [{"id": l.id, "name": l.name} for l in items]}
 
 
+@agents.tool
+async def dokument_finden(
+    document_id: Annotated[str, Field(description="Dokument-ID (UUID) - wird automatisch ueber ALLE Libraries aufgeloest.")],
+) -> dict:
+    """Loest eine Dokument-ID automatisch ueber alle 4 Libraries auf (Apparat, Grammatik-statt-Stil, Katalogstadt, Research-Ablage) und liefert die korrekte library_id + Name. IMMER vor dokument_lesen/zitat_pruefen mit einer Dokument-ID verwenden (E7/E3)."""
+    client = _client()
+    libs = [APPARAT_LIBRARY_ID, PROJECT_LIBRARY_ID, CATALOG_LIBRARY_ID, NOTES_LIBRARY_ID]
+    for lib in libs:
+        try:
+            doc = await client.beta.libraries.documents.get_async(library_id=lib, document_id=document_id)
+            return {"document_id": document_id, "library_id": lib, "name": doc.name, "status": doc.processing_status}
+        except Exception:
+            continue
+    return {"document_id": document_id, "library_id": None, "gefunden": False}
+
+
 agent = agents.Agent(
     model="mistral-large-latest",
     temperature=0.0,
@@ -578,6 +602,7 @@ agent = agents.Agent(
         ablage_durchsuchen,
         projektdateien_auflisten,
         bibliotheken_auflisten,
+        dokument_finden,
         zitat_pruefen,
         dokument_lesen,
         web_zitat_pruefen,
