@@ -385,6 +385,11 @@ class QuoteAuditHook(agents.Hook):
             for i in ids_in_answer:
                 if _norm(i) in tool_blob:
                     problems.append("Widerspruch: ID " + i + " im Tool-Ergebnis vorhanden, aber als nicht gefunden gemeldet")
+        # 4. "gesichert" ohne Such-Tool-Call im selben Turn ist unzulaessig
+        for a in data.get("belegte_aussagen") or []:
+            if isinstance(a, dict) and "gesichert" in str(a.get("evidenzgrad", "")).lower():
+                if not (set(self.tools_called) & search_tools):
+                    problems.append("evidenzgrad=gesichert ohne Such-Tool-Call im selben Turn: " + str(a.get("aussage", ""))[:100])
         if not problems:
             return None
         feedback = ("VERBOTEN: " + " | ".join(problems) +
