@@ -337,8 +337,8 @@ async def research_note_ablegen(
 @agents.tool
 async def zitat_pruefen(
     document_id: Annotated[str, Field(description="Dokument-ID.")],
-    library_id: Annotated[str, Field(description="Optional: Library-ID aus bibliotheken_auflisten. Wenn leer, automatische Aufloesung ueber alle 4 Libraries.")] = "",
     zitat: Annotated[str, Field(description="Das angebliche wörtliche Zitat, das geprueft werden soll.")],
+    library_id: Annotated[str, Field(description="Optional: Library-ID aus bibliotheken_auflisten. Wenn leer, automatische Aufloesung ueber alle 4 Libraries.")] = "",
 ) -> dict:
     """PFLICHT vor jedem wörtlichen Zitat: prueft per Substring-Suche im exakten Dokument-Volltext (text_content), ob das Zitat dort vorkommt. Ergebnis: found True/False + Fundstelle. NIEMALS ein Zitat als wörtlich ausgeben ohne found=True."""
     client = _client()
