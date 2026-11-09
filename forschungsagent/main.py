@@ -313,6 +313,12 @@ class QuoteAuditHook(agents.Hook):
     verified: list[dict] = Field(default_factory=list)
     retries: int = 0
 
+    async def pre_agent_turn(self, ctx, request):
+        # State pro Turn zuruecksetzen: deterministisch, keine Turn-Grenzen-Ueberdauer
+        self.verified = []
+        self.retries = 0
+        return None
+
     async def post_tool_call(self, ctx, result):
         name = getattr(result, "tool_name", "")
         if name in ("zitat_pruefen", "web_zitat_pruefen"):
