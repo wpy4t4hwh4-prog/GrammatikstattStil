@@ -358,7 +358,9 @@ class QuoteAuditHook(agents.Hook):
                 }]
         return None
 
-    async def post_agent_turn(self, ctx, result):
+    async def post_llm_call(self, ctx, result):
+        if getattr(result, "tool_calls", None):
+            return None
         text = getattr(result, "text", "") or ""
         try:
             data = _json.loads(text)
@@ -390,8 +392,8 @@ class QuoteAuditHook(agents.Hook):
                     "Negativbefunde nur nach dokument_lesen/ablage_durchsuchen/projektquellen_suchen/projektdateien_auflisten-Call mit dokumentiertem Ergebnis in double_check.")
         if self.retries < 2:
             self.retries = self.retries + 1
-            return _authoring_hooks.retry(feedback)
-        return _authoring_hooks.reject("Turn abgelehnt: " + feedback)
+            return agents.retry(feedback)
+        return agents.reject("Turn abgelehnt: " + feedback)
 
 
 
