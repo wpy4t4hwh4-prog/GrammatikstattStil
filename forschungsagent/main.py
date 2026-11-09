@@ -296,10 +296,76 @@ async def web_zitat_pruefen(
     return {"found": found_norm, "found_exact_inkl_leerzeichen": found_exact, "url": url, "http_status": resp.status_code}
 
 
+import re as _re
+import json as _json
+
+
+def _norm(s: str) -> str:
+    return _re.sub(r"\s+", " ", s).strip()
+
+
+class QuoteAuditHook(agents.Hook):
+    """Sichert wörtliche Zitate ab: sammelt in post_tool_call die mit zitat_pruefen/web_zitat_pruefen
+    verifizierten Zitate (found=True) und prueft in post_agent_turn jedes verbatim_zitate-Eintrag.
+    Unverifiziertes Zitat -> Retry mit Feedback (max 2), dann Reject. Abrufsperren (403/fehler)
+    gelten als 'nicht pruefbar', nicht als Widerlegung."""
+
+    verified: list[dict] = Field(default_factory=list)
+    retries: int = 0
+
+    async def post_tool_call(self, ctx, result):
+        name = getattr(result, "tool_name", "")
+        if name in ("zitat_pruefen", "web_zitat_pruefen"):
+            tr = getattr(result, "tool_result", None)
+            txt = ""
+            content = getattr(tr, "content", None) or []
+            for b in content:
+                txt += getattr(b, "text", "") or ""
+            if not txt:
+                txt = str(tr)
+            try:
+                data = _json.loads(txt)
+            except Exception:
+                data = {}
+            if isinstance(data, dict) and data.get("found") is True:
+                self.verified = self.verified + [{
+                    "text": _norm(str(data.get("zitat", ""))),
+                    "quelle": _norm(str(data.get("quelle", data.get("url", "")))),
+                }]
+        return None
+
+    async def post_agent_turn(self, ctx, result):
+        text = getattr(result, "text", "") or ""
+        try:
+            data = _json.loads(text)
+        except Exception:
+            return None
+        if not isinstance(data, dict):
+            return None
+        quotes = data.get("verbatim_zitate") or []
+        bad = []
+        for q in quotes:
+            qt = _norm(str(q.get("text", "")))
+            if not qt:
+                continue
+            if not any(qt == v["text"] for v in self.verified):
+                bad.append(q.get("text", "")[:120])
+        if not bad:
+            return None
+        feedback = ("VERBOTEN: wörtliche Zitate ohne Verifikation: " + " | ".join(bad) +
+                    ". Regel: Jedes verbatim_zitate muss mit zitat_pruefen/web_zitat_pruefen in DIESEM Turn found=True erhalten. "
+                    "Nicht verifizierte Zitate entfernen oder in offene_punkte verschieben.")
+        if self.retries < 2:
+            self.retries = self.retries + 1
+            return agents.PostAgentTurnHookRetry(feedback=[agents.TextContentBlock(text=feedback)])
+        return agents.PostAgentTurnHookReject(reason=[agents.TextContentBlock(text="Turn abgelehnt: " + feedback)])
+
+
 agent = agents.Agent(
     model="mistral-large-latest",
     temperature=0.0,
     tool_errors="show",
+    hooks=[QuoteAuditHook()],
     output_type=ResearchAnswer,
     name="grammatik-statt-stil-research",
     description=(
