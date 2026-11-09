@@ -371,7 +371,9 @@ async def dokument_lesen(
     library_id = await _resolve_library(client, library_id, document_id)
     content = await client.beta.libraries.documents.text_content_async(library_id=library_id, document_id=document_id)
     text = getattr(content, "text", None) or str(content)
-    return {"document_id": document_id, "library_id": library_id, "laenge": len(text), "volltext": text}
+    # Verlauf klein halten: Volltext kappen (in_dokument_suchen/zitat_pruefen liefern gezielte Ausschnitte)
+    volltext = text[:6000] + (" ... [gekürzt, Gesamtlänge %d Zeichen - für Details in_dokument_suchen/zitat_pruefen nutzen]" % len(text) if len(text) > 6000 else "")
+    return {"document_id": document_id, "library_id": library_id, "laenge": len(text), "volltext": volltext}
 
 
 @agents.tool
