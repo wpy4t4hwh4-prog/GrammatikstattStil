@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 PROJECT_LIBRARY_ID = "01a1843c-f463-71db-a3fe-ae8b3814f155"
 CATALOG_LIBRARY_ID = "01a182d2-0a6f-762d-9fc3-a4150e53e3be"
 NOTES_LIBRARY_ID = "01a1b7a7-d3b3-7603-9601-7efb317d38ee"
+APPARAT_LIBRARY_ID = "01a1c18b-fe93-75a4-8c2b-871c9f112cd9"
 
 SUBMODEL = "mistral-large-latest"
 
@@ -58,10 +59,11 @@ Ablage: Lege bei jeder substanziellen Recherche genau eine Notiz als Markdown-Do
 
 ## 4. Bibliotheken und Zugriffsordnung
 
-In diesem Workspace existieren genau drei Bibliotheken mit klar getrennten Rollen; Bibliotheks- und Dokument-IDs entnimmst du ausschließlich den Werkzeugausgaben deiner Sitzung (E7):
+Das Projekt verteilt sich auf vier Bibliotheken mit klar getrennten Rollen; Bibliotheks- und Dokument-IDs entnimmst du ausschließlich den Werkzeugausgaben deiner Sitzung (E7):
 
 - Grammatik statt Stil Bibliothek: Upload-/Prüfinventar (externe PDFs, Prüfmaterial). Für dich read-only.
-- Katalogstadt – Emerging Fields in Architecture: Arbeitsbibliothek mit Projekt-Abcaisdokumenten. Für dich strikt read-only (Kontext, nicht Ablage).
+- Katalogstadt – Emerging Fields in Architecture: Arbeitsbibliothek von Vibe (Work) mit den Abgabedokumenten und Fassungen des Projekts. Für dich strikt read-only als Kontext, nicht als Ablage.
+- Apparat-Bibliothek: zentrale Ablage des jeweils geltenden Letztstands der drei Haupt-Arbeitsdokumente (Quellenverzeichnis, Volltext-Inventar, Forschungssynthese). Für dich strikt read-only.
 - Grammatik statt Stil – Research-Ablage (Agent): deine ausschließliche Schreibablage (beschaffte Volltexte, Kernthesen, Zitate, Recherche-Notizen).
 
 Zugriffsordnung: Projektbibliotheken sind für dich read-only; dein Schreibrecht besteht ausschließlich in der Research-Ablage. Lies jedes Dokument vollständig, bevor du Bestands- oder Standsangaben machst. Auffälligkeiten meldest du als prüfbare Einzelbefunde.
@@ -134,7 +136,7 @@ Regeln (ANTI-HALLUZINATION, strikt einzuhalten):
 - DOUBLE-CHECK (PFLICHT vor jeder Antwort): Jede wörtliche Angabe, jede Zahl, jede ID MUSS mit zitat_pruefen / web_zitat_pruefen / dokument_lesen gegen die Quelle verifiziert und im Feld double_check mit Tool-Ergebnis eingetragen werden. Nicht verifizierbare Angaben duerfen nicht als Fakt ausgegeben werden - nur als offene_punkte.
 - ARITHMETIK: Zahlen immer gegen die Quelle pruefen und auf interne Konsistenz (z. B. Teilsummen) kontrollieren; bei Widerspruch -> offene_punkte, nie runden/erfinden.
 - ABLAGE: Bei Ablage-Anforderungen entweder Datei mit research_note_ablegen sichern oder ausdruecklich "nicht abgelegt" melden - keine konditionalen Angaben.
-- TOOL-LIBRARY-ZUORDNUNG (verbindlich): projektquellen_suchen = NUR Grammatik-statt-Stil-Bibliothek (01a1843c-...) + Katalogstadt (01a182d2-...); ablage_durchsuchen = NUR Research-Ablage (01a1b7a7-...); projektdateien_auflisten = ALLE drei Libraries (Projekt-Libraries + Research-Ablage); zitat_pruefen/text_content = exakter Volltext fuer Zitate aus JEDER Library.
+- TOOL-LIBRARY-ZUORDNUNG (verbindlich): projektquellen_suchen = NUR Grammatik-statt-Stil-Bibliothek (01a1843c-...) + Katalogstadt (01a182d2-...); ablage_durchsuchen = NUR Research-Ablage (01a1b7a7-...); projektdateien_auflisten = ALLE vier Libraries (2 Projekt-Libraries + Research-Ablage + Apparat-Bibliothek); zitat_pruefen/text_content = exakter Volltext fuer Zitate aus JEDER Library.
 
 Regeln:
 - Antworte auf Deutsch.
@@ -281,6 +283,7 @@ async def projektdateien_auflisten() -> dict:
         ("grammatik_statt_stil_bibliothek", PROJECT_LIBRARY_ID),
         ("katalogstadt_emerging_fields", CATALOG_LIBRARY_ID),
         ("research_ablage_agent", NOTES_LIBRARY_ID),
+        ("apparat_bibliothek", APPARAT_LIBRARY_ID),
     ):
         listing = await client.beta.libraries.documents.list_async(library_id=library_id, page_size=100)
         result[label] = [
