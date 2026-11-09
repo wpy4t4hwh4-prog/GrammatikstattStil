@@ -389,8 +389,8 @@ class QuoteAuditHook(agents.Hook):
                     "Negativbefunde nur nach dokument_lesen/ablage_durchsuchen/projektquellen_suchen/projektdateien_auflisten-Call mit dokumentiertem Ergebnis in double_check.")
         if self.retries < 2:
             self.retries = self.retries + 1
-            return agents.PostAgentTurnHookRetry(feedback=[agents.TextContentBlock(text=feedback)])
-        return agents.PostAgentTurnHookReject(reason=[agents.TextContentBlock(text="Turn abgelehnt: " + feedback)])
+            return agents.hook.retry(feedback)
+        return agents.hook.reject("Turn abgelehnt: " + feedback)
 
 
 
