@@ -37,6 +37,7 @@ E5 Negativbefunde: Eine Meldung „nicht gefunden“, „existiert nicht“ oder
 
 E6 Grenzangaben bei Blockierung und Teilausfall: Kannst du eine Prüfung nicht ausführen, ersetze sie nicht durch einen Inhaltsbericht, sondern durch eine dokumentierte Grenzangabe mit vier Elementen: Aufgabe, Dokument-ID oder gefragtes Objekt, konkreter Suchweg (Werkzeug und Abfrage) samt dem tatsächlichen Ergebnis, und die ausdrückliche Feststellung, dass keine Prüfung möglich war und alle betreffenden Angaben offen bleiben. Werkzeugfehler meldest du wörtlich mit Fehleranzeige und Zeitpunkt. Behaupte keine Blockierung, die dir nicht angezeigt wurde.
 
+E-DATUM: Datumsangaben (Zugriffsdatum, Fristen, Datierung in Titeln) IMMER ueber das Tool aktuelles_datum ermitteln - nie aus Erinnerung oder Annahme (z. B. nicht "12.11.").
 E0 DATEISYSTEM: Library-Dokumente (Apparat, Projektbibliotheken, Ablage) liegen NICHT im Sandbox-Dateisystem - nie file_system.read_file auf Dokumentnamen anwenden ("File not found"). Library-Dokumente nur ueber dokument_lesen/dokument_finden/in_dokument_suchen/zitat_pruefen. Skills nur ueber skill.read.
 E7 ID-Herkunft: Bibliotheks-IDs IMMER aus bibliotheken_auflisten, Dokument-IDs nur aus dokument_finden/projektdateien_auflisten. ACHTUNG: Skill-IDs (aus skill.read) sind KEINE Library-IDs! Bei 403/"no access"/404 eines Lese-Tools: dokument_finden aufrufen und die korrekte library_id holen. Vor jeder ID-Angabe das jeweilige Tool aufgerufen haben.
 
@@ -207,6 +208,7 @@ class ResearchAnswer(BaseModel):
     offene_punkte: list[str] = Field(default_factory=list, description="Ungeklaerte Fragen / nicht belegbare Punkte.")
     verbatim_zitate: list[VerbatimZitat] = Field(default_factory=list, description="Alle wörtlichen Zitate, jeweils per zitat_pruefen verifiziert. Leer lassen, wenn keins verifiziert ist.")
     double_check: list[DoubleCheck] = Field(default_factory=list, description="PFLICHT: jede wörtliche Angabe und jede Zahl/ID, jeweils mit Tool-Ergebnis verifiziert.")
+    arbeitsupdate: str = Field(default="", description="PFLICHT nach jeder Arbeitsrunde: Klartext-Update in vollen Saetzen, was in diesem Turn recherchiert/gelesen/abgelegt wurde (plain text, keine Stichpunkte).")
 
 
 async def _resolve_library(client, library_id: str, document_id: str) -> str:
@@ -396,7 +398,7 @@ def _norm(s: str) -> str:
     return _re.sub(r"\s+", " ", s).strip()
 
 
-KNOWN_TOOL_NAMES = {"web_recherche", "projektquellen_suchen", "ablage_durchsuchen", "projektdateien_auflisten", "bibliotheken_auflisten", "dokument_finden", "research_note_ablegen", "zitat_pruefen", "web_zitat_pruefen", "dokument_lesen", "doi_pruefen", "url_status_pruefen", "in_dokument_suchen"}
+KNOWN_TOOL_NAMES = {"web_recherche", "projektquellen_suchen", "ablage_durchsuchen", "projektdateien_auflisten", "bibliotheken_auflisten", "dokument_finden", "research_note_ablegen", "zitat_pruefen", "web_zitat_pruefen", "dokument_lesen", "doi_pruefen", "url_status_pruefen", "in_dokument_suchen", "aktuelles_datum"}
 
 
 class QuoteAuditHook(agents.Hook):
@@ -600,6 +602,14 @@ async def dokument_finden(
     return {"document_id": document_id, "library_id": None, "gefunden": False}
 
 
+@agents.tool
+async def aktuelles_datum() -> dict:
+    """Liefert das aktuelle Datum/Uhrzeit (UTC) aus der Worker-Systemuhr. PFLICHT vor jeder Datumsangabe (Zugriffsdatum, Fristen, Titel mit Datum): niemals ein Datum aus Erinnerung oder Annahme verwenden."""
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+    return {"utc": now.isoformat(), "datum": now.date().isoformat(), "uhrzeit": now.strftime("%H:%M:%S")}
+
+
 agent = agents.Agent(
     model="mistral-large-latest",
     temperature=0.0,
@@ -622,6 +632,7 @@ agent = agents.Agent(
         projektdateien_auflisten,
         bibliotheken_auflisten,
         dokument_finden,
+        aktuelles_datum,
         zitat_pruefen,
         dokument_lesen,
         web_zitat_pruefen,
