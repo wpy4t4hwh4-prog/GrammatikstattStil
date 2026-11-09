@@ -461,12 +461,20 @@ class QuoteAuditHook(agents.Hook):
             for i in ids_in_answer:
                 if _norm(i) in tool_blob:
                     problems.append("Widerspruch: ID " + i + " im Tool-Ergebnis vorhanden, aber als nicht gefunden gemeldet")
-        # 4. "gesichert" mit konkreter Quellenangabe (UUID/URL/DOI) ohne Such-Tool-Call ist unzulaessig
+        # 4. Prüfbare Claims (ID/URL/DOI/Zahl/Zitat in Aussage oder Quelle) brauchen Such-Tool-Call im selben Turn;
+        #    "gesichert" generell nur mit Tool-Call. Reine Deutungen/Allgemeinwissen ohne Quelle bleiben zulaessig.
         for a in data.get("belegte_aussagen") or []:
-            if isinstance(a, dict) and "gesichert" in str(a.get("evidenzgrad", "")).lower():
-                q = str(a.get("quelle", "")).lower()
-                if _re.search(r"[0-9a-f]{8}-[0-9a-f]{4}|https?://|doi:", q) and not (set(self.tools_called) & search_tools):
-                    problems.append("evidenzgrad=gesichert mit Quelle ohne Such-Tool-Call im selben Turn: " + str(a.get("aussage", ""))[:100])
+            if not isinstance(a, dict):
+                continue
+            aussage = str(a.get("aussage", ""))
+            quelle = str(a.get("quelle", ""))
+            ev = str(a.get("evidenzgrad", "")).lower()
+            is_pruefbar = bool(_re.search(r"[0-9a-f]{8}-[0-9a-f]{4}|https?://|doi:|\d{4}|[\u201e\u201c\"']", aussage + " " + quelle))
+            no_tool = not (set(self.tools_called) & search_tools)
+            if "gesichert" in ev and no_tool:
+                problems.append("evidenzgrad=gesichert ohne Such-Tool-Call: " + aussage[:100])
+            elif is_pruefbar and no_tool:
+                problems.append("prüfbarer Claim (ID/URL/DOI/Zahl/Zitat) ohne Such-Tool-Call: " + aussage[:100])
         # 5. ID-Herkunft (E7): jede UUID in der Antwort muss in Tool-Ergebnissen des Turns
         # oder unter den bekannten Library-IDs vorkommen
         known_libs = {"01a1843c-f463-71db-a3fe-ae8b3814f155", "01a182d2-0a6f-762d-9fc3-a4150e53e3be", "01a1b7a7-d3b3-7603-9601-7efb317d38ee", "01a1c18b-fe93-75a4-8c2b-871c9f112cd9"}
