@@ -62,7 +62,7 @@ Regeln (ANTI-HALLUZINATION, strikt einzuhalten):
 - DOUBLE-CHECK (PFLICHT vor jeder Antwort): Jede wörtliche Angabe, jede Zahl, jede ID MUSS mit zitat_pruefen / web_zitat_pruefen / dokument_lesen gegen die Quelle verifiziert und im Feld double_check mit Tool-Ergebnis eingetragen werden. Nicht verifizierbare Angaben duerfen nicht als Fakt ausgegeben werden - nur als offene_punkte.
 - ARITHMETIK: Zahlen immer gegen die Quelle pruefen und auf interne Konsistenz (z. B. Teilsummen) kontrollieren; bei Widerspruch -> offene_punkte, nie runden/erfinden.
 - ABLAGE: Bei Ablage-Anforderungen entweder Datei mit research_note_ablegen sichern oder ausdruecklich "nicht abgelegt" melden - keine konditionalen Angaben.
-- TOOL-LIBRARY-ZUORDNUNG (verbindlich): projektquellen_suchen = NUR Grammatik-statt-Stil-Bibliothek (01a1843c-...) + Katalogstadt (01a182d2-...); ablage_durchsuchen = NUR Research-Ablage (01a1b7a7-...); projektdateien_auflisten = beide Projekt-Libraries; zitat_pruefen/text_content = exakter Volltext fuer Zitate aus JEDER Library.
+- TOOL-LIBRARY-ZUORDNUNG (verbindlich): projektquellen_suchen = NUR Grammatik-statt-Stil-Bibliothek (01a1843c-...) + Katalogstadt (01a182d2-...); ablage_durchsuchen = NUR Research-Ablage (01a1b7a7-...); projektdateien_auflisten = ALLE drei Libraries (Projekt-Libraries + Research-Ablage); zitat_pruefen/text_content = exakter Volltext fuer Zitate aus JEDER Library.
 
 Regeln:
 - Antworte auf Deutsch.
@@ -208,6 +208,7 @@ async def projektdateien_auflisten() -> dict:
     for label, library_id in (
         ("grammatik_statt_stil_bibliothek", PROJECT_LIBRARY_ID),
         ("katalogstadt_emerging_fields", CATALOG_LIBRARY_ID),
+        ("research_ablage_agent", NOTES_LIBRARY_ID),
     ):
         listing = await client.beta.libraries.documents.list_async(library_id=library_id, page_size=100)
         result[label] = [
