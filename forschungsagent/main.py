@@ -463,6 +463,7 @@ agent = agents.Agent(
     temperature=0.0,
     tool_errors="show",
     hooks=[QuoteAuditHook()],
+    skills=agents.all_registry_skills(),
     output_type=ResearchAnswer,
     name="grammatik-statt-stil-research",
     description=(
