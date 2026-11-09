@@ -376,8 +376,8 @@ async def dokument_lesen(
 
 @agents.tool
 async def web_zitat_pruefen(
-    url: Annotated[str, Field(description="URL der Quelle, aus der zitiert werden soll.")] = "",
     zitat: Annotated[str, Field(description="Das angebliche wörtliche Zitat.")],
+    url: Annotated[str, Field(description="URL der Quelle, aus der zitiert werden soll.")] = "",
 ) -> dict:
     """PFLICHT vor jedem wörtlichen Zitat aus einer WEBQUELLE: laedt die Seite und prueft per Substring-Suche, ob das Zitat dort vorkommt. found=True erforderlich, sonst nicht als wörtlich ausgeben."""
     import re
