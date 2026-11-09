@@ -56,6 +56,9 @@ Regeln (ANTI-HALLUZINATION, strikt einzuhalten):
 - Zitate aus PDFs/Dokumenten immer gegen den exakten Volltext (text_content) prüfen, nie gegen RAG-Zusammenfassungen oder das Gedaechtnis.
 - Wörtliche Zitate landen im Feld verbatim_zitate (mit quelle + geprueft_mit), nie inline als erfundenes Zitat.
 - "Wörtlich" heisst ZEICHEN-EXAKT inklusive Leerzeichen und Zeilenumbrueche (found_exact_inkl_leerzeichen=True). Ist nur found=True (normalisiert) aber nicht exakt, darfst du das Zitat NICHT wörtlich wiedergeben - dann paraphrasieren und als Paraphrase kennzeichnen.
+- DOUBLE-CHECK (PFLICHT vor jeder Antwort): Jede wörtliche Angabe, jede Zahl, jede ID MUSS mit zitat_pruefen / web_zitat_pruefen / dokument_lesen gegen die Quelle verifiziert und im Feld double_check mit Tool-Ergebnis eingetragen werden. Nicht verifizierbare Angaben duerfen nicht als Fakt ausgegeben werden - nur als offene_punkte.
+- ARITHMETIK: Zahlen immer gegen die Quelle pruefen und auf interne Konsistenz (z. B. Teilsummen) kontrollieren; bei Widerspruch -> offene_punkte, nie runden/erfinden.
+- ABLAGE: Bei Ablage-Anforderungen entweder Datei mit research_note_ablegen sichern oder ausdruecklich "nicht abgelegt" melden - keine konditionalen Angaben.
 - TOOL-LIBRARY-ZUORDNUNG (verbindlich): projektquellen_suchen = NUR Grammatik-statt-Stil-Bibliothek (01a1843c-...) + Katalogstadt (01a182d2-...); ablage_durchsuchen = NUR Research-Ablage (01a1b7a7-...); projektdateien_auflisten = beide Projekt-Libraries; zitat_pruefen/text_content = exakter Volltext fuer Zitate aus JEDER Library.
 
 Regeln:
@@ -111,12 +114,19 @@ class VerbatimZitat(BaseModel):
     quelle: str = Field(description="Dokumentname + Dokument-ID oder Titel + URL.")
     geprueft_mit: str = Field(description="Name des Tools, mit dem das Zitat verifiziert wurde (z. B. zitat_pruefen).")
 
+class DoubleCheck(BaseModel):
+    angabe: str = Field(description="Die gepruefte Angabe (Zitat, Zahl, ID).")
+    pruef_tool: str = Field(description="Tool, mit dem geprueft wurde (zitat_pruefen / web_zitat_pruefen / dokument_lesen).")
+    ergebnis: str = Field(description="found=True/False bzw. exakter Befund - wörtlich aus dem Tool-Ergebnis.")
+
+
 class ResearchAnswer(BaseModel):
     zusammenfassung: str = Field(description="Praegnanate Zusammenfassung der Antwort.")
     belegte_aussagen: list[BelegteAussage] = Field(default_factory=list, description="Alle faktischen Aussagen mit Pflichtquelle.")
     deutungen: list[str] = Field(default_factory=list, description="Eigene Einordnungen, klar als Deutung markiert.")
     offene_punkte: list[str] = Field(default_factory=list, description="Ungeklaerte Fragen / nicht belegbare Punkte.")
     verbatim_zitate: list[VerbatimZitat] = Field(default_factory=list, description="Alle wörtlichen Zitate, jeweils per zitat_pruefen verifiziert. Leer lassen, wenn keins verifiziert ist.")
+    double_check: list[DoubleCheck] = Field(default_factory=list, description="PFLICHT: jede wörtliche Angabe und jede Zahl/ID, jeweils mit Tool-Ergebnis verifiziert.")
 
 
 @agents.tool
@@ -249,6 +259,38 @@ async def zitat_pruefen(
     return {"found": found_norm, "found_exact_inkl_leerzeichen": found_exact, "zitat": zitat, "kontext": kontext}
 
 
+@agents.tool
+async def dokument_lesen(
+    library_id: Annotated[str, Field(description="Library-ID.")],
+    document_id: Annotated[str, Field(description="Dokument-ID.")],
+) -> dict:
+    """Liefert den EXAKTEN Volltext eines Library-Dokuments (text_content). Pflicht bei Aufgaben mit wörtlichen Zitaten, IDs oder genauen Zahlen - niemals ueber RAG raten."""
+    client = _client()
+    content = await client.beta.libraries.documents.text_content_async(library_id=library_id, document_id=document_id)
+    text = getattr(content, "text", None) or str(content)
+    return {"document_id": document_id, "laenge": len(text), "volltext": text}
+
+
+@agents.tool
+async def web_zitat_pruefen(
+    url: Annotated[str, Field(description="URL der Quelle, aus der zitiert werden soll.")],
+    zitat: Annotated[str, Field(description="Das angebliche wörtliche Zitat.")],
+) -> dict:
+    """PFLICHT vor jedem wörtlichen Zitat aus einer WEBQUELLE: laedt die Seite und prueft per Substring-Suche, ob das Zitat dort vorkommt. found=True erforderlich, sonst nicht als wörtlich ausgeben."""
+    import re
+    import httpx
+    norm = lambda s: re.sub(r"\s+", " ", s).strip()
+    try:
+        async with httpx.AsyncClient(timeout=30, follow_redirects=True, headers={"User-Agent": "Mozilla/5.0"}) as hc:
+            resp = await hc.get(url)
+            text = resp.text
+    except Exception as e:
+        return {"found": False, "fehler": f"Seite nicht abrufbar: {e}"}
+    found_norm = norm(zitat) in norm(text)
+    found_exact = zitat in text
+    return {"found": found_norm, "found_exact_inkl_leerzeichen": found_exact, "url": url, "http_status": resp.status_code}
+
+
 agent = agents.Agent(
     model="mistral-large-latest",
     temperature=0.0,
@@ -267,6 +309,8 @@ agent = agents.Agent(
         ablage_durchsuchen,
         projektdateien_auflisten,
         zitat_pruefen,
+        dokument_lesen,
+        web_zitat_pruefen,
         research_note_ablegen,
     ],
     max_iterations=40,
