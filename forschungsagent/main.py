@@ -411,7 +411,7 @@ class QuoteAuditHook(agents.Hook):
     - post_agent_turn: unverifizierte verbatim_zitate ODER Negativbefund ("nicht gefunden"/"nicht lesbar"/
       "nicht existiert") ohne Such-Tool-Call im selben Turn -> Retry mit Feedback (max 2), dann Reject."""
 
-    verified: list[dict] = Field(default_factory=list)
+    verified: list[str] = Field(default_factory=list)
     tools_called: list[str] = Field(default_factory=list)
     retries: int = 0
 
@@ -459,10 +459,9 @@ class QuoteAuditHook(agents.Hook):
             except Exception:
                 data = {}
             if isinstance(data, dict) and data.get("found") is True:
-                self.verified = self.verified + [{
-                    "text": _norm(str(data.get("zitat", ""))),
-                    "quelle": _norm(str(data.get("quelle", data.get("url", "")))),
-                }]
+                import hashlib as _hl
+                h = _hl.sha256(_norm(str(data.get("zitat", ""))).encode()).hexdigest()
+                self.verified = (self.verified + [h])[:100]
         return None
 
     async def post_llm_call(self, ctx, result):
@@ -477,9 +476,10 @@ class QuoteAuditHook(agents.Hook):
             return None
         problems = []
         quotes = data.get("verbatim_zitate") or []
+        import hashlib as _hl2
         for q in quotes:
             qt = _norm(str(q.get("text", "")))
-            if qt and not any(qt == v["text"] for v in self.verified):
+            if qt and _hl2.sha256(qt.encode()).hexdigest() not in self.verified:
                 problems.append("unverifiziertes Zitat: " + qt[:100])
         search_tools = {"dokument_lesen", "zitat_pruefen", "web_zitat_pruefen", "ablage_durchsuchen", "projektquellen_suchen", "projektdateien_auflisten", "web_recherche", "dokument_finden", "bibliotheken_auflisten", "aktuelles_datum"}
         all_text = _norm(str(data.get("zusammenfassung", "")) + " " + str(data.get("offene_punkte", "")) + " " + str(data.get("belegte_aussagen", "")))
