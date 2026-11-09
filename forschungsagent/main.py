@@ -37,7 +37,7 @@ E5 Negativbefunde: Eine Meldung „nicht gefunden“, „existiert nicht“ oder
 
 E6 Grenzangaben bei Blockierung und Teilausfall: Kannst du eine Prüfung nicht ausführen, ersetze sie nicht durch einen Inhaltsbericht, sondern durch eine dokumentierte Grenzangabe mit vier Elementen: Aufgabe, Dokument-ID oder gefragtes Objekt, konkreter Suchweg (Werkzeug und Abfrage) samt dem tatsächlichen Ergebnis, und die ausdrückliche Feststellung, dass keine Prüfung möglich war und alle betreffenden Angaben offen bleiben. Werkzeugfehler meldest du wörtlich mit Fehleranzeige und Zeitpunkt. Behaupte keine Blockierung, die dir nicht angezeigt wurde.
 
-E7 ID-Herkunft: Bibliotheks-IDs entnimmst du IMMER aus dem Tool bibliotheken_auflisten (niemals aus Erinnerung/Prompt), Dokument-IDs/DOIs nur aus Tool-Ausgaben. Vor jeder ID-Angabe das jeweilige Tool aufgerufen haben.
+E7 ID-Herkunft: Bibliotheks-IDs IMMER aus bibliotheken_auflisten, Dokument-IDs nur aus dokument_finden/projektdateien_auflisten. ACHTUNG: Skill-IDs (aus skill.read) sind KEINE Library-IDs! Bei 403/"no access"/404 eines Lese-Tools: dokument_finden aufrufen und die korrekte library_id holen. Vor jeder ID-Angabe das jeweilige Tool aufgerufen haben.
 
 E8 Deklarationsdisziplin: Evidenzangaben wie „gesichert“, „verifiziert“ oder ein Evidenzgrad sind nur zulässig, wenn die entsprechende Prüfung tatsächlich stattgefunden hat und benannt werden kann. Eine Deklaration ersetzt niemals den Nachweis; Felder, die Überprüfung behaupten, ohne dass eine Werkzeughandlung stattfand, sind Fehlangaben. Weise bei jeder Quelle die Zugangsstufe aus: Metadaten, Abstract, Teiltext oder Volltext.
 
@@ -208,6 +208,19 @@ class ResearchAnswer(BaseModel):
     double_check: list[DoubleCheck] = Field(default_factory=list, description="PFLICHT: jede wörtliche Angabe und jede Zahl/ID, jeweils mit Tool-Ergebnis verifiziert.")
 
 
+async def _resolve_library(client, library_id: str, document_id: str) -> str:
+    """Wenn library_id leer/unbekannt: Dokument ueber alle 4 Libraries aufloesen (dokument_finden-Logik)."""
+    if library_id:
+        return library_id
+    for lib in (APPARAT_LIBRARY_ID, PROJECT_LIBRARY_ID, CATALOG_LIBRARY_ID, NOTES_LIBRARY_ID):
+        try:
+            await client.beta.libraries.documents.get_async(library_id=lib, document_id=document_id)
+            return lib
+        except Exception:
+            continue
+    return library_id
+
+
 @agents.tool
 async def web_recherche(
     query: Annotated[str, Field(description="Präzise Such-/Recherchefrage auf Deutsch oder Englisch.")],
@@ -323,12 +336,13 @@ async def research_note_ablegen(
 
 @agents.tool
 async def zitat_pruefen(
-    library_id: Annotated[str, Field(description="ID der Library, z. B. 01a1843c-f463-71db-a3fe-ae8b3814f155 (Grammatik statt Stil) oder 01a182d2-0a6f-762d-9fc3-a4150e53e3be (Katalogstadt).")],
-    document_id: Annotated[str, Field(description="Dokument-ID in dieser Library.")],
+    document_id: Annotated[str, Field(description="Dokument-ID.")],
+    library_id: Annotated[str, Field(description="Optional: Library-ID aus bibliotheken_auflisten. Wenn leer, automatische Aufloesung ueber alle 4 Libraries.")] = "",
     zitat: Annotated[str, Field(description="Das angebliche wörtliche Zitat, das geprueft werden soll.")],
 ) -> dict:
     """PFLICHT vor jedem wörtlichen Zitat: prueft per Substring-Suche im exakten Dokument-Volltext (text_content), ob das Zitat dort vorkommt. Ergebnis: found True/False + Fundstelle. NIEMALS ein Zitat als wörtlich ausgeben ohne found=True."""
     client = _client()
+    library_id = await _resolve_library(client, library_id, document_id)
     content = await client.beta.libraries.documents.text_content_async(library_id=library_id, document_id=document_id)
     text = getattr(content, "text", None) or str(content)
     import re
@@ -342,14 +356,15 @@ async def zitat_pruefen(
 
 @agents.tool
 async def dokument_lesen(
-    library_id: Annotated[str, Field(description="Library-ID.")],
     document_id: Annotated[str, Field(description="Dokument-ID.")],
+    library_id: Annotated[str, Field(description="Optional: Library-ID. Wenn leer, wird sie ueber alle 4 Libraries automatisch aufgeloest.")] = "",
 ) -> dict:
     """Liefert den EXAKTEN Volltext eines Library-Dokuments (text_content). Pflicht bei Aufgaben mit wörtlichen Zitaten, IDs oder genauen Zahlen - niemals ueber RAG raten."""
     client = _client()
+    library_id = await _resolve_library(client, library_id, document_id)
     content = await client.beta.libraries.documents.text_content_async(library_id=library_id, document_id=document_id)
     text = getattr(content, "text", None) or str(content)
-    return {"document_id": document_id, "laenge": len(text), "volltext": text}
+    return {"document_id": document_id, "library_id": library_id, "laenge": len(text), "volltext": text}
 
 
 @agents.tool
@@ -540,12 +555,13 @@ async def url_status_pruefen(
 
 @agents.tool
 async def in_dokument_suchen(
-    library_id: Annotated[str, Field(description="Library-ID.")],
     document_id: Annotated[str, Field(description="Dokument-ID.")],
     begriff: Annotated[str, Field(description="Suchbegriff (Substring, case-insensitive).")],
+    library_id: Annotated[str, Field(description="Optional: Library-ID. Wenn leer, automatische Aufloesung.")] = "",
 ) -> dict:
     """Grep-aehnliche Suche im exakten Volltext eines Library-Dokuments. Liefert alle Treffer mit Kontext. Deterministisch - nutze das statt RAG fuer exakte Nachweise."""
     client = _client()
+    library_id = await _resolve_library(client, library_id, document_id)
     content = await client.beta.libraries.documents.text_content_async(library_id=library_id, document_id=document_id)
     text = getattr(content, "text", None) or str(content)
     import re as _re2
