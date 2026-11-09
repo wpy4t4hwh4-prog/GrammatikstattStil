@@ -2,6 +2,7 @@ import os
 from typing import Annotated
 
 from mistralai import agents
+from mistralai.vibe_agents.sdk.authoring import hooks as _authoring_hooks
 from mistralai.client.models import File
 from mistralai.workflows.client import get_mistral_client
 from pydantic import BaseModel, Field
@@ -389,8 +390,8 @@ class QuoteAuditHook(agents.Hook):
                     "Negativbefunde nur nach dokument_lesen/ablage_durchsuchen/projektquellen_suchen/projektdateien_auflisten-Call mit dokumentiertem Ergebnis in double_check.")
         if self.retries < 2:
             self.retries = self.retries + 1
-            return agents.hook.retry(feedback)
-        return agents.hook.reject("Turn abgelehnt: " + feedback)
+            return _authoring_hooks.retry(feedback)
+        return _authoring_hooks.reject("Turn abgelehnt: " + feedback)
 
 
 
