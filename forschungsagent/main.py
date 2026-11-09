@@ -62,6 +62,7 @@ Regeln (ANTI-HALLUZINATION, strikt einzuhalten):
 - RECHERCHE-PROTOKOLL: In jeder substantiellen research_note_ablegen-Notiz ALLE Suchbegriffe, URLs, Zugriffsdaten und verworfene Quellen festhalten (reproduzierbar wie ein Laborbuch). Notiz-Titel immer mit Datum; bestehende Notizen nie ueberschreiben.
 - LESBARKEITS-REGEL: Bevor du "nicht lesbar"/"nicht gefunden" meldest, MUSST du dokument_lesen (bzw. zitat_pruefen) aufgerufen haben und das Tool-Ergebnis (inkl. Fehlermeldung) in double_check zitieren. Pauschale Negativmeldungen ohne dokumentierten Tool-Call sind unzulaessig.
 - ID-REGEL: Bibliotheks-IDs, Dokument-IDs, DOIs, PIIs NUR aus Tool-Ergebnissen kopieren - niemals eintippen oder aus dem Gedaechtnis. Vor Ausgabe in double_check eintragen. Bei DOI/PII zusaetzlich gegen doi.org/Verlag verifizieren (web_zitat_pruefen), Transpositionen sind typische Fehler.
+- BOUNDARIES: Schreiben NUR in die Research-Ablage (research_note_ablegen); Projekt-Libraries sind fuer den Agenten LESEN-only (dokument_lesen/zitat_pruefen/in_dokument_suchen). DOIs/PIIs vor Ausgabe mit doi_pruefen/url_status_pruefen verifizieren; Sperre (403) != 404.
 - NEGATIVBEFUND-REGEL (verbindlich): Eine Aussage wie "X existiert nicht" oder "keine Treffer" darf NUR als gesichert ausgegeben werden, wenn ALLE drei Libraries durchsucht wurden: projektdateien_auflisten (alle 3 Libraries) + projektquellen_suchen (Projekt-Libraries) + ablage_durchsuchen (Research-Ablage) + ggf. web_recherche. Sonst muss der Negativbefund als wahrscheinlich/offene_punkte deklariert werden mit Angabe, welche Libraries geprueft wurden.
 - DOUBLE-CHECK (PFLICHT vor jeder Antwort): Jede wörtliche Angabe, jede Zahl, jede ID MUSS mit zitat_pruefen / web_zitat_pruefen / dokument_lesen gegen die Quelle verifiziert und im Feld double_check mit Tool-Ergebnis eingetragen werden. Nicht verifizierbare Angaben duerfen nicht als Fakt ausgegeben werden - nur als offene_punkte.
 - ARITHMETIK: Zahlen immer gegen die Quelle pruefen und auf interne Konsistenz (z. B. Teilsummen) kontrollieren; bei Widerspruch -> offene_punkte, nie runden/erfinden.
@@ -402,6 +403,61 @@ class QuoteAuditHook(agents.Hook):
 
 
 
+@agents.tool
+async def doi_pruefen(
+    doi: Annotated[str, Field(description="DOI, z. B. 10.1016/j.autcon.2008.09.006. Muss aus einer Tool-Quelle stammen, nie getippt.")],
+) -> dict:
+    """PFLICHT vor jeder DOI-Angabe: loest den DOI ueber doi.org auf und liefert Titel/Autoren/Jahr. Falsch transkribierte DOIs (z. B. vertauschte Ziffern) werden so erkannt."""
+    import httpx
+    try:
+        async with httpx.AsyncClient(timeout=30, follow_redirects=False, headers={"Accept": "application/vnd.citationstyles.csl+json", "User-Agent": "Mozilla/5.0"}) as hc:
+            r = await hc.get(f"https://doi.org/{_norm(doi)}", headers={"Accept": "application/vnd.citationstyles.csl+json"})
+            if r.status_code in (200, 302, 303):
+                if r.status_code == 200:
+                    meta = r.json()
+                    return {"doi": doi, "existiert": True, "titel": meta.get("title"), "autoren": [f"{a.get('family','')} {a.get('given','')}" for a in meta.get("author", [])], "jahr": (meta.get("issued", {}).get("date-parts", [[None]])[0][0])}
+                loc = r.headers.get("location", "")
+                return {"doi": doi, "existiert": True, "redirect": loc, "titel": None}
+            return {"doi": doi, "existiert": False, "http_status": r.status_code}
+    except Exception as e:
+        return {"doi": doi, "existiert": None, "fehler": str(e)}
+
+
+@agents.tool
+async def url_status_pruefen(
+    url: Annotated[str, Field(description="URL, deren Erreichbarkeit geprueft wird.")],
+) -> dict:
+    """Prueft HTTP-Status einer URL. UNTERSCHEIDET Sperre (403/Cloudflare) von echtem 404 - Sperre heisst 'nicht pruefbar', nie 'nicht gefunden'."""
+    import httpx
+    try:
+        async with httpx.AsyncClient(timeout=20, follow_redirects=True, headers={"User-Agent": "Mozilla/5.0"}) as hc:
+            r = await hc.get(url)
+            blocked = r.status_code in (403, 429) or "cloudflare" in r.text[:2000].lower()
+            return {"url": url, "http_status": r.status_code, "gesperrt": blocked, "pruefbar": not blocked}
+    except Exception as e:
+        return {"url": url, "http_status": None, "gesperrt": None, "pruefbar": False, "fehler": str(e)}
+
+
+@agents.tool
+async def in_dokument_suchen(
+    library_id: Annotated[str, Field(description="Library-ID.")],
+    document_id: Annotated[str, Field(description="Dokument-ID.")],
+    begriff: Annotated[str, Field(description="Suchbegriff (Substring, case-insensitive).")],
+) -> dict:
+    """Grep-aehnliche Suche im exakten Volltext eines Library-Dokuments. Liefert alle Treffer mit Kontext. Deterministisch - nutze das statt RAG fuer exakte Nachweise."""
+    client = _client()
+    content = await client.beta.libraries.documents.text_content_async(library_id=library_id, document_id=document_id)
+    text = getattr(content, "text", None) or str(content)
+    import re as _re2
+    hits = []
+    for m in _re2.finditer(_re2.escape(begriff), text, _re2.IGNORECASE):
+        s = max(0, m.start()-100)
+        hits.append(text[s:m.end()+100].replace("\n", " "))
+        if len(hits) >= 20:
+            break
+    return {"document_id": document_id, "begriff": begriff, "anzahl": len(hits), "treffer": hits}
+
+
 agent = agents.Agent(
     model="mistral-large-latest",
     temperature=0.0,
@@ -423,6 +479,9 @@ agent = agents.Agent(
         zitat_pruefen,
         dokument_lesen,
         web_zitat_pruefen,
+        doi_pruefen,
+        url_status_pruefen,
+        in_dokument_suchen,
         research_note_ablegen,
     ],
     max_iterations=40,
