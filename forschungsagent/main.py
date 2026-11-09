@@ -464,6 +464,7 @@ agent = agents.Agent(
     tool_errors="show",
     hooks=[QuoteAuditHook()],
     skills=[agents.all_registry_skills()],
+    environment=agents.BashkitSandbox(),
     output_type=ResearchAnswer,
     name="grammatik-statt-stil-research",
     description=(
