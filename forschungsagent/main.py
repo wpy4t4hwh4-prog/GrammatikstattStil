@@ -380,6 +380,9 @@ def _norm(s: str) -> str:
     return _re.sub(r"\s+", " ", s).strip()
 
 
+KNOWN_TOOL_NAMES = {"web_recherche", "projektquellen_suchen", "ablage_durchsuchen", "projektdateien_auflisten", "bibliotheken_auflisten", "dokument_finden", "research_note_ablegen", "zitat_pruefen", "web_zitat_pruefen", "dokument_lesen", "doi_pruefen", "url_status_pruefen", "in_dokument_suchen"}
+
+
 class QuoteAuditHook(agents.Hook):
     """Sichert Zitate UND Negativbefunde ab. Pro Turn (State wird in pre_agent_turn zurueckgesetzt):
     - sammelt verifizierte Zitate (zitat_pruefen/web_zitat_pruefen found=True) und alle Tool-Calls
@@ -390,12 +393,10 @@ class QuoteAuditHook(agents.Hook):
     tools_called: list[str] = Field(default_factory=list)
     retries: int = 0
 
-    KNOWN_TOOLS = {"web_recherche", "projektquellen_suchen", "ablage_durchsuchen", "projektdateien_auflisten", "bibliotheken_auflisten", "dokument_finden", "research_note_ablegen", "zitat_pruefen", "web_zitat_pruefen", "dokument_lesen", "doi_pruefen", "url_status_pruefen", "in_dokument_suchen"}
-
     async def pre_tool_call(self, ctx, call):
         name = getattr(call, "tool_name", "")
-        if name and name not in self.KNOWN_TOOLS:
-            return _authoring_hooks.skip("Dieses Tool existiert nicht: " + name + ". Verfügbare Tools: " + ", ".join(sorted(self.KNOWN_TOOLS)))
+        if name and name not in KNOWN_TOOL_NAMES:
+            return _authoring_hooks.skip("Dieses Tool existiert nicht: " + name + ". Verfuegbare Tools: " + ", ".join(sorted(KNOWN_TOOL_NAMES)))
         return None
 
     async def pre_agent_turn(self, ctx, request):
