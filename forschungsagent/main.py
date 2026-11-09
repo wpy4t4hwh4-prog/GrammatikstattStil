@@ -378,19 +378,22 @@ class QuoteAuditHook(agents.Hook):
         search_tools = {"dokument_lesen", "zitat_pruefen", "web_zitat_pruefen", "ablage_durchsuchen", "projektquellen_suchen", "projektdateien_auflisten", "web_recherche"}
         all_text = _norm(str(data.get("zusammenfassung", "")) + " " + str(data.get("offene_punkte", "")) + " " + str(data.get("belegte_aussagen", "")))
         neg_words = ["nicht gefunden", "nicht lesbar", "nicht existiert", "nicht auffindbar", "keine treffer"]
-        if any(w in all_text.lower() for w in neg_words) and not (set(self.tools_called) & search_tools):
+        # nur bei echtem Dokument-/Quellenbezug pruefen (UUID, URL, DOI, "Dokument"), nicht bei reinen Chat-Antworten
+        has_source_ref = bool(_re.search(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|https?://|doi:|dokument", all_text.lower()))
+        if has_source_ref and any(w in all_text.lower() for w in neg_words) and not (set(self.tools_called) & search_tools):
             problems.append("Negativbefund ohne Such-Tool-Call im selben Turn")
         ids_in_answer = set(_re.findall(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", all_text))
         tool_blob = _norm(" ".join(self.tool_texts))
-        if any(w in all_text.lower() for w in neg_words):
+        if has_source_ref and any(w in all_text.lower() for w in neg_words):
             for i in ids_in_answer:
                 if _norm(i) in tool_blob:
                     problems.append("Widerspruch: ID " + i + " im Tool-Ergebnis vorhanden, aber als nicht gefunden gemeldet")
-        # 4. "gesichert" ohne Such-Tool-Call im selben Turn ist unzulaessig
+        # 4. "gesichert" mit konkreter Quellenangabe (UUID/URL/DOI) ohne Such-Tool-Call ist unzulaessig
         for a in data.get("belegte_aussagen") or []:
             if isinstance(a, dict) and "gesichert" in str(a.get("evidenzgrad", "")).lower():
-                if not (set(self.tools_called) & search_tools):
-                    problems.append("evidenzgrad=gesichert ohne Such-Tool-Call im selben Turn: " + str(a.get("aussage", ""))[:100])
+                q = str(a.get("quelle", "")).lower()
+                if _re.search(r"[0-9a-f]{8}-[0-9a-f]{4}|https?://|doi:", q) and not (set(self.tools_called) & search_tools):
+                    problems.append("evidenzgrad=gesichert mit Quelle ohne Such-Tool-Call im selben Turn: " + str(a.get("aussage", ""))[:100])
         if not problems:
             return None
         feedback = ("VERBOTEN: " + " | ".join(problems) +
