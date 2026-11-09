@@ -464,6 +464,12 @@ class QuoteAuditHook(agents.Hook):
                 q = str(a.get("quelle", "")).lower()
                 if _re.search(r"[0-9a-f]{8}-[0-9a-f]{4}|https?://|doi:", q) and not (set(self.tools_called) & search_tools):
                     problems.append("evidenzgrad=gesichert mit Quelle ohne Such-Tool-Call im selben Turn: " + str(a.get("aussage", ""))[:100])
+        # 5. ID-Herkunft (E7): jede UUID in der Antwort muss in Tool-Ergebnissen des Turns
+        # oder unter den bekannten Library-IDs vorkommen
+        known_libs = {"01a1843c-f463-71db-a3fe-ae8b3814f155", "01a182d2-0a6f-762d-9fc3-a4150e53e3be", "01a1b7a7-d3b3-7603-9601-7efb317d38ee", "01a1c18b-fe93-75a4-8c2b-871c9f112cd9"}
+        for i in ids_in_answer:
+            if _norm(i) not in tool_blob and i not in known_libs:
+                problems.append("ID nicht aus Tool-Output/Library-Konstante: " + i)
         if not problems:
             return None
         feedback = ("VERBOTEN: " + " | ".join(problems) +
