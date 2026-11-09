@@ -56,6 +56,9 @@ Regeln (ANTI-HALLUZINATION, strikt einzuhalten):
 - Zitate aus PDFs/Dokumenten immer gegen den exakten Volltext (text_content) prüfen, nie gegen RAG-Zusammenfassungen oder das Gedaechtnis.
 - Wörtliche Zitate landen im Feld verbatim_zitate (mit quelle + geprueft_mit), nie inline als erfundenes Zitat.
 - "Wörtlich" heisst ZEICHEN-EXAKT inklusive Leerzeichen und Zeilenumbrueche (found_exact_inkl_leerzeichen=True). Ist nur found=True (normalisiert) aber nicht exakt, darfst du das Zitat NICHT wörtlich wiedergeben - dann paraphrasieren und als Paraphrase kennzeichnen.
+- QUELLENHIERARCHIE: Primaerquellen (Original-PDF, Verlag, DOI) bevorzugen; ResearchGate/Sekundaerquellen nur mit Kennzeichnung primaerquelle=false.
+- TRIANGULATION: Wichtige Fakten brauchen mind. 2 unabhaengige Quellen -> evidenzgrad=gesichert; sonst wahrscheinlich/umstritten. Bei widerspruechlichen Quellen aktiv nach Gegenpositionen suchen und vermerken.
+- RECHERCHE-PROTOKOLL: In jeder substantiellen research_note_ablegen-Notiz ALLE Suchbegriffe, URLs, Zugriffsdaten und verworfene Quellen festhalten (reproduzierbar wie ein Laborbuch). Notiz-Titel immer mit Datum; bestehende Notizen nie ueberschreiben.
 - DOUBLE-CHECK (PFLICHT vor jeder Antwort): Jede wörtliche Angabe, jede Zahl, jede ID MUSS mit zitat_pruefen / web_zitat_pruefen / dokument_lesen gegen die Quelle verifiziert und im Feld double_check mit Tool-Ergebnis eingetragen werden. Nicht verifizierbare Angaben duerfen nicht als Fakt ausgegeben werden - nur als offene_punkte.
 - ARITHMETIK: Zahlen immer gegen die Quelle pruefen und auf interne Konsistenz (z. B. Teilsummen) kontrollieren; bei Widerspruch -> offene_punkte, nie runden/erfinden.
 - ABLAGE: Bei Ablage-Anforderungen entweder Datei mit research_note_ablegen sichern oder ausdruecklich "nicht abgelegt" melden - keine konditionalen Angaben.
@@ -107,6 +110,8 @@ def _client():
 class BelegteAussage(BaseModel):
     aussage: str = Field(description="Faktische Aussage, die ausschliesslich auf einem Tool-Ergebnis oder einer Quelle beruht.")
     quelle: str = Field(description="Konkrete Quelle: Dokumentname/ID oder Titel + URL. Nie leer, nie erfunden.")
+    evidenzgrad: str = Field(description=" Einer von: gesichert (mind. 2 unabhaengige Quellen oder Primaerquelle), wahrscheinlich (1 Quelle), umstritten (gegenteilige Quellen), unbelegt (nicht verifiziert -> nur offene_punkte).")
+    primaerquelle: bool = Field(default=False, description="True, wenn die Quelle das Original/Primaerdokument ist (Verlag/DOI), nicht ResearchGate/Zweitquelle.")
 
 
 class VerbatimZitat(BaseModel):
