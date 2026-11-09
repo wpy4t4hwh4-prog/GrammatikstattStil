@@ -395,8 +395,9 @@ class QuoteAuditHook(agents.Hook):
 
     async def pre_tool_call(self, ctx, call):
         name = getattr(call, "tool_name", "")
-        if name and name not in KNOWN_TOOL_NAMES:
-            return _authoring_hooks.skip("Dieses Tool existiert nicht: " + name + ". Verfuegbare Tools: " + ", ".join(sorted(KNOWN_TOOL_NAMES)))
+        BUILTIN_PREFIXES = ("skill.", "file_system.", "self.", "process.", "agents.", "subagent.")
+        if name and name not in KNOWN_TOOL_NAMES and not name.startswith(BUILTIN_PREFIXES):
+            return _authoring_hooks.skip("Dieses Tool existiert nicht: " + name + ". Eigene Tools: " + ", ".join(sorted(KNOWN_TOOL_NAMES)) + " | Builtins: skill.read, file_system.*, ...")
         return None
 
     async def pre_agent_turn(self, ctx, request):
