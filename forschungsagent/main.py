@@ -409,7 +409,10 @@ class QuoteAuditHook(agents.Hook):
             txt += getattr(b, "text", "") or ""
         if not txt:
             txt = str(tr)
-        self.tool_texts = self.tool_texts + [txt[:20000]]
+        # State klein halten (65536-Byte-Limit): nur UUIDs + kurzer Hash pro Tool-Ergebnis speichern
+        ids = _re.findall(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", txt)
+        import hashlib
+        self.tool_texts = (self.tool_texts + ids + [hashlib.sha256(txt.encode()).hexdigest()[:16]])[:200]
         if name in ("zitat_pruefen", "web_zitat_pruefen"):
             tr = getattr(result, "tool_result", None)
             txt = ""
