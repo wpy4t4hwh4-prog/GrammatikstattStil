@@ -37,7 +37,7 @@ E5 Negativbefunde: Eine Meldung „nicht gefunden“, „existiert nicht“ oder
 
 E6 Grenzangaben bei Blockierung und Teilausfall: Kannst du eine Prüfung nicht ausführen, ersetze sie nicht durch einen Inhaltsbericht, sondern durch eine dokumentierte Grenzangabe mit vier Elementen: Aufgabe, Dokument-ID oder gefragtes Objekt, konkreter Suchweg (Werkzeug und Abfrage) samt dem tatsächlichen Ergebnis, und die ausdrückliche Feststellung, dass keine Prüfung möglich war und alle betreffenden Angaben offen bleiben. Werkzeugfehler meldest du wörtlich mit Fehleranzeige und Zeitpunkt. Behaupte keine Blockierung, die dir nicht angezeigt wurde.
 
-E7 ID-Herkunft: Bibliotheks-IDs, Dokument-IDs, DOIs und sonstige Bezeichner entnimmst du ausschließlich den Ausgaben deiner Werkzeuge, niemals der Erinnerung oder Konstruktion, auch dann nicht, wenn der Präfix korrekt erscheint.
+E7 ID-Herkunft: Bibliotheks-IDs entnimmst du IMMER aus dem Tool bibliotheken_auflisten (niemals aus Erinnerung/Prompt), Dokument-IDs/DOIs nur aus Tool-Ausgaben. Vor jeder ID-Angabe das jeweilige Tool aufgerufen haben.
 
 E8 Deklarationsdisziplin: Evidenzangaben wie „gesichert“, „verifiziert“ oder ein Evidenzgrad sind nur zulässig, wenn die entsprechende Prüfung tatsächlich stattgefunden hat und benannt werden kann. Eine Deklaration ersetzt niemals den Nachweis; Felder, die Überprüfung behaupten, ohne dass eine Werkzeughandlung stattfand, sind Fehlangaben. Weise bei jeder Quelle die Zugangsstufe aus: Metadaten, Abstract, Teiltext oder Volltext.
 
@@ -537,6 +537,15 @@ async def in_dokument_suchen(
     return {"document_id": document_id, "begriff": begriff, "anzahl": len(hits), "treffer": hits}
 
 
+@agents.tool
+async def bibliotheken_auflisten() -> dict:
+    """Liefert ALLE Bibliotheken des Workspace mit kanonischen IDs und Namen (aus der API, nicht aus Erinnerung). VOR jeder Angabe einer Bibliotheks-ID dieses Tool aufrufen und die ID daraus kopieren (E7)."""
+    client = _client()
+    res = await client.beta.libraries.list_async()
+    items = res.data if hasattr(res, "data") else res
+    return {"bibliotheken": [{"id": l.id, "name": l.name} for l in items]}
+
+
 agent = agents.Agent(
     model="mistral-large-latest",
     temperature=0.0,
@@ -557,6 +566,7 @@ agent = agents.Agent(
         projektquellen_suchen,
         ablage_durchsuchen,
         projektdateien_auflisten,
+        bibliotheken_auflisten,
         zitat_pruefen,
         dokument_lesen,
         web_zitat_pruefen,
