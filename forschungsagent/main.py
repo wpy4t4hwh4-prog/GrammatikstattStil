@@ -252,7 +252,7 @@ async def web_recherche(
 
 @agents.tool
 async def projektquellen_suchen(
-    query: Annotated[str, Field(description="Frage oder Suchbegriff, der in den Projekt-Dokumenten (Essay, Entwurf, Reports, Literaturliste) gesucht werden soll.")],
+    query: Annotated[str, Field(description="Frage oder Suchbegriff in den Projekt-Dokumenten.")] = "",
 ) -> dict:
     """Durchsucht die beiden Projekt-Libraries („Grammatik statt Stil Bibliothek" und „Katalogstadt – Emerging Fields in Architecture“) per RAG und beantwortet quellenbasiert mit Dokument-Angaben."""
     client = _client()
@@ -276,7 +276,7 @@ async def projektquellen_suchen(
 
 @agents.tool
 async def ablage_durchsuchen(
-    query: Annotated[str, Field(description="Wonach in den bereits vom Agenten abgelegten Research-Notizen gesucht werden soll.")],
+    query: Annotated[str, Field(description="Wonach in den Research-Notizen gesucht werden soll.")] = "",
 ) -> dict:
     """Durchsucht die Ablage-Library mit den bisherigen Research-Notizen des Agenten (Research-Ablage), um frühere Ergebnisse wiederzuverwenden."""
     client = _client()
@@ -363,10 +363,12 @@ async def zitat_pruefen(
 
 @agents.tool
 async def dokument_lesen(
-    document_id: Annotated[str, Field(description="Dokument-ID.")],
-    library_id: Annotated[str, Field(description="Optional: Library-ID. Wenn leer, wird sie ueber alle 4 Libraries automatisch aufgeloest.")] = "",
+    document_id: Annotated[str, Field(description="Dokument-ID.")] = "",
+    library_id: Annotated[str, Field(description="Optional: Library-ID. Wenn leer, automatische Aufloesung ueber alle 4 Libraries.")] = "",
 ) -> dict:
     """Liefert den EXAKTEN Volltext eines Library-Dokuments (text_content). Pflicht bei Aufgaben mit wörtlichen Zitaten, IDs oder genauen Zahlen - niemals ueber RAG raten."""
+    if not document_id:
+        return {"fehler": "document_id fehlt - nur echte Dokument-IDs aus Tool-Ausgaben (projektdateien_auflisten/dokument_finden), nie raten."}
     client = _client()
     library_id = await _resolve_library(client, library_id, document_id)
     content = await client.beta.libraries.documents.text_content_async(library_id=library_id, document_id=document_id)
