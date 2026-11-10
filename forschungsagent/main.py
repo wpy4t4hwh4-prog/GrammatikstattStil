@@ -418,6 +418,7 @@ class QuoteAuditHook(agents.Hook):
     verified: list[str] = Field(default_factory=list)
     tools_called: list[str] = Field(default_factory=list)
     retries: int = 0
+    consec_errors: int = 0
 
 
     async def pre_agent_turn(self, ctx, request):
@@ -425,6 +426,7 @@ class QuoteAuditHook(agents.Hook):
         self.tools_called = []
         self.tool_texts = []
         self.retries = 0
+        self.consec_errors = 0
         return None
 
     tool_texts: list[str] = Field(default_factory=list)
@@ -432,6 +434,13 @@ class QuoteAuditHook(agents.Hook):
     async def post_tool_call(self, ctx, result):
         name = getattr(result, "tool_name", "")
         self.tools_called = self.tools_called + [name]
+        # Client-Tools (client.*) gehoeren zum Vibe-Chat, nicht zum Agenten -> klarstellen
+        if name.startswith("client."):
+            try:
+                from mistralai.vibe_agents.sdk.authoring import hooks as _h
+                return _h.PostToolCallHookContinue(tool_result=type(tr)(content=[type(b)(type="text", text="FEHLER: '" + name + "' ist ein Client-Tool des Vibe-Chats und hier nicht verfuegbar. Nutze die Server-Tools: dokument_lesen, dokument_finden, bibliotheken_auflisten, ablage_durchsuchen, projektquellen_suchen, in_dokument_suchen.") for b in (getattr(tr, "content", None) or [])]))
+            except Exception:
+                pass
         tr = getattr(result, "tool_result", None)
         txt = ""
         content = getattr(tr, "content", None) or []
@@ -440,6 +449,10 @@ class QuoteAuditHook(agents.Hook):
         if not txt:
             txt = str(tr)
         # State klein halten (65536-Byte-Limit): nur UUIDs + kurzer Hash pro Tool-Ergebnis speichern
+        if ("fehler" in txt.lower() or "invalid arguments" in txt.lower() or "not found" in txt.lower()) and name in KNOWN_TOOL_NAMES:
+            self.consec_errors += 1
+        else:
+            self.consec_errors = 0
         ids = _re.findall(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", txt)
         import hashlib
         self.tool_texts = (self.tool_texts + ids + [hashlib.sha256(txt.encode()).hexdigest()[:16]])[:200]
@@ -471,6 +484,8 @@ class QuoteAuditHook(agents.Hook):
     async def post_llm_call(self, ctx, result):
         if getattr(result, "tool_calls", None):
             return None
+        if self.consec_errors >= 3:
+            return agents.retry("STOPP: 3+ aufeinanderfolgende fehlgeschlagene Tool-Calls. Pruefe die Argumente sorgfaeltig: IDs nur aus projektdateien_auflisten/bibliotheken_auflisten/dokument_finden kopieren, nie raten. Dann erst weiter.")
         text = getattr(result, "text", "") or ""
         try:
             data = _json.loads(text)
