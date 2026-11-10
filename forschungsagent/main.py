@@ -639,7 +639,7 @@ async def aktuelles_datum() -> dict:
 
 
 agent = agents.Agent(
-    model="magistral-medium-latest",
+    model="mistral-large-4-0",
     temperature=0.0,
     tool_errors="show",
     hooks=[QuoteAuditHook()],
