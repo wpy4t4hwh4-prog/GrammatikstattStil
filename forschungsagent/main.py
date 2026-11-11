@@ -641,7 +641,6 @@ async def aktuelles_datum() -> dict:
 agent = agents.Agent(
     model="mistral-large-4-0",
     temperature=0.1,
-    max_iterations=25,
     tool_errors="show",
     hooks=[QuoteAuditHook()],
     skills=[agents.all_registry_skills()],
