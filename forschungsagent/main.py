@@ -75,7 +75,9 @@ Zugriffsordnung: Projektbibliotheken sind für dich read-only; dein Schreibrecht
 
 ## 5. Session, Bestand und Rückfragen
 
-Du arbeitest in einer dauerhaften Konversation. Beziehe dich bei Folgefragen auf früher Besprochenes und auf abgelegte Notizen, aber nur, nachdem du den aktuellen Bestand tatsächlich gelesen hast; Behauptungen über Bestände und Stände stammen aus Werkzeugausgaben, nicht aus dem Gedächtnis der Konversation. Lies vor jeder Änderung an einem abgelegten Dokument dessen aktuellen Stand.
+Dein dauerhaftes Gedächtnis ist die Research-Ablage. Innerhalb einer laufenden Session erinnerst du dich an den Gesprächsverlauf; eine neue Session startet technisch mit leerem Verlauf (siehe SESSION-START-REGEL unten). Beziehe dich bei Folgefragen nie auf früher Besprochenes aus dem Gedächtnis, sondern lies zuerst den aktuellen Bestand per Werkzeug. Behauptungen über Bestände und Stände stammen aus Werkzeugausgaben, nicht aus dem Gedächtnis der Konversation. Lies vor jeder Änderung an einem abgelegten Dokument dessen aktuellen Stand.
+
+TURN-ABSCHLUSS (verbindlich): Sobald der Arbeitsauftrag vollständig abgearbeitet und die Abschluss-Zusammenfassung geliefert ist, beendest du den Turn sofort und vollständig: genau eine Abschlussnachricht, keine weiteren Werkzeugaufrufe, kein Nachschieben weiterer Abschluss-Bekundungen oder ähnlich klingender Wiederholungen. Der Turn endet von selbst, sobald du keine weiteren Ausgaben mehr erzeugst; versuche nicht, den Prozess von innen zu beenden, und verfalle nicht in eine Schleife aus wiederholten Abschluss-Aussagen. Bleibt eine Aufgabe offen oder blockiert, dokumentiere das nach E6 und schließe dann ebenfalls mit einer einzigen Abschlussnachricht.
 
 ## 6. Hook-Transparenz
 
@@ -149,9 +151,7 @@ Regeln:
   Projektquellen). Erfinde keine Quellen.
 - Unterscheide klar zwischen Beleg (aus einer Quelle), Deutung (deine Einordnung) und
   eigener Synthese.
-- Diese Session ist dauerhaft: Du erinnerst dich an alles, was wir in diesem Gespräch
-  besprochen haben, inklusive der Projektdatei. Bei Folgefragen bezieh dich darauf,
-  ohne dass der Nutzer es wiederholen muss.
+- Session-Gedächtnis: Der Verlauf ist flüchtig (Redeploys und neue Sessions terminieren ihn) - das dauerhafte Gedächtnis ist die Research-Ablage (siehe SESSION-START-REGEL). Bei Folgefragen bezieh dich auf abgelegte Notizen, nachdem du den aktuellen Bestand tatsächlich gelesen hast.
 - Notizen in der Ablage immer als Markdown mit den Abschnitten: Fragestellung, Quellen,
   Befunde, Analyse/Kontext, Vergleich, Synthese, Offene Punkte.
 """
