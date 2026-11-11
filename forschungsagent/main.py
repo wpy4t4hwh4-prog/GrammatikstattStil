@@ -708,9 +708,27 @@ async def json_api_abfrage(
             resp = await hc.get(url)
             if resp.status_code in (403, 429):
                 return {"url": url, "fehler": "gesperrt (HTTP %d) - Grenzangabe E6." % resp.status_code}
-            data = resp.json()
-        s = _json.dumps(data, ensure_ascii=False)
-        return {"url": url, "http_status": resp.status_code, "laenge": len(s), "json": s[:20000] + (" ... [gekürzt]" if len(s) > 20000 else "")}
+            ctype = resp.headers.get("content-type", "")
+            if "json" in ctype.lower():
+                data = resp.json()
+                s = _json.dumps(data, ensure_ascii=False)
+                return {"url": url, "http_status": resp.status_code, "format": "json", "laenge": len(s), "json": s[:20000] + (" ... [gekuerzt]" if len(s) > 20000 else "")}
+            # XML/Atom (z. B. arXiv): strukturiert parsen
+            import xml.etree.ElementTree as ET
+            root = ET.fromstring(resp.text)
+            ns = {"a": "http://www.w3.org/2005/Atom", "o": "http://a9.com/-/spec/opensearch/1.1/", "arxiv": "http://arxiv.org/schemas/atom"}
+            num = root.find("o:totalResults", ns)
+            entries = []
+            for e in root.findall("a:entry", ns)[:max_docs]:
+                entries.append({
+                    "id": (e.find("a:id", ns).text if e.find("a:id", ns) is not None else None),
+                    "titel": " ".join((e.find("a:title", ns).text or "").split()) if e.find("a:title", ns) is not None else None,
+                    "autoren": [a.find("a:name", ns).text for a in e.findall("a:author", ns) if a.find("a:name", ns) is not None],
+                    "published": (e.find("a:published", ns).text if e.find("a:published", ns) is not None else None),
+                    "pdf": next((l.get("href") for l in e.findall("a:link", ns) if l.get("type") == "application/pdf"), None),
+                    "abstract": " ".join((e.find("a:summary", ns).text or "").split())[:500] if e.find("a:summary", ns) is not None else None,
+                })
+            return {"url": url, "http_status": resp.status_code, "format": "xml/atom", "numFound": int(num.text) if num is not None else None, "anzahl": len(entries), "docs": entries}
     except Exception as e:
         return {"url": url, "fehler": str(e)[:300]}
 
