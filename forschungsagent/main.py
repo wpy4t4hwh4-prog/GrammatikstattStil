@@ -366,7 +366,7 @@ async def dokument_lesen(
     document_id: Annotated[str, Field(description="Dokument-ID.")] = "",
     library_id: Annotated[str, Field(description="Optional: Library-ID. Wenn leer, automatische Aufloesung ueber alle 4 Libraries.")] = "",
 ) -> dict:
-    """Liefert den EXAKTEN Volltext eines Library-Dokuments (text_content). Pflicht bei Aufgaben mit wörtlichen Zitaten, IDs oder genauen Zahlen - niemals ueber RAG raten."""
+    """Liefert den EXAKTEN Volltext eines Library-Dokuments (text_content). NIE client.*-Tools aufrufen (die gehoeren zum Vibe-Chat); nur dieses Server-Tool. IDs nur aus projektdateien_auflisten/dokument_finden. Pflicht bei Aufgaben mit wörtlichen Zitaten, IDs oder genauen Zahlen - niemals ueber RAG raten."""
     if not document_id:
         return {"fehler": "document_id fehlt - nur echte Dokument-IDs aus Tool-Ausgaben (projektdateien_auflisten/dokument_finden), nie raten."}
     client = _client()
@@ -641,6 +641,7 @@ async def aktuelles_datum() -> dict:
 agent = agents.Agent(
     model="mistral-large-4-0",
     temperature=0.1,
+    max_iterations=25,
     tool_errors="show",
     hooks=[QuoteAuditHook()],
     skills=[agents.all_registry_skills()],
