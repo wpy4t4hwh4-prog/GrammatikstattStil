@@ -562,6 +562,146 @@ async def pdf_in_ablage_speichern(
         return {"url": url, "fehler": str(e)[:300]}
 
 
+
+KNOWN_TOOL_NAMES = {"web_recherche", "projektquellen_suchen", "ablage_durchsuchen", "projektdateien_auflisten", "bibliotheken_auflisten", "dokument_finden", "research_note_ablegen", "zitat_pruefen", "web_zitat_pruefen", "dokument_lesen", "doi_pruefen", "url_status_pruefen", "in_dokument_suchen", "aktuelles_datum", "pdf_ocr"}
+
+
+class QuoteAuditHook(agents.Hook):
+    """Sichert Zitate UND Negativbefunde ab. Pro Turn (State wird in pre_agent_turn zurueckgesetzt):
+    - sammelt verifizierte Zitate (zitat_pruefen/web_zitat_pruefen found=True) und alle Tool-Calls
+    - post_agent_turn: unverifizierte verbatim_zitate ODER Negativbefund ("nicht gefunden"/"nicht lesbar"/
+      "nicht existiert") ohne Such-Tool-Call im selben Turn -> Retry mit Feedback (max 2), dann Reject."""
+
+    verified: list[str] = Field(default_factory=list)
+    tools_called: list[str] = Field(default_factory=list)
+    retries: int = 0
+    consec_errors: int = 0
+
+
+    async def pre_agent_turn(self, ctx, request):
+        self.verified = []
+        self.tools_called = []
+        self.tool_texts = []
+        self.retries = 0
+        self.consec_errors = 0
+        return None
+
+    tool_texts: list[str] = Field(default_factory=list)
+
+    async def post_tool_call(self, ctx, result):
+        name = getattr(result, "tool_name", "")
+        self.tools_called = self.tools_called + [name]
+        # Client-Tools (client.*) gehoeren zum Vibe-Chat, nicht zum Agenten -> klarstellen
+        if name.startswith("client."):
+            try:
+                from mistralai.vibe_agents.sdk.authoring import hooks as _h
+                return _h.PostToolCallHookContinue(tool_result=type(tr)(content=[type(b)(type="text", text="FEHLER: '" + name + "' ist ein Client-Tool des Vibe-Chats und hier nicht verfuegbar. Nutze die Server-Tools: dokument_lesen, dokument_finden, bibliotheken_auflisten, ablage_durchsuchen, projektquellen_suchen, in_dokument_suchen.") for b in (getattr(tr, "content", None) or [])]))
+            except Exception:
+                pass
+        tr = getattr(result, "tool_result", None)
+        txt = ""
+        content = getattr(tr, "content", None) or []
+        for b in content:
+            txt += getattr(b, "text", "") or ""
+        if not txt:
+            txt = str(tr)
+        # State klein halten (65536-Byte-Limit): nur UUIDs + kurzer Hash pro Tool-Ergebnis speichern
+        if ("fehler" in txt.lower() or "invalid arguments" in txt.lower() or "not found" in txt.lower()) and name in KNOWN_TOOL_NAMES:
+            self.consec_errors += 1
+        else:
+            self.consec_errors = 0
+        ids = _re.findall(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", txt)
+        import hashlib
+        self.tool_texts = (self.tool_texts + ids + [hashlib.sha256(txt.encode()).hexdigest()[:16]])[:200]
+        m403 = _re.search(r"no access on library ([0-9a-f-]{36})", txt)
+        if m403 and m403.group(1) not in {"01a1843c-f463-71db-a3fe-ae8b3814f155", "01a182d2-0a6f-762d-9fc3-a4150e53e3be", "01a1b7a7-d3b3-7603-9601-7efb317d38ee", "01a1c18b-fe93-75a4-8c2b-871c9f112cd9"}:
+            try:
+                from mistralai.vibe_agents.sdk.authoring import hooks as _h
+                return _h.PostToolCallHookContinue(tool_result=type(tr)(content=[type(b)(type="text", text="FEHLER: Library-ID " + m403.group(1) + " unbekannt. Nutze bibliotheken_auflisten fuer echte Library-IDs oder dokument_finden zur Aufloesung der Dokument-ID.") for b in (getattr(tr, "content", None) or [])]))
+            except Exception:
+                pass
+        if name in ("zitat_pruefen", "web_zitat_pruefen"):
+            tr = getattr(result, "tool_result", None)
+            txt = ""
+            content = getattr(tr, "content", None) or []
+            for b in content:
+                txt += getattr(b, "text", "") or ""
+            if not txt:
+                txt = str(tr)
+            try:
+                data = _json.loads(txt)
+            except Exception:
+                data = {}
+            if isinstance(data, dict) and data.get("found") is True:
+                import hashlib as _hl
+                h = _hl.sha256(_norm(str(data.get("zitat", ""))).encode()).hexdigest()
+                self.verified = (self.verified + [h])[:100]
+        return None
+
+    async def post_llm_call(self, ctx, result):
+        if getattr(result, "tool_calls", None):
+            return None
+        if self.consec_errors >= 3:
+            return agents.retry("STOPP: 3+ aufeinanderfolgende fehlgeschlagene Tool-Calls. Pruefe die Argumente sorgfaeltig: IDs nur aus projektdateien_auflisten/bibliotheken_auflisten/dokument_finden kopieren, nie raten. Dann erst weiter.")
+        text = getattr(result, "text", "") or ""
+        try:
+            data = _json.loads(text)
+        except Exception:
+            data = None
+        if not isinstance(data, dict):
+            return None
+        problems = []
+        quotes = data.get("verbatim_zitate") or []
+        import hashlib as _hl2
+        for q in quotes:
+            qt = _norm(str(q.get("text", "")))
+            if qt and _hl2.sha256(qt.encode()).hexdigest() not in self.verified:
+                problems.append("unverifiziertes Zitat: " + qt[:100])
+        search_tools = {"dokument_lesen", "zitat_pruefen", "web_zitat_pruefen", "ablage_durchsuchen", "projektquellen_suchen", "projektdateien_auflisten", "web_recherche", "dokument_finden", "bibliotheken_auflisten", "aktuelles_datum", "pdf_ocr"}
+        all_text = _norm(str(data.get("zusammenfassung", "")) + " " + str(data.get("offene_punkte", "")) + " " + str(data.get("belegte_aussagen", "")))
+        neg_words = ["nicht gefunden", "nicht lesbar", "nicht existiert", "nicht auffindbar", "keine treffer"]
+        # nur bei echtem Dokument-/Quellenbezug pruefen (UUID, URL, DOI, "Dokument"), nicht bei reinen Chat-Antworten
+        has_source_ref = bool(_re.search(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|https?://|doi:|dokument", all_text.lower()))
+        if has_source_ref and any(w in all_text.lower() for w in neg_words) and not (set(self.tools_called) & search_tools):
+            problems.append("Negativbefund ohne Such-Tool-Call im selben Turn")
+        ids_in_answer = set(_re.findall(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", all_text))
+        tool_blob = _norm(" ".join(self.tool_texts))
+        if has_source_ref and any(w in all_text.lower() for w in neg_words):
+            for i in ids_in_answer:
+                if _norm(i) in tool_blob:
+                    problems.append("Widerspruch: ID " + i + " im Tool-Ergebnis vorhanden, aber als nicht gefunden gemeldet")
+        # 4. Prüfbare Claims (ID/URL/DOI/Zahl/Zitat in Aussage oder Quelle) brauchen Such-Tool-Call im selben Turn;
+        #    "gesichert" generell nur mit Tool-Call. Reine Deutungen/Allgemeinwissen ohne Quelle bleiben zulaessig.
+        for a in data.get("belegte_aussagen") or []:
+            if not isinstance(a, dict):
+                continue
+            aussage = str(a.get("aussage", ""))
+            quelle = str(a.get("quelle", ""))
+            ev = str(a.get("evidenzgrad", "")).lower()
+            is_pruefbar = bool(_re.search(r"[0-9a-f]{8}-[0-9a-f]{4}|https?://|doi:|\d{4}|[\u201e\u201c\"']", aussage + " " + quelle))
+            no_tool = not (set(self.tools_called) & search_tools)
+            if "gesichert" in ev and no_tool:
+                problems.append("evidenzgrad=gesichert ohne Such-Tool-Call: " + aussage[:100])
+            elif is_pruefbar and no_tool:
+                problems.append("prüfbarer Claim (ID/URL/DOI/Zahl/Zitat) ohne Such-Tool-Call: " + aussage[:100])
+        # 5. ID-Herkunft (E7): jede UUID in der Antwort muss in Tool-Ergebnissen des Turns
+        # oder unter den bekannten Library-IDs vorkommen
+        known_libs = {"01a1843c-f463-71db-a3fe-ae8b3814f155", "01a182d2-0a6f-762d-9fc3-a4150e53e3be", "01a1b7a7-d3b3-7603-9601-7efb317d38ee", "01a1c18b-fe93-75a4-8c2b-871c9f112cd9"}
+        for i in ids_in_answer:
+            if _norm(i) not in tool_blob and i not in known_libs:
+                problems.append("ID nicht aus Tool-Output/Library-Konstante: " + i)
+        if not problems:
+            return None
+        feedback = ("VERBOTEN: " + " | ".join(problems) +
+                    ". Regeln: wörtliche Zitate nur mit zitat_pruefen/web_zitat_pruefen found=True in DIESEM Turn; "
+                    "Negativbefunde nur nach dokument_lesen/ablage_durchsuchen/projektquellen_suchen/projektdateien_auflisten-Call mit dokumentiertem Ergebnis in double_check.")
+        if self.retries < 2:
+            self.retries = self.retries + 1
+            return agents.retry(feedback)
+        return agents.reject("Turn abgelehnt: " + feedback)
+
+
+
 agent = agents.Agent(
     model="mistral-large-4-0",
     temperature=0.1,
