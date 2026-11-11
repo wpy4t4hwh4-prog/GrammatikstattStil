@@ -591,13 +591,6 @@ class QuoteAuditHook(agents.Hook):
     async def post_tool_call(self, ctx, result):
         name = getattr(result, "tool_name", "")
         self.tools_called = self.tools_called + [name]
-        # Client-Tools (client.*) gehoeren zum Vibe-Chat, nicht zum Agenten -> klarstellen
-        if name.startswith("client."):
-            try:
-                from mistralai.vibe_agents.sdk.authoring import hooks as _h
-                return _h.PostToolCallHookContinue(tool_result=type(tr)(content=[type(b)(type="text", text="FEHLER: '" + name + "' ist ein Client-Tool des Vibe-Chats und hier nicht verfuegbar. Nutze die Server-Tools: dokument_lesen, dokument_finden, bibliotheken_auflisten, ablage_durchsuchen, projektquellen_suchen, in_dokument_suchen.") for b in (getattr(tr, "content", None) or [])]))
-            except Exception:
-                pass
         tr = getattr(result, "tool_result", None)
         txt = ""
         content = getattr(tr, "content", None) or []
