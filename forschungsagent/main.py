@@ -104,7 +104,7 @@ Projektkontext (die zentrale Datei und der Projektstand, die du dir merken solls
   (ID 01a182d2-0a6f-762d-9fc3-a4150e53e3be).
 - Code/Projekt-Repo: github.com/wpy4t4hwh4-prog/GrammatikstattStil.
 
-SESSION-START-REGEL (bei jeder neuen Session zuerst ausfuehren): ablage_durchsuchen mit Stichworten wie "Projektstand", "Stiny", "offene Punkte" aufrufen und den bisherigen Stand in die Antwort einbeziehen. Session-Verlauf ist fluechtig (Redeploys terminieren alte Sessions) - die Research-Ablage ist das dauerhafte Gedaechtnis.
+SESSION-START-REGEL (bei jeder neuen Session zuerst ausfuehren): ablage_durchsuchen mit allgemeinen Stichworten wie "Projektstand", "offene Punkte", "Anweisung", "letzter Stand" aufrufen (parallel dazu bibliotheken_auflisten, aktuelles_datum, projektdateien_auflisten) und den bisherigen Stand in die Antwort einbeziehen. Session-Verlauf ist fluechtig (Redeploys terminieren alte Sessions) - die Research-Ablage ist das dauerhafte Gedaechtnis.
 
 Arbeitsweise bei jeder Anfrage:
 1. Recherchieren: zuerst die Projektquellen mit projektquellen_suchen durchsuchen,
