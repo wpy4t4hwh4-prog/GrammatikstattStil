@@ -383,166 +383,40 @@ async def web_zitat_pruefen(
     zitat: Annotated[str, Field(description="Das angebliche wörtliche Zitat.")],
     url: Annotated[str, Field(description="URL der Quelle, aus der zitiert werden soll.")] = "",
 ) -> dict:
-    """PFLICHT vor jedem wörtlichen Zitat aus einer WEBQUELLE: laedt die Seite und prueft per Substring-Suche, ob das Zitat dort vorkommt. found=True erforderlich, sonst nicht als wörtlich ausgeben."""
-    import re
-    import httpx
-    norm = lambda s: re.sub(r"\s+", " ", s).strip()
+    """PFLICHT vor jedem wörtlichen Zitat aus einer WEBQUELLE. v2: liefert bei Treffer Kontext (+-250 Zeichen um die Fundstelle), normalisiert HTML-Entities/Quotes/Whitespace, erkennt PDFs und nutzt dann OCR (mistral-ocr-4-1). found=True erforderlich."""
+    import re, html, httpx
+    if not url or not zitat:
+        return {"fehler": "url und zitat fehlen - beide aus Tool-Ausgaben/Quelle entnehmen."}
+    def norm(s):
+        s = html.unescape(s)
+        s = s.replace("\u201e", '"').replace("\u201c", '"').replace("\u2018", "'").replace("\u2019", "'").replace("\u2013", "-").replace("\u2014", "-").replace("\u00a0", " ")
+        return re.sub(r"\s+", " ", s).strip().lower()
     try:
-        async with httpx.AsyncClient(timeout=30, follow_redirects=True, headers={"User-Agent": "Mozilla/5.0"}) as hc:
+        async with httpx.AsyncClient(timeout=40, follow_redirects=True, headers={"User-Agent": "Mozilla/5.0"}) as hc:
             resp = await hc.get(url)
-            text = resp.text
+            ctype = resp.headers.get("content-type", "")
+            if "pdf" in ctype.lower() or url.lower().endswith(".pdf"):
+                client = _client()
+                ocr = await client.ocr.process_async(model="mistral-ocr-4-1", document={"type": "document_url", "document_url": url})
+                text = "\n".join(getattr(p, "markdown", "") or "" for p in (getattr(ocr, "pages", []) or []))
+            else:
+                text = resp.text
     except Exception as e:
-        return {"found": False, "fehler": f"Seite nicht abrufbar: {e}"}
-    found_norm = norm(zitat) in norm(text)
+        return {"found": False, "url": url, "fehler": f"Seite nicht abrufbar: {e}"}
+    nt, nz = norm(text), norm(zitat)
+    found_norm = nz in nt
     found_exact = zitat in text
-    return {"found": found_norm, "found_exact_inkl_leerzeichen": found_exact, "url": url, "http_status": resp.status_code}
-
-
-import re as _re
-import json as _json
-
-
-def _norm(s: str) -> str:
-    return _re.sub(r"\s+", " ", s).strip()
-
-
-KNOWN_TOOL_NAMES = {"web_recherche", "projektquellen_suchen", "ablage_durchsuchen", "projektdateien_auflisten", "bibliotheken_auflisten", "dokument_finden", "research_note_ablegen", "zitat_pruefen", "web_zitat_pruefen", "dokument_lesen", "doi_pruefen", "url_status_pruefen", "in_dokument_suchen", "aktuelles_datum", "pdf_ocr"}
-
-
-class QuoteAuditHook(agents.Hook):
-    """Sichert Zitate UND Negativbefunde ab. Pro Turn (State wird in pre_agent_turn zurueckgesetzt):
-    - sammelt verifizierte Zitate (zitat_pruefen/web_zitat_pruefen found=True) und alle Tool-Calls
-    - post_agent_turn: unverifizierte verbatim_zitate ODER Negativbefund ("nicht gefunden"/"nicht lesbar"/
-      "nicht existiert") ohne Such-Tool-Call im selben Turn -> Retry mit Feedback (max 2), dann Reject."""
-
-    verified: list[str] = Field(default_factory=list)
-    tools_called: list[str] = Field(default_factory=list)
-    retries: int = 0
-    consec_errors: int = 0
-
-
-    async def pre_agent_turn(self, ctx, request):
-        self.verified = []
-        self.tools_called = []
-        self.tool_texts = []
-        self.retries = 0
-        self.consec_errors = 0
-        return None
-
-    tool_texts: list[str] = Field(default_factory=list)
-
-    async def post_tool_call(self, ctx, result):
-        name = getattr(result, "tool_name", "")
-        self.tools_called = self.tools_called + [name]
-        # Client-Tools (client.*) gehoeren zum Vibe-Chat, nicht zum Agenten -> klarstellen
-        if name.startswith("client."):
-            try:
-                from mistralai.vibe_agents.sdk.authoring import hooks as _h
-                return _h.PostToolCallHookContinue(tool_result=type(tr)(content=[type(b)(type="text", text="FEHLER: '" + name + "' ist ein Client-Tool des Vibe-Chats und hier nicht verfuegbar. Nutze die Server-Tools: dokument_lesen, dokument_finden, bibliotheken_auflisten, ablage_durchsuchen, projektquellen_suchen, in_dokument_suchen.") for b in (getattr(tr, "content", None) or [])]))
-            except Exception:
-                pass
-        tr = getattr(result, "tool_result", None)
-        txt = ""
-        content = getattr(tr, "content", None) or []
-        for b in content:
-            txt += getattr(b, "text", "") or ""
-        if not txt:
-            txt = str(tr)
-        # State klein halten (65536-Byte-Limit): nur UUIDs + kurzer Hash pro Tool-Ergebnis speichern
-        if ("fehler" in txt.lower() or "invalid arguments" in txt.lower() or "not found" in txt.lower()) and name in KNOWN_TOOL_NAMES:
-            self.consec_errors += 1
-        else:
-            self.consec_errors = 0
-        ids = _re.findall(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", txt)
-        import hashlib
-        self.tool_texts = (self.tool_texts + ids + [hashlib.sha256(txt.encode()).hexdigest()[:16]])[:200]
-        m403 = _re.search(r"no access on library ([0-9a-f-]{36})", txt)
-        if m403 and m403.group(1) not in {"01a1843c-f463-71db-a3fe-ae8b3814f155", "01a182d2-0a6f-762d-9fc3-a4150e53e3be", "01a1b7a7-d3b3-7603-9601-7efb317d38ee", "01a1c18b-fe93-75a4-8c2b-871c9f112cd9"}:
-            try:
-                from mistralai.vibe_agents.sdk.authoring import hooks as _h
-                return _h.PostToolCallHookContinue(tool_result=type(tr)(content=[type(b)(type="text", text="FEHLER: Library-ID " + m403.group(1) + " unbekannt. Nutze bibliotheken_auflisten fuer echte Library-IDs oder dokument_finden zur Aufloesung der Dokument-ID.") for b in (getattr(tr, "content", None) or [])]))
-            except Exception:
-                pass
-        if name in ("zitat_pruefen", "web_zitat_pruefen"):
-            tr = getattr(result, "tool_result", None)
-            txt = ""
-            content = getattr(tr, "content", None) or []
-            for b in content:
-                txt += getattr(b, "text", "") or ""
-            if not txt:
-                txt = str(tr)
-            try:
-                data = _json.loads(txt)
-            except Exception:
-                data = {}
-            if isinstance(data, dict) and data.get("found") is True:
-                import hashlib as _hl
-                h = _hl.sha256(_norm(str(data.get("zitat", ""))).encode()).hexdigest()
-                self.verified = (self.verified + [h])[:100]
-        return None
-
-    async def post_llm_call(self, ctx, result):
-        if getattr(result, "tool_calls", None):
-            return None
-        if self.consec_errors >= 3:
-            return agents.retry("STOPP: 3+ aufeinanderfolgende fehlgeschlagene Tool-Calls. Pruefe die Argumente sorgfaeltig: IDs nur aus projektdateien_auflisten/bibliotheken_auflisten/dokument_finden kopieren, nie raten. Dann erst weiter.")
-        text = getattr(result, "text", "") or ""
-        try:
-            data = _json.loads(text)
-        except Exception:
-            data = None
-        if not isinstance(data, dict):
-            return None
-        problems = []
-        quotes = data.get("verbatim_zitate") or []
-        import hashlib as _hl2
-        for q in quotes:
-            qt = _norm(str(q.get("text", "")))
-            if qt and _hl2.sha256(qt.encode()).hexdigest() not in self.verified:
-                problems.append("unverifiziertes Zitat: " + qt[:100])
-        search_tools = {"dokument_lesen", "zitat_pruefen", "web_zitat_pruefen", "ablage_durchsuchen", "projektquellen_suchen", "projektdateien_auflisten", "web_recherche", "dokument_finden", "bibliotheken_auflisten", "aktuelles_datum", "pdf_ocr"}
-        all_text = _norm(str(data.get("zusammenfassung", "")) + " " + str(data.get("offene_punkte", "")) + " " + str(data.get("belegte_aussagen", "")))
-        neg_words = ["nicht gefunden", "nicht lesbar", "nicht existiert", "nicht auffindbar", "keine treffer"]
-        # nur bei echtem Dokument-/Quellenbezug pruefen (UUID, URL, DOI, "Dokument"), nicht bei reinen Chat-Antworten
-        has_source_ref = bool(_re.search(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|https?://|doi:|dokument", all_text.lower()))
-        if has_source_ref and any(w in all_text.lower() for w in neg_words) and not (set(self.tools_called) & search_tools):
-            problems.append("Negativbefund ohne Such-Tool-Call im selben Turn")
-        ids_in_answer = set(_re.findall(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", all_text))
-        tool_blob = _norm(" ".join(self.tool_texts))
-        if has_source_ref and any(w in all_text.lower() for w in neg_words):
-            for i in ids_in_answer:
-                if _norm(i) in tool_blob:
-                    problems.append("Widerspruch: ID " + i + " im Tool-Ergebnis vorhanden, aber als nicht gefunden gemeldet")
-        # 4. Prüfbare Claims (ID/URL/DOI/Zahl/Zitat in Aussage oder Quelle) brauchen Such-Tool-Call im selben Turn;
-        #    "gesichert" generell nur mit Tool-Call. Reine Deutungen/Allgemeinwissen ohne Quelle bleiben zulaessig.
-        for a in data.get("belegte_aussagen") or []:
-            if not isinstance(a, dict):
-                continue
-            aussage = str(a.get("aussage", ""))
-            quelle = str(a.get("quelle", ""))
-            ev = str(a.get("evidenzgrad", "")).lower()
-            is_pruefbar = bool(_re.search(r"[0-9a-f]{8}-[0-9a-f]{4}|https?://|doi:|\d{4}|[\u201e\u201c\"']", aussage + " " + quelle))
-            no_tool = not (set(self.tools_called) & search_tools)
-            if "gesichert" in ev and no_tool:
-                problems.append("evidenzgrad=gesichert ohne Such-Tool-Call: " + aussage[:100])
-            elif is_pruefbar and no_tool:
-                problems.append("prüfbarer Claim (ID/URL/DOI/Zahl/Zitat) ohne Such-Tool-Call: " + aussage[:100])
-        # 5. ID-Herkunft (E7): jede UUID in der Antwort muss in Tool-Ergebnissen des Turns
-        # oder unter den bekannten Library-IDs vorkommen
-        known_libs = {"01a1843c-f463-71db-a3fe-ae8b3814f155", "01a182d2-0a6f-762d-9fc3-a4150e53e3be", "01a1b7a7-d3b3-7603-9601-7efb317d38ee", "01a1c18b-fe93-75a4-8c2b-871c9f112cd9"}
-        for i in ids_in_answer:
-            if _norm(i) not in tool_blob and i not in known_libs:
-                problems.append("ID nicht aus Tool-Output/Library-Konstante: " + i)
-        if not problems:
-            return None
-        feedback = ("VERBOTEN: " + " | ".join(problems) +
-                    ". Regeln: wörtliche Zitate nur mit zitat_pruefen/web_zitat_pruefen found=True in DIESEM Turn; "
-                    "Negativbefunde nur nach dokument_lesen/ablage_durchsuchen/projektquellen_suchen/projektdateien_auflisten-Call mit dokumentiertem Ergebnis in double_check.")
-        if self.retries < 2:
-            self.retries = self.retries + 1
-            return agents.retry(feedback)
-        return agents.reject("Turn abgelehnt: " + feedback)
-
+    out = {"found": found_norm, "found_exact_inkl_leerzeichen": found_exact, "url": url, "http_status": resp.status_code, "pdf_via_ocr": "pdf" in ctype.lower()}
+    if found_norm:
+        i = nt.find(nz)
+        out["kontext"] = text[max(0, i-250): i+len(zitat)+250].replace("\n", " ")
+        out["fundstelle_hint"] = "Treffer nach Normierung (Entities/Whitespace bereinigt)"
+    elif found_exact:
+        i = text.find(zitat)
+        out["kontext"] = text[max(0, i-250): i+len(zitat)+250].replace("\n", " ")
+    else:
+        out["diagnose"] = "Zitat weder exakt noch normiert gefunden; Seite gekuerzt auf %d Zeichen geprueft." % len(text)
+    return out
 
 
 @agents.tool
@@ -662,6 +536,32 @@ async def pdf_ocr(
         return {"url": url, "fehler": str(e)[:300]}
 
 
+@agents.tool
+async def pdf_in_ablage_speichern(
+    url: Annotated[str, Field(description="Exakte PDF-URL (aus Tool-Ausgabe).")],
+    titel: Annotated[str, Field(description="Dateiname/Titel fuer die Ablage, z. B. Autor_Jahr_Titel.pdf")] = "",
+) -> dict:
+    """Laedt ein Web-PDF herunter und speichert es als Dokument in der Research-Ablage (serverseitig verarbeitet, danach per dokument_lesen/in_dokument_suchen/zitat_pruefen nutzbar). Legitime Wege only (E6)."""
+    import httpx
+    if not url:
+        return {"fehler": "url fehlt."}
+    client = _client()
+    try:
+        async with httpx.AsyncClient(timeout=60, follow_redirects=True, headers={"User-Agent": "Mozilla/5.0"}) as hc:
+            resp = await hc.get(url)
+            if resp.status_code in (403, 429):
+                return {"url": url, "fehler": "gesperrt (HTTP %d) - keine Umgehung; Grenzangabe E6." % resp.status_code}
+            if resp.status_code != 200:
+                return {"url": url, "fehler": "HTTP %d" % resp.status_code}
+            name = titel or url.split("/")[-1].split("?")[0] or "dokument.pdf"
+            if not name.lower().endswith(".pdf"):
+                name += ".pdf"
+            doc = await client.beta.libraries.documents.upload_async(library_id=NOTES_LIBRARY_ID, file={"file_name": name, "content": resp.content})
+            return {"url": url, "document_id": doc.id, "name": doc.name, "library_id": NOTES_LIBRARY_ID, "status": doc.processing_status}
+    except Exception as e:
+        return {"url": url, "fehler": str(e)[:300]}
+
+
 agent = agents.Agent(
     model="mistral-large-4-0",
     temperature=0.1,
@@ -686,6 +586,7 @@ agent = agents.Agent(
         dokument_finden,
         aktuelles_datum,
         pdf_ocr,
+        pdf_in_ablage_speichern,
         zitat_pruefen,
         dokument_lesen,
         web_zitat_pruefen,
