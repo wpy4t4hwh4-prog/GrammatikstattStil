@@ -669,5 +669,5 @@ agent = agents.Agent(
         in_dokument_suchen,
         research_note_ablegen,
     ],
-    max_iterations=40,
+    max_iterations=25,
 )
