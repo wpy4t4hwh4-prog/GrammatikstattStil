@@ -406,7 +406,7 @@ def _norm(s: str) -> str:
     return _re.sub(r"\s+", " ", s).strip()
 
 
-KNOWN_TOOL_NAMES = {"web_recherche", "projektquellen_suchen", "ablage_durchsuchen", "projektdateien_auflisten", "bibliotheken_auflisten", "dokument_finden", "research_note_ablegen", "zitat_pruefen", "web_zitat_pruefen", "dokument_lesen", "doi_pruefen", "url_status_pruefen", "in_dokument_suchen", "aktuelles_datum"}
+KNOWN_TOOL_NAMES = {"web_recherche", "projektquellen_suchen", "ablage_durchsuchen", "projektdateien_auflisten", "bibliotheken_auflisten", "dokument_finden", "research_note_ablegen", "zitat_pruefen", "web_zitat_pruefen", "dokument_lesen", "doi_pruefen", "url_status_pruefen", "in_dokument_suchen", "aktuelles_datum", "pdf_ocr"}
 
 
 class QuoteAuditHook(agents.Hook):
@@ -500,7 +500,7 @@ class QuoteAuditHook(agents.Hook):
             qt = _norm(str(q.get("text", "")))
             if qt and _hl2.sha256(qt.encode()).hexdigest() not in self.verified:
                 problems.append("unverifiziertes Zitat: " + qt[:100])
-        search_tools = {"dokument_lesen", "zitat_pruefen", "web_zitat_pruefen", "ablage_durchsuchen", "projektquellen_suchen", "projektdateien_auflisten", "web_recherche", "dokument_finden", "bibliotheken_auflisten", "aktuelles_datum"}
+        search_tools = {"dokument_lesen", "zitat_pruefen", "web_zitat_pruefen", "ablage_durchsuchen", "projektquellen_suchen", "projektdateien_auflisten", "web_recherche", "dokument_finden", "bibliotheken_auflisten", "aktuelles_datum", "pdf_ocr"}
         all_text = _norm(str(data.get("zusammenfassung", "")) + " " + str(data.get("offene_punkte", "")) + " " + str(data.get("belegte_aussagen", "")))
         neg_words = ["nicht gefunden", "nicht lesbar", "nicht existiert", "nicht auffindbar", "keine treffer"]
         # nur bei echtem Dokument-/Quellenbezug pruefen (UUID, URL, DOI, "Dokument"), nicht bei reinen Chat-Antworten
@@ -638,6 +638,30 @@ async def aktuelles_datum() -> dict:
     return {"utc": now.isoformat(), "datum": now.date().isoformat(), "uhrzeit": now.strftime("%H:%M:%S")}
 
 
+@agents.tool
+async def pdf_ocr(
+    url: Annotated[str, Field(description="Exakte URL eines PDFs (aus Tool-Ausgabe/Quelle, nie geraten).")],
+) -> dict:
+    """Laedt ein Web-PDF per mistral-ocr-4 (OCR) und liefert Markdown-Text. Zuvor url_status_pruefen: Sperre (403) != 404. Ergebnis gekappt; Details via in_dokument_suchen nach Ablage."""
+    import httpx
+    if not url:
+        return {"fehler": "url fehlt - nur exakte URLs aus Tool-Ausgaben verwenden."}
+    client = _client()
+    try:
+        async with httpx.AsyncClient(timeout=30, follow_redirects=True, headers={"User-Agent": "Mozilla/5.0"}) as hc:
+            head = await hc.head(url)
+            if head.status_code in (403, 429):
+                return {"url": url, "fehler": "gesperrt (HTTP %d) - keine Umgehung; Grenzangabe nach E6." % head.status_code}
+            if head.status_code == 404:
+                return {"url": url, "fehler": "404 - nicht gefunden."}
+        resp = await client.ocr.process_async(model="mistral-ocr-4-1", document={"type": "document_url", "document_url": url})
+        pages = getattr(resp, "pages", []) or []
+        text = "\n\n".join(getattr(p, "markdown", "") or "" for p in pages)
+        return {"url": url, "seiten": len(pages), "laenge": len(text), "text": text[:8000] + (" ... [gekürzt]" if len(text) > 8000 else "")}
+    except Exception as e:
+        return {"url": url, "fehler": str(e)[:300]}
+
+
 agent = agents.Agent(
     model="mistral-large-4-0",
     temperature=0.1,
@@ -661,6 +685,7 @@ agent = agents.Agent(
         bibliotheken_auflisten,
         dokument_finden,
         aktuelles_datum,
+        pdf_ocr,
         zitat_pruefen,
         dokument_lesen,
         web_zitat_pruefen,
