@@ -563,7 +563,7 @@ async def pdf_in_ablage_speichern(
 
 
 
-KNOWN_TOOL_NAMES = {"web_recherche", "projektquellen_suchen", "ablage_durchsuchen", "projektdateien_auflisten", "bibliotheken_auflisten", "dokument_finden", "research_note_ablegen", "zitat_pruefen", "web_zitat_pruefen", "dokument_lesen", "doi_pruefen", "url_status_pruefen", "in_dokument_suchen", "aktuelles_datum", "pdf_ocr"}
+KNOWN_TOOL_NAMES = {"web_recherche", "projektquellen_suchen", "ablage_durchsuchen", "projektdateien_auflisten", "bibliotheken_auflisten", "dokument_finden", "research_note_ablegen", "zitat_pruefen", "web_zitat_pruefen", "dokument_lesen", "doi_pruefen", "url_status_pruefen", "in_dokument_suchen", "aktuelles_datum", "pdf_ocr", "pdf_in_ablage_speichern"}
 
 
 class QuoteAuditHook(agents.Hook):
@@ -657,7 +657,7 @@ class QuoteAuditHook(agents.Hook):
             qt = _norm(str(q.get("text", "")))
             if qt and _hl2.sha256(qt.encode()).hexdigest() not in self.verified:
                 problems.append("unverifiziertes Zitat: " + qt[:100])
-        search_tools = {"dokument_lesen", "zitat_pruefen", "web_zitat_pruefen", "ablage_durchsuchen", "projektquellen_suchen", "projektdateien_auflisten", "web_recherche", "dokument_finden", "bibliotheken_auflisten", "aktuelles_datum", "pdf_ocr"}
+        search_tools = {"dokument_lesen", "zitat_pruefen", "web_zitat_pruefen", "ablage_durchsuchen", "projektquellen_suchen", "projektdateien_auflisten", "web_recherche", "dokument_finden", "bibliotheken_auflisten", "aktuelles_datum", "pdf_ocr", "pdf_in_ablage_speichern"}
         all_text = _norm(str(data.get("zusammenfassung", "")) + " " + str(data.get("offene_punkte", "")) + " " + str(data.get("belegte_aussagen", "")))
         neg_words = ["nicht gefunden", "nicht lesbar", "nicht existiert", "nicht auffindbar", "keine treffer"]
         # nur bei echtem Dokument-/Quellenbezug pruefen (UUID, URL, DOI, "Dokument"), nicht bei reinen Chat-Antworten
