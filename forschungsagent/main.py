@@ -629,13 +629,13 @@ class QuoteAuditHook(agents.Hook):
     async def post_llm_call(self, ctx, result):
         if getattr(result, "tool_calls", None):
             return None
+        text = getattr(result, "text", "") or ""
         if self.consec_errors >= 3:
             return agents.retry("STOPP: 3+ aufeinanderfolgende fehlgeschlagene Tool-Calls. Pruefe die Argumente sorgfaeltig: IDs nur aus projektdateien_auflisten/bibliotheken_auflisten/dokument_finden kopieren, nie raten. Dann erst weiter.")
         # degenerativer Text-Loop ("Fertig... [stop]...") ohne Tool-Calls -> Turn hart beenden
         deg = len(_re.findall(r"fertig|\[stop\]|\[end|ende der (runde|antwort)|tschüss|aufhören|höre auf", text, _re.IGNORECASE))
         if deg >= 3 and not getattr(result, "tool_calls", None):
             return agents.reject("Turn beendet: degenerativer Endlos-Text erkannt. Bitte naechsten Auftrag stellen.")
-        text = getattr(result, "text", "") or ""
         try:
             data = _json.loads(text)
         except Exception:
