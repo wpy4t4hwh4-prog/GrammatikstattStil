@@ -410,11 +410,12 @@ async def web_zitat_pruefen(
     out = {"found": found_norm, "found_exact_inkl_leerzeichen": found_exact, "url": url, "http_status": resp.status_code, "pdf_via_ocr": "pdf" in ctype.lower()}
     if found_norm:
         i = nt.find(nz)
-        out["kontext"] = text[max(0, i-250): i+len(zitat)+250].replace("\n", " ")
+        out["kontext"] = text[max(0, i-500): i+len(zitat)+500].replace("\n", " ")
+        out["alle_treffer"] = [text[max(0, m-100): m+len(zitat)+100].replace("\n", " ") for m in [mm.start() for mm in _re.finditer(_re.escape(nz), nt)][:5]]
         out["fundstelle_hint"] = "Treffer nach Normierung (Entities/Whitespace bereinigt)"
     elif found_exact:
         i = text.find(zitat)
-        out["kontext"] = text[max(0, i-250): i+len(zitat)+250].replace("\n", " ")
+        out["kontext"] = text[max(0, i-500): i+len(zitat)+500].replace("\n", " ")
     else:
         out["diagnose"] = "Zitat weder exakt noch normiert gefunden; Seite gekuerzt auf %d Zeichen geprueft." % len(text)
     return out
@@ -564,7 +565,7 @@ async def pdf_in_ablage_speichern(
 
 
 
-KNOWN_TOOL_NAMES = {"web_recherche", "projektquellen_suchen", "ablage_durchsuchen", "projektdateien_auflisten", "bibliotheken_auflisten", "dokument_finden", "research_note_ablegen", "zitat_pruefen", "web_zitat_pruefen", "dokument_lesen", "doi_pruefen", "url_status_pruefen", "in_dokument_suchen", "aktuelles_datum", "pdf_ocr", "pdf_in_ablage_speichern"}
+KNOWN_TOOL_NAMES = {"web_recherche", "projektquellen_suchen", "ablage_durchsuchen", "projektdateien_auflisten", "bibliotheken_auflisten", "dokument_finden", "research_note_ablegen", "zitat_pruefen", "web_zitat_pruefen", "dokument_lesen", "doi_pruefen", "url_status_pruefen", "in_dokument_suchen", "aktuelles_datum", "pdf_ocr", "pdf_in_ablage_speichern", "json_api_abfrage"}
 
 
 class QuoteAuditHook(agents.Hook):
@@ -630,6 +631,10 @@ class QuoteAuditHook(agents.Hook):
             return None
         if self.consec_errors >= 3:
             return agents.retry("STOPP: 3+ aufeinanderfolgende fehlgeschlagene Tool-Calls. Pruefe die Argumente sorgfaeltig: IDs nur aus projektdateien_auflisten/bibliotheken_auflisten/dokument_finden kopieren, nie raten. Dann erst weiter.")
+        # degenerativer Text-Loop ("Fertig... [stop]...") ohne Tool-Calls -> Turn hart beenden
+        deg = len(_re.findall(r"fertig|\[stop\]|\[end|ende der (runde|antwort)|tschüss|aufhören|höre auf", text, _re.IGNORECASE))
+        if deg >= 3 and not getattr(result, "tool_calls", None):
+            return agents.reject("Turn beendet: degenerativer Endlos-Text erkannt. Bitte naechsten Auftrag stellen.")
         text = getattr(result, "text", "") or ""
         try:
             data = _json.loads(text)
@@ -644,7 +649,7 @@ class QuoteAuditHook(agents.Hook):
             qt = _norm(str(q.get("text", "")))
             if qt and _hl2.sha256(qt.encode()).hexdigest() not in self.verified:
                 problems.append("unverifiziertes Zitat: " + qt[:100])
-        search_tools = {"dokument_lesen", "zitat_pruefen", "web_zitat_pruefen", "ablage_durchsuchen", "projektquellen_suchen", "projektdateien_auflisten", "web_recherche", "dokument_finden", "bibliotheken_auflisten", "aktuelles_datum", "pdf_ocr", "pdf_in_ablage_speichern"}
+        search_tools = {"dokument_lesen", "zitat_pruefen", "web_zitat_pruefen", "ablage_durchsuchen", "projektquellen_suchen", "projektdateien_auflisten", "web_recherche", "dokument_finden", "bibliotheken_auflisten", "aktuelles_datum", "pdf_ocr", "pdf_in_ablage_speichern", "json_api_abfrage"}
         all_text = _norm(str(data.get("zusammenfassung", "")) + " " + str(data.get("offene_punkte", "")) + " " + str(data.get("belegte_aussagen", "")))
         neg_words = ["nicht gefunden", "nicht lesbar", "nicht existiert", "nicht auffindbar", "keine treffer"]
         # nur bei echtem Dokument-/Quellenbezug pruefen (UUID, URL, DOI, "Dokument"), nicht bei reinen Chat-Antworten
@@ -689,6 +694,27 @@ class QuoteAuditHook(agents.Hook):
 
 
 
+@agents.tool
+async def json_api_abfrage(
+    url: Annotated[str, Field(description="Vollstaendige API-URL mit Query-Parametern (z. B. export.arxiv.org/api/query?search_query=...), aus Tool-Ausgabe/Quelle.")],
+    max_docs: Annotated[int, Field(description="Max. Anzahl Dokumente/Felder in der Antwort (Default 10).")] = 10,
+) -> dict:
+    """Ruft eine JSON-API ab (z. B. arXiv export API, archive.org advancedsearch) und gibt numFound/results UNGEKUERZT strukturiert zurueck (Titel, IDs, URLs, relevante Felder)."""
+    import httpx, json as _json
+    if not url:
+        return {"fehler": "url fehlt - nur echte API-URLs aus Tool-Ausgaben/Quellen."}
+    try:
+        async with httpx.AsyncClient(timeout=40, follow_redirects=True, headers={"User-Agent": "Mozilla/5.0"}) as hc:
+            resp = await hc.get(url)
+            if resp.status_code in (403, 429):
+                return {"url": url, "fehler": "gesperrt (HTTP %d) - Grenzangabe E6." % resp.status_code}
+            data = resp.json()
+        s = _json.dumps(data, ensure_ascii=False)
+        return {"url": url, "http_status": resp.status_code, "laenge": len(s), "json": s[:20000] + (" ... [gekürzt]" if len(s) > 20000 else "")}
+    except Exception as e:
+        return {"url": url, "fehler": str(e)[:300]}
+
+
 agent = agents.Agent(
     model="mistral-large-4-0",
     temperature=0.1,
@@ -714,6 +740,7 @@ agent = agents.Agent(
         aktuelles_datum,
         pdf_ocr,
         pdf_in_ablage_speichern,
+        json_api_abfrage,
         zitat_pruefen,
         dokument_lesen,
         web_zitat_pruefen,
