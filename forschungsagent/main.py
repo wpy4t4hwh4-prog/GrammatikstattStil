@@ -606,13 +606,6 @@ class QuoteAuditHook(agents.Hook):
         ids = _re.findall(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", txt)
         import hashlib
         self.tool_texts = (self.tool_texts + ids + [hashlib.sha256(txt.encode()).hexdigest()[:16]])[:200]
-        m403 = _re.search(r"no access on library ([0-9a-f-]{36})", txt)
-        if m403 and m403.group(1) not in {"01a1843c-f463-71db-a3fe-ae8b3814f155", "01a182d2-0a6f-762d-9fc3-a4150e53e3be", "01a1b7a7-d3b3-7603-9601-7efb317d38ee", "01a1c18b-fe93-75a4-8c2b-871c9f112cd9"}:
-            try:
-                from mistralai.vibe_agents.sdk.authoring import hooks as _h
-                return _h.PostToolCallHookContinue(tool_result=type(tr)(content=[type(b)(type="text", text="FEHLER: Library-ID " + m403.group(1) + " unbekannt. Nutze bibliotheken_auflisten fuer echte Library-IDs oder dokument_finden zur Aufloesung der Dokument-ID.") for b in (getattr(tr, "content", None) or [])]))
-            except Exception:
-                pass
         if name in ("zitat_pruefen", "web_zitat_pruefen"):
             tr = getattr(result, "tool_result", None)
             txt = ""
