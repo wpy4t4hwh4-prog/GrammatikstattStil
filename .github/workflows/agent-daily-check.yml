@@ -2,7 +2,7 @@ name: Täglicher Apparat-Check (Forschungsagent)
 
 on:
   schedule:
-    - cron: "0 6 * * *" # täglich 06:00 UTC
+    - cron: "0 6,11,16,21 * * *" # 4x taeglich # täglich 06:00 UTC
   workflow_dispatch: # manueller Start möglich
 
 jobs:
