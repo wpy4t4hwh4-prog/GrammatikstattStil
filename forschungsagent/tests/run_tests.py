@@ -67,6 +67,20 @@ class HookLoopTests(unittest.TestCase):
         self.assertIsNotNone(res)
         self.assertEqual(self.hook.retries, 1)
 
+    def test_wellen_loop_retry_then_reject(self):
+        wellig = '```json\n{"zusammenfassung": "A", "belegte_aussagen": []}\n```\nZwischenfazit.\n```json\n{"zusammenfassung": "B"}\n```'
+        res1 = self._post(wellig)
+        self.assertIsNotNone(res1)  # erster Welle -> Retry
+        self.assertEqual(self.hook.rep_streak, 1)
+        res2 = self._post(wellig)
+        self.assertIsNotNone(res2)  # zweite Welle -> Reject
+        self.assertTrue(self.hook.turn_rejected)
+
+    def test_single_answer_block_not_flagged(self):
+        import json
+        payload = json.dumps({"zusammenfassung": "ok", "belegte_aussagen": [], "double_check": [], "verifizierungsquote": 1.0})
+        self.assertIsNone(self._post(payload))
+
     def test_verifizierungsquote_low_retries(self):
         import json
         payload = json.dumps({

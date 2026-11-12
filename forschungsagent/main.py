@@ -846,6 +846,13 @@ class QuoteAuditHook(agents.Hook):
         self.deg_total += deg
         if deg >= 4 or (self.no_tool_streak >= 3 and self.deg_total >= 3):
             self.turn_rejected = True; logger.warning("hook reject"); return agents.reject("Turn beendet: degenerativer Endlos-Text erkannt. Bitte naechsten Auftrag stellen.")
+        # Wellen-Loop: EINE text-only Antwort enthaelt mehrere Answer-Bloecke (mehrere ```json-Fences oder mehrere "zusammenfassung"-Felder) -> wie Wiederholung behandeln
+        _wellen = text.count("```json") + len(_re.findall(r'"zusammenfassung"\s*:', text))
+        if _wellen >= 2:
+            self.rep_streak += 1
+            if self.rep_streak >= 2:
+                self.turn_rejected = True; logger.warning("hook reject"); return agents.reject("Turn beendet: Antwort enthaelt mehrere Wellen/Answer-Bloecke ohne neuen Tool-Call. Bitte naechsten Auftrag stellen.")
+            return agents.retry("STOPP: genau EINE Antwort abgeben - keine weiteren Wellen, keine zweiten JSON-Bloecke, keine wiederholte Zusammenfassung nach der ersten Antwort. Turn sofort beenden.")
         # Wiederholungs-Loop in der Texterstellung (z. B. Dokumentation): aehnliche Antworten ohne Tool-Calls
         import difflib
         norm_text = _norm(text)
