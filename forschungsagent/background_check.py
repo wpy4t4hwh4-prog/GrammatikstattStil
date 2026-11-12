@@ -9,16 +9,13 @@ import sys
 
 from mistralai import agents
 
-TASK = """Arbeitsauftrag:
+TASK = """Arbeitsauftrag (alle übrigen Regeln gelten aus der Systemanweisung: E1-E8, Ablage-Template, Double-Check, Hook-Regeln):
 
-Arbeite wie folgt:
-
-1. Prioritätsermittlung und Entscheidung: Melde zu Beginn, ob in deiner Research-Ablage eine noch unbeantwortete Anweisung liegt; eine solche Anweisung hat Vorrang und ist diese Runde zu bearbeiten. Lies andernfalls die Standzeile, die priorisierte Beschaffungsliste des Volltext-Inventars und die offenen Prüfaufgaben des Quellenverzeichnisses. Wähle daraus die eine Aufgabe mit dem höchsten strategischen Ertrag für den Apparat (insbesondere Hebung dokumentierter Zugänge zu K4- und K5-Positionen, Abarbeitung der Beschaffungsliste, Nachbeschaffung zu offenen Fundstellen) und formuliere deine Wahl samt Begründung und Abnahmekriterien in drei bis vier Sätzen. Bearbeite genau diese eine Aufgabe; verteile dich nicht.
-2. Recherche: Suche zuerst Apparat-Bibliothek, Grammatik statt Stil Bibliothek, Katalogstadt-Bibliothek und deine Research-Ablage, danach das Web. Melde je Quelle bibliografische Identität, Fassung, Zugangsstufe, Zugriffsdatum und bei Treffern im Apparat die Positionsnotation (G/Nr.).
-3. Volltextbeschaffung: Ausschließlich auf legitimen Wegen (Open Access, frei zugängliche oder lizenzierte Fassungen); keine Kostenpflichtigkeit ohne Philipps Freigabe, keine Umgehung von Sperren. Bei Scheitern dokumentierte Grenzangabe: Aufgabe, Suchweg mit Werkzeug und Abfrage, Ergebnis, offene Punkte.
-4. Prüfung und Analyse: Lies jeden Volltext tatsächlich. Extrahiere Kernthesen mit exakten Fundstellen; jede Zahl mit Fundstelle, ohne Rundung; Datumsangaben ausschließlich aus deiner Werkzeugumgebung (aktuelles_datum). Negativbefunde nur nach tatsächlich ausgeführter, benannter Suche; „verifiziert“ nur mit reproduzierbarem Nachweis; IDs ausschließlich aus Werkzeugausgaben.
-5. Ablage: Hinterlege beschaffte Volltexte, Kernthesen und zeichengenaue Zitate (Wortlaut, Fundstelle, Zugangsstufe) in deiner Research-Ablage; genau eine Notiz je Recherche im vorgeschriebenen Aufbau; Korrekturen als dokumentierte Korrektur im selben Dokument, keine stille Zweitablage.
-6. Abgabe: Hook-Transparenzmeldung, falls ein Prüfhook aktiv ist. Schließe mit einer kompakten Zusammenfassung ab: gewählte Priorität mit Begründung, geprüfte Quellen, begründete K-Vorschläge ohne eigene Nummernvergabe, offene Punkte und Grenzen sowie die Empfehlung, welche Aufgabe die nächste Runde priorisieren sollte. Dokumentiere offene Punkte, statt Lösungen zu unterstellen."""
+1. Priorität: Prüfe zuerst per ablage_durchsuchen, ob eine unbeantwortete Anweisung in der Research-Ablage liegt (Vorrang). Sonst: Standzeile + Beschaffungsliste (Volltext-Inventar) + offene Prüfaufgaben (Quellenverzeichnis) lesen und DIE EINE Aufgabe mit dem höchsten strategischen Ertrag für den Apparat wählen (K4/K5-Hebung, Beschaffungsliste, Nachbeschaffung). Wahl + Begründung + Abnahmekriterien in 3-4 Sätzen. Genau diese eine Aufgabe bearbeiten.
+2. Reihenfolge: Apparat-Bibliothek -> Projekt-Libraries -> Research-Ablage -> Web. Je Quelle: bibliografische Identität, Fassung, Zugangsstufe, Zugriffsdatum, G/Nr.
+3. Volltextbeschaffung nur auf legitimen Wegen; keine Kosten ohne Philipps Freigabe; keine Sperrumgehung; bei Scheitern dokumentierte Grenzangabe (E6).
+4. Ablage: genau eine Notiz je Recherche (research-note-template v3); Korrekturen via research_note_aktualisieren im selben Dokument.
+5. Abgabe: Hook-Transparenzmeldung; dann kompakte Zusammenfassung: gewählte Priorität + Begründung, geprüfte Quellen, begründete K-Vorschläge (keine eigene Nummernvergabe), offene Punkte/Grenzen, Empfehlung für die nächste Runde."""
 
 
 SELF_EVAL_TASK = """Zusaetzlicher woechentlicher Auftrag (Self-Eval, DRACO-artig):
