@@ -67,6 +67,18 @@ class HookLoopTests(unittest.TestCase):
         self.assertIsNotNone(res)
         self.assertEqual(self.hook.retries, 1)
 
+    def test_verifizierungsquote_low_retries(self):
+        import json
+        payload = json.dumps({
+            "zusammenfassung": "x",
+            "belegte_aussagen": [{"aussage": "a%d" % i, "quelle": "q", "evidenzgrad": "wahrscheinlich"} for i in range(4)],
+            "double_check": [{"angabe": "a0", "pruef_tool": "dokument_lesen", "ergebnis": "ok"}],
+            "verifizierungsquote": 0.25,
+        })
+        res = self._post(payload)
+        self.assertIsNotNone(res)
+        self.assertIn("Verifizierungsquote", str(getattr(res, "message", res)))
+
     def test_rejected_turn_skips_summary_guard(self):
         with open(main.__file__, encoding="utf-8") as _f:
             src = _f.read()
@@ -176,6 +188,20 @@ class StaticSourceTests(unittest.TestCase):
         self.assertIn("zaehlen NICHT", self.src)
         self.assertIn("DATENSCHUTZ/ROBOTS", self.src)
         self.assertIn("Getty AAT", self.src)
+
+    def test_verifizierungsquote_feld_und_hook_check(self):
+        self.assertIn("verifizierungsquote: float", self.src)
+        self.assertIn("Verifizierungsquote zu niedrig", self.src)
+
+    def test_provenance_header(self):
+        self.assertIn("Erstellt mit: Forschungsagent grammatik-statt-stil-research", self.src)
+
+    def test_self_eval_in_background_check(self):
+        with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "background_check.py"), encoding="utf-8") as _f:
+            bc = _f.read()
+        self.assertIn("SELF_EVAL_TASK", bc)
+        self.assertIn("_task_for_today()", bc)
+        self.assertIn("selbst-eval-", bc)
 
     def test_aktualisieren_deletes_predecessor(self):
         self.assertIn("delete_async(library_id=NOTES_LIBRARY_ID, document_id=document_id)", self.src)

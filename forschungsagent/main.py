@@ -228,6 +228,7 @@ class ResearchAnswer(BaseModel):
     verbatim_zitate: list[VerbatimZitat] = Field(default_factory=list, description="Alle wörtlichen Zitate, jeweils per zitat_pruefen verifiziert. Leer lassen, wenn keins verifiziert ist.")
     double_check: list[DoubleCheck] = Field(default_factory=list, description="PFLICHT: jede wörtliche Angabe und jede Zahl/ID, jeweils mit Tool-Ergebnis verifiziert.")
     arbeitsupdate: str = Field(default="", description="PFLICHT nach jeder Arbeitsrunde: Klartext-Update in vollen Saetzen, was in diesem Turn recherchiert/gelesen/abgelegt wurde (plain text, keine Stichpunkte).")
+    verifizierungsquote: float = Field(default=0.0, description="Anteil der belegte_aussagen mit double_check-Nachweis (0.0-1.0). Wird vom Hook gegen die tatsaechlichen double_check-Eintraege geprueft; Abweichung >0.2 oder Quote <0.5 bei belegten Aussagen -> Retry.")
 
 
 async def _resolve_library(client, library_id: str, document_id: str) -> str:
@@ -374,7 +375,8 @@ async def research_note_ablegen(
     _m = _re4.match(r"(\d{4}-\d{2}-\d{2})", titel.strip())
     if _m and _m.group(1) > _dt.now(_tz.utc).date().isoformat():
         return {"fehler": "titel-datum %s liegt in der Zukunft (heute %s) - Datum nur aus aktuelles_datum." % (_m.group(1), _dt.now(_tz.utc).date().isoformat())}
-    header = f"# {titel}\n\n- Thema: {thema}\n- Ablage: Research-Agent „Grammatik statt Stil“\n\n"
+    from datetime import datetime as _dth, timezone as _tzh
+    header = f"# {titel}\n\n- Thema: {thema}\n- Ablage: Research-Agent „Grammatik statt Stil“\n- Erstellt mit: Forschungsagent grammatik-statt-stil-research (Modell mistral-large-4-0, Temperatur 0.1) am {_dth.now(_tzh.utc).strftime('%Y-%m-%d %H:%M:%S')} UTC (Provenance/Reproduzierbarkeit; KI-Offenlegung erfolgt in der wissenschaftlichen Arbeit)\n\n"
     document = await client.beta.libraries.documents.upload_async(
         library_id=NOTES_LIBRARY_ID,
         file=File(fileName=filename, content=(header + markdown).encode("utf-8")),
@@ -905,6 +907,16 @@ class QuoteAuditHook(agents.Hook):
                 problems.append("ID nicht aus Tool-Output/Library-Konstante: " + i)
         if data.get("belegte_aussagen") and (set(self.tools_called) & search_tools) and "research_note_ablegen" not in self.tools_called:
             problems.append("substanzielle Recherche mit belegten Aussagen, aber keine research_note_ablegen-Ablage im selben Turn")
+        # Verifizierungsquote (DRACO-artig): belegte Aussagen brauchen double_check-Nachweise
+        _n_aus = len(data.get("belegte_aussagen") or [])
+        _n_dc = len(data.get("double_check") or [])
+        if _n_aus > 0:
+            _q = min(1.0, _n_dc / _n_aus)
+            _angegeben = float(data.get("verifizierungsquote") or 0.0)
+            if _q < 0.5:
+                problems.append("Verifizierungsquote zu niedrig: %.0f%% der belegten Aussagen haben double_check-Nachweis (min. 50%%)" % (_q * 100))
+            elif abs(_angegeben - _q) > 0.2:
+                problems.append("verifizierungsquote (%.2f) weicht von tatsaechlicher Quote (%.2f) ab" % (_angegeben, _q))
         if not problems:
             return None
         feedback = ("VERBOTEN: " + " | ".join(problems) +

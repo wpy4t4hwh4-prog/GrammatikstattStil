@@ -21,6 +21,22 @@ Arbeite wie folgt:
 6. Abgabe: Hook-Transparenzmeldung, falls ein Prüfhook aktiv ist. Schließe mit einer kompakten Zusammenfassung ab: gewählte Priorität mit Begründung, geprüfte Quellen, begründete K-Vorschläge ohne eigene Nummernvergabe, offene Punkte und Grenzen sowie die Empfehlung, welche Aufgabe die nächste Runde priorisieren sollte. Dokumentiere offene Punkte, statt Lösungen zu unterstellen."""
 
 
+SELF_EVAL_TASK = """Zusaetzlicher woechentlicher Auftrag (Self-Eval, DRACO-artig):
+
+1. Lies die letzten 10 Research-Notizen der Ablage (projektdateien_auflisten -> research_ablage_agent, dann dokument_lesen; ablage_durchsuchen ergaenzend).
+2. Pruefe fuer jede Notiz (Rubrik wie DRACO): (a) faktische Akkuratheit - hat jede belegte Aussage einen double_check-Nachweis mit Tool + Ergebnis? (b) Zitationsqualitaet - jedes verbatim_zitat mit zitat_pruefen found=True im selben Arbeitsgang? (c) Provenance - Werkzeug/Modell/Datum im Header? (d) offene Punkte benannt?
+3. Berechne pro Notiz eine Verifizierungsquote (Anteil belegter Aussagen mit Nachweis, 0-1) und einen Gesamtscore.
+4. Lege das Ergebnis als Notiz "selbst-eval-<datum>.md" via research_note_ablegen ab (Tabelle: Notiz | Quote | Befunde) und nenne die schwaechsten Notizen in offene_punkte.
+Regel: Das Self-Eval ist eine Messung, keine inhaltliche Neurecherche - keine neuen Fakten behaupten ohne Tool-Call."""
+
+
+def _task_for_today() -> str:
+    from datetime import datetime, timezone
+    if datetime.now(timezone.utc).weekday() == 6:  # Sonntag UTC
+        return TASK + "\n\n" + SELF_EVAL_TASK
+    return TASK
+
+
 async def main() -> int:
     if not os.getenv("MISTRAL_API_KEY"):
         print("MISTRAL_API_KEY fehlt", file=sys.stderr)
@@ -28,7 +44,7 @@ async def main() -> int:
     agent = agents.Agent.load_from(agent_name="grammatik-statt-stil-research")
     session = await agent.start_session()
     print("SESSION:", session.id)
-    turn = await session.run(TASK)
+    turn = await session.run(_task_for_today())
     out = str(getattr(turn, "output", None) or turn)
     if "Failed" in out:
         print("TURN FAILED:", out[:500], file=sys.stderr)
