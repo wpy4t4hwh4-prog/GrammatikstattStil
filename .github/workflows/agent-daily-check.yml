@@ -5,9 +5,17 @@ on:
     - cron: "0 6,11,16,21 * * *" # 4x taeglich # täglich 06:00 UTC
   workflow_dispatch: # manueller Start möglich
 
+permissions:
+  contents: read
+
+concurrency:
+  group: forschungsagent-daily-check
+  cancel-in-progress: false
+
 jobs:
   daily-check:
     runs-on: ubuntu-latest
+    timeout-minutes: 360
     steps:
       - uses: actions/checkout@v4
         with:
@@ -16,6 +24,12 @@ jobs:
       - name: Install deps
         working-directory: forschungsagent
         run: uv sync --quiet
+      - name: Compile check
+        working-directory: forschungsagent
+        run: uv run python -m py_compile main.py background_check.py
+      - name: Offline tests
+        working-directory: forschungsagent
+        run: uv run python tests/run_tests.py
       - name: Run background check
         working-directory: forschungsagent
         env:
