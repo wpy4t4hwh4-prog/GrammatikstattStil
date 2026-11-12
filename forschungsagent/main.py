@@ -393,7 +393,7 @@ async def research_note_aktualisieren(
     aenderungen: Annotated[str, Field(description="Kurz und praezise, was geaendert/korrigiert wird.")] = "",
     korrektur: Annotated[str, Field(description="Vollstaendiger Korrektur-Text als Markdown; wird als markierter Abschnitt an den bestehenden Text angehaengt.")] = "",
 ) -> dict:
-    """Dokumentierte Korrektur an einer BESTEHENDEN Ablage-Notiz (statt stiller Zweitablage): liest den aktuellen Volltext, haengt einen markierten Korrektur-Abschnitt mit Vorgaenger-ID und Aenderungsbeschreibung an und legt das Dokument unter GLEICHEM Dateinamen in der Research-Ablage neu ab. Nur die Research-Ablage ist beschreibbar."""
+    """Dokumentierte Korrektur an einer BESTEHENDEN Ablage-Notiz (statt stiller Zweitablage): liest den aktuellen Volltext, haengt einen markierten Korrektur-Abschnitt mit Vorgaenger-ID und Aenderungsbeschreibung an und legt das Dokument unter GLEICHEM Dateinamen in der Research-Ablage neu ab und loescht das Vorgaenger-Dokument (gleicher Name wuerde sonst ein Duplikat erzeugen). Nur die Research-Ablage ist beschreibbar."""
     if not document_id or not korrektur:
         return {"fehler": "document_id und korrektur fehlen - beide aus Tool-Ausgaben entnehmen."}
     client = _client()
@@ -407,8 +407,13 @@ async def research_note_aktualisieren(
     abschnitt = ("\n\n---\n\n## Dokumentierte Korrektur %s UTC\n- Vorgaenger-Dokument-ID: %s\n- Geaendert: %s\n\n%s\n" % (now.strftime("%Y-%m-%d %H:%M:%S"), document_id, aenderungen or "siehe Korrekturtext", korrektur))
     _text_cache_invalidate(lib, document_id)
     document = await client.beta.libraries.documents.upload_async(library_id=NOTES_LIBRARY_ID, file=File(fileName=doc.name, content=(old + abschnitt).encode("utf-8")))
+    # Gleicher-Dateiname-Upload ERSETZT NICHT (API-getestet 2026-11-12: erzeugt Duplikat) -> Vorgaenger explizit loeschen
+    try:
+        await client.beta.libraries.documents.delete_async(library_id=NOTES_LIBRARY_ID, document_id=document_id)
+    except Exception as e:
+        logger.warning("aktualisieren: Vorgaenger %s konnte nicht geloescht werden: %s", document_id, e)
     _text_cache_invalidate(lib, document.id)
-    return {"document_id": document.id, "vorgaenger_id": document_id, "name": document.name, "library_id": NOTES_LIBRARY_ID, "processing_status": document.processing_status, "hinweis": "Unter gleichem Dateinamen neu abgelegt; im Zweifel die neue document_id verwenden (dokument_finden loest Namen auf)."}
+    return {"document_id": document.id, "vorgaenger_id": document_id, "name": document.name, "library_id": NOTES_LIBRARY_ID, "processing_status": document.processing_status, "hinweis": "Aktualisierte Fassung unter gleichem Dateinamen abgelegt; Vorgaenger-Dokument geloescht (sonst same-name-Duplikat). Neue document_id verwenden."}
 
 
 @agents.tool

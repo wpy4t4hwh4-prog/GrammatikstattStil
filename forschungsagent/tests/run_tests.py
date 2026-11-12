@@ -177,6 +177,9 @@ class StaticSourceTests(unittest.TestCase):
         self.assertIn("DATENSCHUTZ/ROBOTS", self.src)
         self.assertIn("Getty AAT", self.src)
 
+    def test_aktualisieren_deletes_predecessor(self):
+        self.assertIn("delete_async(library_id=NOTES_LIBRARY_ID, document_id=document_id)", self.src)
+
     def test_lizenzfeld_present(self):
         self.assertIn("Lizenz-/Zugangsweg-Feld", self.src)
         self.assertNotIn("KI-Nutzung: mit KI-Assistenz", self.src)
