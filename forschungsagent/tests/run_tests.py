@@ -171,6 +171,12 @@ class StaticSourceTests(unittest.TestCase):
         self.assertIn("EIGENE-ABLAGE-REGEL", self.src)
         self.assertIn("NIEMALS Primaerquelle", self.src)
 
+    def test_naechster_block_regeln_present(self):
+        self.assertIn("SAETTIGUNGS-REGEL v2", self.src)
+        self.assertIn("zaehlen NICHT", self.src)
+        self.assertIn("DATENSCHUTZ/ROBOTS", self.src)
+        self.assertIn("Getty AAT", self.src)
+
     def test_lizenzfeld_present(self):
         self.assertIn("Lizenz-/Zugangsweg-Feld", self.src)
         self.assertNotIn("KI-Nutzung: mit KI-Assistenz", self.src)
