@@ -1,4 +1,5 @@
 import os
+import json as _json
 import re as _re
 from typing import Annotated
 
@@ -336,8 +337,15 @@ async def research_note_ablegen(
     client = _client()
     # Duplikat-Schutz: keine Zweitablage unter bereits vorhandenem Dateinamen
     try:
-        _listing = await client.beta.libraries.documents.list_async(library_id=NOTES_LIBRARY_ID, page_size=100)
-        _existing = {(d.name or "").lower() for d in (_listing.data or [])}
+        _existing = set()
+        _page = 0
+        while _page < 50:
+            _listing = await client.beta.libraries.documents.list_async(library_id=NOTES_LIBRARY_ID, page_size=100, page=_page)
+            _data = _listing.data or []
+            _existing |= {(d.name or "").lower() for d in _data}
+            if len(_data) < 100:
+                break
+            _page += 1
         if filename.lower() in _existing:
             return {"fehler": "duplikat: Datei '%s' existiert bereits - keine Zweitablage; Korrektur im bestehenden Dokument vornehmen (E6/Notiz-Regel)." % filename, "duplikat": True}
     except Exception:
@@ -462,14 +470,14 @@ async def doi_pruefen(
                 if r.status_code == 200:
                     meta = r.json()
                     _out = {"doi": doi, "existiert": True, "titel": meta.get("title"), "autoren": [f"{a.get('family','')} {a.get('given','')}" for a in meta.get("author", [])], "jahr": (meta.get("issued", {}).get("date-parts", [[None]])[0][0])}
-                    _TOOL_CACHE[_ck] = _out
+                    _cache_set(_ck, _out)
                     return _out
                 loc = r.headers.get("location", "")
                 _out = {"doi": doi, "existiert": True, "redirect": loc, "titel": None}
-                _TOOL_CACHE[_ck] = _out
+                _cache_set(_ck, _out)
                 return _out
             _out = {"doi": doi, "existiert": False, "http_status": r.status_code}
-            _TOOL_CACHE[_ck] = _out
+            _cache_set(_ck, _out)
             return _out
     except Exception as e:
         return {"doi": doi, "existiert": None, "fehler": str(e)}
@@ -489,7 +497,7 @@ async def url_status_pruefen(
             r = await hc.get(url)
             blocked = r.status_code in (403, 429) or "cloudflare" in r.text[:2000].lower()
             _out = {"url": url, "http_status": r.status_code, "gesperrt": blocked, "pruefbar": not blocked}
-            _TOOL_CACHE[_ck] = _out
+            _cache_set(_ck, _out)
             return _out
     except Exception as e:
         return {"url": url, "http_status": None, "gesperrt": None, "pruefbar": False, "fehler": str(e)}
@@ -630,6 +638,13 @@ async def webseite_lesen(
 
 
 _TOOL_CACHE: dict = {}
+_TOOL_CACHE_MAX = 2000
+
+
+def _cache_set(key: str, val) -> None:
+    if len(_TOOL_CACHE) >= _TOOL_CACHE_MAX and key not in _TOOL_CACHE:
+        _TOOL_CACHE.clear()
+    _TOOL_CACHE[key] = val
 
 
 KNOWN_TOOL_NAMES = {"web_recherche", "projektquellen_suchen", "ablage_durchsuchen", "projektdateien_auflisten", "bibliotheken_auflisten", "dokument_finden", "research_note_ablegen", "zitat_pruefen", "web_zitat_pruefen", "dokument_lesen", "doi_pruefen", "url_status_pruefen", "in_dokument_suchen", "aktuelles_datum", "pdf_ocr", "pdf_in_ablage_speichern", "json_api_abfrage", "webseite_lesen"}
@@ -649,6 +664,7 @@ class QuoteAuditHook(agents.Hook):
     deg_total: int = 0
     rep_streak: int = 0
     last_texts: list[str] = Field(default_factory=list)
+    turn_rejected: bool = False
 
 
     async def pre_agent_turn(self, ctx, request):
@@ -661,6 +677,7 @@ class QuoteAuditHook(agents.Hook):
         self.deg_total = 0
         self.rep_streak = 0
         self.last_texts = []
+        self.turn_rejected = False
         return None
 
     tool_texts: list[str] = Field(default_factory=list)
@@ -712,11 +729,11 @@ class QuoteAuditHook(agents.Hook):
             return agents.retry("STOPP: 3+ aufeinanderfolgende fehlgeschlagene Tool-Calls. Pruefe die Argumente sorgfaeltig: IDs nur aus projektdateien_auflisten/bibliotheken_auflisten/dokument_finden kopieren, nie raten. Dann erst weiter.")
         # degenerativer Text-Loop ("Fertig... Ende... Done...") ohne Tool-Calls -> Turn hart beenden.
         # Kumulativ ueber aufeinanderfolgende text-only Antworten, damit auch verteilte Floskeln greifen.
-        deg = len(_re.findall(r"\b(fertig|done|stop|ende|tschüss|aufhören|höre auf|abgeschlossen|schluss|schlussstrich|halt|terminiert|beendet|closed|over|final|last|ultimate|letzter|bye|abschied|ok)\b|\[stop\]|\[end|ende der (runde|antwort)|turn-ende", text, _re.IGNORECASE))
+        deg = len(_re.findall(r"\b(fertig|done|stop|ende|tschüss|aufhören|höre auf|abgeschlossen|schluss|schlussstrich|terminiert|beendet|closed|over|final|last|ultimate|letzter|bye|abschied)\b|\[stop\]|\[end|ende der (runde|antwort)|turn-ende", text, _re.IGNORECASE))
         self.no_tool_streak += 1
         self.deg_total += deg
-        if deg >= 3 or (self.no_tool_streak >= 3 and self.deg_total >= 3):
-            return agents.reject("Turn beendet: degenerativer Endlos-Text erkannt. Bitte naechsten Auftrag stellen.")
+        if deg >= 4 or (self.no_tool_streak >= 3 and self.deg_total >= 3):
+            self.turn_rejected = True; return agents.reject("Turn beendet: degenerativer Endlos-Text erkannt. Bitte naechsten Auftrag stellen.")
         # Wiederholungs-Loop in der Texterstellung (z. B. Dokumentation): aehnliche Antworten ohne Tool-Calls
         import difflib
         norm_text = _norm(text)
@@ -725,7 +742,7 @@ class QuoteAuditHook(agents.Hook):
             if sim >= 0.90:
                 self.rep_streak += 1
                 if self.rep_streak >= 2:
-                    return agents.reject("Turn beendet: Antwort wiederholt sich weitgehend ohne neuen Tool-Call. Bitte naechsten Auftrag stellen.")
+                    self.turn_rejected = True; return agents.reject("Turn beendet: Antwort wiederholt sich weitgehend ohne neuen Tool-Call. Bitte naechsten Auftrag stellen.")
                 return agents.retry("STOPP: Diese Antwort aehnelt der vorherigen zu stark (%.0f%%) ohne neuen Werkzeugaufruf. Wiederhole dich nicht - fuege nur NEUE, belegte Inhalte hinzu oder schliesse ab." % (sim * 100))
             else:
                 self.rep_streak = 0
@@ -786,13 +803,13 @@ class QuoteAuditHook(agents.Hook):
         if self.retries < 2:
             self.retries = self.retries + 1
             return agents.retry(feedback)
-        return agents.reject("Turn abgelehnt: " + feedback)
+        self.turn_rejected = True; return agents.reject("Turn abgelehnt: " + feedback)
 
     async def post_agent_turn(self, ctx, answer):
         # Auto-Gedaechtnis: bei substanziellem Turn (Tool-Calls) kompaktes Summary in die Research-Ablage schreiben,
         # damit Wissen auch bei Session-Ende erhalten bleibt (naechste Session laedt es ueber SESSION-START-REGEL).
         try:
-            if not self.tools_called:
+            if not self.tools_called or self.turn_rejected:
                 return None
             import json as _json2
             from datetime import datetime as _dt2, timezone as _tz2
