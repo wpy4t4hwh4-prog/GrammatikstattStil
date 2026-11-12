@@ -580,6 +580,8 @@ class QuoteAuditHook(agents.Hook):
     consec_errors: int = 0
     no_tool_streak: int = 0
     deg_total: int = 0
+    rep_streak: int = 0
+    last_texts: list[str] = Field(default_factory=list)
 
 
     async def pre_agent_turn(self, ctx, request):
@@ -590,6 +592,8 @@ class QuoteAuditHook(agents.Hook):
         self.consec_errors = 0
         self.no_tool_streak = 0
         self.deg_total = 0
+        self.rep_streak = 0
+        self.last_texts = []
         return None
 
     tool_texts: list[str] = Field(default_factory=list)
@@ -634,6 +638,7 @@ class QuoteAuditHook(agents.Hook):
         if getattr(result, "tool_calls", None):
             self.no_tool_streak = 0
             self.deg_total = 0
+            self.rep_streak = 0
             return None
         text = getattr(result, "text", "") or ""
         if self.consec_errors >= 3:
@@ -645,6 +650,19 @@ class QuoteAuditHook(agents.Hook):
         self.deg_total += deg
         if deg >= 3 or (self.no_tool_streak >= 3 and self.deg_total >= 3):
             return agents.reject("Turn beendet: degenerativer Endlos-Text erkannt. Bitte naechsten Auftrag stellen.")
+        # Wiederholungs-Loop in der Texterstellung (z. B. Dokumentation): aehnliche Antworten ohne Tool-Calls
+        import difflib
+        norm_text = _norm(text)
+        if norm_text and len(norm_text) > 200:
+            sim = max((difflib.SequenceMatcher(None, norm_text, prev).ratio() for prev in self.last_texts[-3:]), default=0.0)
+            if sim >= 0.90:
+                self.rep_streak += 1
+                if self.rep_streak >= 2:
+                    return agents.reject("Turn beendet: Antwort wiederholt sich weitgehend ohne neuen Tool-Call. Bitte naechsten Auftrag stellen.")
+                return agents.retry("STOPP: Diese Antwort aehnelt der vorherigen zu stark (%.0f%%) ohne neuen Werkzeugaufruf. Wiederhole dich nicht - fuege nur NEUE, belegte Inhalte hinzu oder schliesse ab." % (sim * 100))
+            else:
+                self.rep_streak = 0
+        self.last_texts = (self.last_texts + [norm_text])[-5:]
         try:
             data = _json.loads(text)
         except Exception:
