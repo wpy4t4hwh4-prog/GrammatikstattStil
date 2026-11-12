@@ -67,6 +67,29 @@ class HookLoopTests(unittest.TestCase):
         self.assertIsNotNone(res)
         self.assertEqual(self.hook.retries, 1)
 
+    def test_duplicate_aussagen_in_json_retried(self):
+        import json
+        payload = json.dumps({
+            "zusammenfassung": "x",
+            "belegte_aussagen": [
+                {"aussage": "Gleiche Aussage", "quelle": "q1", "evidenzgrad": "wahrscheinlich"},
+                {"aussage": "gleiche aussage", "quelle": "q2", "evidenzgrad": "wahrscheinlich"},
+            ],
+            "double_check": [],
+            "verifizierungsquote": 0.0,
+        })
+        res = self._post(payload)
+        self.assertIsNotNone(res)
+        self.assertIn("doppelte", str(getattr(res, "message", res)))
+
+    def test_very_long_answer_retry_then_reject(self):
+        lang = "x" * 30001
+        r1 = self._post(lang)
+        self.assertIsNotNone(r1)  # zu lang -> Retry
+        r2 = self._post(lang)
+        self.assertIsNotNone(r2)  # weiterhin zu lang -> Reject
+        self.assertTrue(self.hook.turn_rejected)
+
     def test_tool_call_dedup_retry_then_reject(self):
         req = types.SimpleNamespace(tool_name="in_dokument_suchen", arguments={"document_id": "x", "begriff": "y"})
         r1 = asyncio.run(self.hook.pre_tool_call(None, req))

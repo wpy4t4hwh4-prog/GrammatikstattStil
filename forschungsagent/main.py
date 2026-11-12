@@ -900,7 +900,7 @@ class QuoteAuditHook(agents.Hook):
             self.turn_rejected = True; logger.warning("hook reject"); return agents.reject("Turn beendet: degenerativer Endlos-Text erkannt. Bitte naechsten Auftrag stellen.")
         # Wellen-Loop: EINE text-only Antwort enthaelt mehrere Answer-Bloecke (mehrere ```json-Fences oder mehrere "zusammenfassung"-Felder) -> wie Wiederholung behandeln
         _wellen = text.count("```json") + len(_re.findall(r'"zusammenfassung"\s*:', text))
-        if _wellen >= 2:
+        if _wellen >= 2 or len(text) > 30000:
             self.rep_streak += 1
             if self.rep_streak >= 2:
                 self.turn_rejected = True; logger.warning("hook reject"); return agents.reject("Turn beendet: Antwort enthaelt mehrere Wellen/Answer-Bloecke ohne neuen Tool-Call. Bitte naechsten Auftrag stellen.")
@@ -925,6 +925,21 @@ class QuoteAuditHook(agents.Hook):
         if not isinstance(data, dict):
             return None
         problems = []
+        # Duplikate innerhalb der strukturierten Antwort -> QA-Problem (Aufblaehen/Wiederholung)
+        _seen_a = set()
+        for _a in data.get("belegte_aussagen") or []:
+            if isinstance(_a, dict):
+                _k = _norm(str(_a.get("aussage", "")))
+                if _k and _k in _seen_a:
+                    problems.append("doppelte belegte_aussage: " + _k[:80])
+                _seen_a.add(_k)
+        _seen_q = set()
+        for _q in data.get("verbatim_zitate") or []:
+            if isinstance(_q, dict):
+                _k = _norm(str(_q.get("text", "")))
+                if _k and _k in _seen_q:
+                    problems.append("doppeltes verbatim_zitat: " + _k[:80])
+                _seen_q.add(_k)
         quotes = data.get("verbatim_zitate") or []
         import hashlib as _hl2
         for q in quotes:
