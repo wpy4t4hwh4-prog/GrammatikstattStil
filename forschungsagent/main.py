@@ -578,6 +578,8 @@ class QuoteAuditHook(agents.Hook):
     tools_called: list[str] = Field(default_factory=list)
     retries: int = 0
     consec_errors: int = 0
+    no_tool_streak: int = 0
+    deg_total: int = 0
 
 
     async def pre_agent_turn(self, ctx, request):
@@ -586,6 +588,8 @@ class QuoteAuditHook(agents.Hook):
         self.tool_texts = []
         self.retries = 0
         self.consec_errors = 0
+        self.no_tool_streak = 0
+        self.deg_total = 0
         return None
 
     tool_texts: list[str] = Field(default_factory=list)
@@ -628,13 +632,18 @@ class QuoteAuditHook(agents.Hook):
 
     async def post_llm_call(self, ctx, result):
         if getattr(result, "tool_calls", None):
+            self.no_tool_streak = 0
+            self.deg_total = 0
             return None
         text = getattr(result, "text", "") or ""
         if self.consec_errors >= 3:
             return agents.retry("STOPP: 3+ aufeinanderfolgende fehlgeschlagene Tool-Calls. Pruefe die Argumente sorgfaeltig: IDs nur aus projektdateien_auflisten/bibliotheken_auflisten/dokument_finden kopieren, nie raten. Dann erst weiter.")
-        # degenerativer Text-Loop ("Fertig... [stop]...") ohne Tool-Calls -> Turn hart beenden
-        deg = len(_re.findall(r"fertig|\[stop\]|\[end|ende der (runde|antwort)|tschüss|aufhören|höre auf", text, _re.IGNORECASE))
-        if deg >= 3 and not getattr(result, "tool_calls", None):
+        # degenerativer Text-Loop ("Fertig... Ende... Done...") ohne Tool-Calls -> Turn hart beenden.
+        # Kumulativ ueber aufeinanderfolgende text-only Antworten, damit auch verteilte Floskeln greifen.
+        deg = len(_re.findall(r"\b(fertig|done|stop|ende|tschüss|aufhören|höre auf|abgeschlossen|schluss|schlussstrich|halt|terminiert|beendet|closed|over|final|last|ultimate|letzter|bye|abschied|ok)\b|\[stop\]|\[end|ende der (runde|antwort)|turn-ende", text, _re.IGNORECASE))
+        self.no_tool_streak += 1
+        self.deg_total += deg
+        if deg >= 3 or (self.no_tool_streak >= 3 and self.deg_total >= 3):
             return agents.reject("Turn beendet: degenerativer Endlos-Text erkannt. Bitte naechsten Auftrag stellen.")
         try:
             data = _json.loads(text)
