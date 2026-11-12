@@ -167,6 +167,14 @@ class StaticSourceTests(unittest.TestCase):
     def test_json_import_module_level(self):
         self.assertIn("import json as _json", self.src.split("\n")[:5])
 
+    def test_eigene_ablage_regel_present(self):
+        self.assertIn("EIGENE-ABLAGE-REGEL", self.src)
+        self.assertIn("NIEMALS Primaerquelle", self.src)
+
+    def test_lizenzfeld_present(self):
+        self.assertIn("Lizenz-/Zugangsweg-Feld", self.src)
+        self.assertNotIn("KI-Nutzung: mit KI-Assistenz", self.src)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
