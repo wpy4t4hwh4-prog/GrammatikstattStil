@@ -770,6 +770,12 @@ class QuoteAuditHook(agents.Hook):
     turn_rejected: bool = False
     llm_calls: int = 0
     wrap_warned: bool = False
+    call_sigs: list[str] = Field(default_factory=list)
+    call_streak: int = 0
+    dedup_warned: bool = False
+    res_streak: int = 0
+    last_res_hash: str = ""
+    noprog_warned: bool = False
 
 
     async def pre_agent_turn(self, ctx, request):
@@ -785,9 +791,39 @@ class QuoteAuditHook(agents.Hook):
         self.turn_rejected = False
         self.llm_calls = 0
         self.wrap_warned = False
+        self.call_sigs = []
+        self.call_streak = 0
+        self.dedup_warned = False
+        self.res_streak = 0
+        self.last_res_hash = ""
+        self.noprog_warned = False
         return None
 
     tool_texts: list[str] = Field(default_factory=list)
+
+    async def pre_tool_call(self, ctx, request):
+        # Tool-Call-Dedup: identische Signatur (Name+Argumente) 3x in Folge -> erst Retry, dann Reject
+        try:
+            import hashlib as _hlp
+            import json as _jsonp
+            _sig = _hlp.sha256((str(getattr(request, "tool_name", "")) + _jsonp.dumps(getattr(request, "arguments", {}), sort_keys=True, default=str)).encode()).hexdigest()[:16]
+        except Exception:
+            _sig = ""
+        if not _sig:
+            return None
+        if self.call_sigs and self.call_sigs[-1] == _sig:
+            self.call_streak += 1
+        else:
+            self.call_streak = 1
+            self.dedup_warned = False
+        self.call_sigs = (self.call_sigs + [_sig])[-10:]
+        if self.call_streak >= 3:
+            if not self.dedup_warned:
+                self.dedup_warned = True
+                logger.warning("dedup: identischer Tool-Call 3x in Folge: %s", getattr(request, "tool_name", ""))
+                return agents.retry("STOPP: Dieser Tool-Call wurde bereits mehrfach mit identischen Argumenten ausgefuehrt und liefert dasselbe Ergebnis. NICHT erneut ausfuehren - arbeite mit dem vorliegenden Ergebnis oder schliesse ab.")
+            self.turn_rejected = True; logger.warning("hook reject"); return agents.reject("Turn beendet: identischer Tool-Call wiederholt sich ohne Fortschritt. Bitte naechsten Auftrag stellen.")
+        return None
 
     async def post_tool_call(self, ctx, result):
         name = getattr(result, "tool_name", "")
@@ -806,7 +842,14 @@ class QuoteAuditHook(agents.Hook):
             self.consec_errors = 0
         ids = _re.findall(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", txt)
         import hashlib
-        self.tool_texts = (self.tool_texts + ids + [hashlib.sha256(txt.encode()).hexdigest()[:16]])[:200]
+        _rh = hashlib.sha256(txt.encode()).hexdigest()[:16]
+        if _rh and _rh == self.last_res_hash:
+            self.res_streak += 1
+        else:
+            self.res_streak = 1
+            self.noprog_warned = False
+        self.last_res_hash = _rh
+        self.tool_texts = (self.tool_texts + ids + [_rh])[:200]
         if name in ("zitat_pruefen", "web_zitat_pruefen"):
             tr = getattr(result, "tool_result", None)
             txt = ""
@@ -831,12 +874,21 @@ class QuoteAuditHook(agents.Hook):
             self.no_tool_streak = 0
             self.deg_total = 0
             self.rep_streak = 0
+            if self.llm_calls >= 17:
+                self.turn_rejected = True; logger.warning("hook reject"); return agents.reject("Turn beendet: Iterationslimit (17/18) erreicht - keine weiteren Tool-Calls mehr moeglich.")
             if self.llm_calls >= 15 and not self.wrap_warned:
                 self.wrap_warned = True
                 logger.warning("iteration soft-warning at llm_calls=%d", self.llm_calls)
                 return agents.retry("WARNUNG: nur noch wenige Iterationen bis zum Turn-Limit (18). Starte KEINE neue Recherche mehr; lege jetzt mit research_note_ablegen ab und gib die Abschluss-Zusammenfassung aus.")
             return None
         text = getattr(result, "text", "") or ""
+        # No-Progress: 4x identisches Tool-Ergebnis in Folge -> erst Retry, dann Reject
+        if self.res_streak >= 4:
+            if not self.noprog_warned:
+                self.noprog_warned = True
+                logger.warning("no-progress: 4x identisches Tool-Ergebnis")
+                return agents.retry("STOPP: Mehrere aufeinanderfolgende Tool-Calls liefern dasselbe Ergebnis - kein Fortschritt. Beende die Recherche jetzt und gib die Abschluss-Antwort aus (ggf. mit research_note_ablegen ablegen).")
+            self.turn_rejected = True; logger.warning("hook reject"); return agents.reject("Turn beendet: kein Fortschritt durch wiederholte Tool-Ergebnisse. Bitte naechsten Auftrag stellen.")
         if self.consec_errors >= 3:
             return agents.retry("STOPP: 3+ aufeinanderfolgende fehlgeschlagene Tool-Calls. Pruefe die Argumente sorgfaeltig: IDs nur aus projektdateien_auflisten/bibliotheken_auflisten/dokument_finden kopieren, nie raten. Dann erst weiter.")
         # degenerativer Text-Loop ("Fertig... Ende... Done...") ohne Tool-Calls -> Turn hart beenden.

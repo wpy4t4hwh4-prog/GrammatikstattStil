@@ -67,6 +67,34 @@ class HookLoopTests(unittest.TestCase):
         self.assertIsNotNone(res)
         self.assertEqual(self.hook.retries, 1)
 
+    def test_tool_call_dedup_retry_then_reject(self):
+        req = types.SimpleNamespace(tool_name="in_dokument_suchen", arguments={"document_id": "x", "begriff": "y"})
+        r1 = asyncio.run(self.hook.pre_tool_call(None, req))
+        r2 = asyncio.run(self.hook.pre_tool_call(None, req))
+        self.assertIsNone(r1); self.assertIsNone(r2)
+        r3 = asyncio.run(self.hook.pre_tool_call(None, req))
+        self.assertIsNotNone(r3)  # 3x identisch -> Retry
+        r4 = asyncio.run(self.hook.pre_tool_call(None, req))
+        self.assertIsNotNone(r4)  # weiterhin identisch -> Reject
+        self.assertTrue(self.hook.turn_rejected)
+
+    def test_hard_watchdog_at_17(self):
+        self.hook.llm_calls = 16
+        res = self._post("weiter", tool_calls=["web_recherche"])
+        self.assertIsNotNone(res)
+        self.assertTrue(self.hook.turn_rejected)
+
+    def test_no_progress_retry_then_reject(self):
+        res = types.SimpleNamespace(tool_name="ablage_durchsuchen", tool_result=types.SimpleNamespace(content=[types.SimpleNamespace(text="gleiches ergebnis")]))
+        for _ in range(4):
+            asyncio.run(self.hook.post_tool_call(None, res))
+        self.assertGreaterEqual(self.hook.res_streak, 4)
+        r1 = self._post("nochmal gleiche suche")
+        self.assertIsNotNone(r1)  # Retry
+        r2 = self._post("immer noch gleich")
+        self.assertIsNotNone(r2)  # Reject
+        self.assertTrue(self.hook.turn_rejected)
+
     def test_wellen_loop_retry_then_reject(self):
         wellig = '```json\n{"zusammenfassung": "A", "belegte_aussagen": []}\n```\nZwischenfazit.\n```json\n{"zusammenfassung": "B"}\n```'
         res1 = self._post(wellig)
