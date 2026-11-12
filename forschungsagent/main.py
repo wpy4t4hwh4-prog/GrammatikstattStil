@@ -15,6 +15,11 @@ APPARAT_LIBRARY_ID = "01a1c18b-fe93-75a4-8c2b-871c9f112cd9"
 
 SUBMODEL = "mistral-large-latest"
 
+
+def _norm(s: str) -> str:
+    """Whitespace-normalisierte, kleingeschriebene Kopie fuer Vergleich/Hashes."""
+    return _re.sub(r"\s+", " ", str(s)).strip().lower()
+
 INSTRUCTIONS = """
 # Systemanweisung: Forschungsagent „Grammatik statt Stil“
 
@@ -239,7 +244,7 @@ async def web_recherche(
         "Stadtbausysteme, Stilstreit in der Architektur).\n\n"
         f"Frage: {query}\n"
         f"Projektkontext: {kontext or 'keiner'}\n\n"
-        "Fasse die wichtigsten Befunde stichpunktartig zusammen (max. 15 Punkte), nenne "
+        "Fasse die wichtigsten Befunde stichpunktartig zusammen (max. 10 Punkte), nenne "
         "dabei stets die Quelle. Liste am Ende alle verwendeten Quellen als „Titel — URL“."
     )
     client = _client()
@@ -329,6 +334,20 @@ async def research_note_ablegen(
     slug = "".join(ch if ch.isalnum() else "-" for ch in titel.lower()).strip("-")
     filename = f"{slug[:80] or 'notiz'}.md"
     client = _client()
+    # Duplikat-Schutz: keine Zweitablage unter bereits vorhandenem Dateinamen
+    try:
+        _listing = await client.beta.libraries.documents.list_async(library_id=NOTES_LIBRARY_ID, page_size=100)
+        _existing = {(d.name or "").lower() for d in (_listing.data or [])}
+        if filename.lower() in _existing:
+            return {"fehler": "duplikat: Datei '%s' existiert bereits - keine Zweitablage; Korrektur im bestehenden Dokument vornehmen (E6/Notiz-Regel)." % filename, "duplikat": True}
+    except Exception:
+        pass
+    # Titel-Datum gegen aktuelles_datum pruefen (Zukunftsdatum = Fehler)
+    import re as _re4
+    from datetime import datetime as _dt, timezone as _tz
+    _m = _re4.match(r"(\d{4}-\d{2}-\d{2})", titel.strip())
+    if _m and _m.group(1) > _dt.now(_tz.utc).date().isoformat():
+        return {"fehler": "titel-datum %s liegt in der Zukunft (heute %s) - Datum nur aus aktuelles_datum." % (_m.group(1), _dt.now(_tz.utc).date().isoformat())}
     header = f"# {titel}\n\n- Thema: {thema}\n- Ablage: Research-Agent „Grammatik statt Stil“\n\n"
     document = await client.beta.libraries.documents.upload_async(
         library_id=NOTES_LIBRARY_ID,
@@ -366,6 +385,8 @@ async def zitat_pruefen(
 async def dokument_lesen(
     document_id: Annotated[str, Field(description="Dokument-ID.")] = "",
     library_id: Annotated[str, Field(description="Optional: Library-ID. Wenn leer, automatische Aufloesung ueber alle 4 Libraries.")] = "",
+    offset: Annotated[int, Field(description="Zeichen-Offset im Volltext (Paging, Default 0).")] = 0,
+    laenge: Annotated[int, Field(description="Max. Zeichen ab Offset (Default 10000, max 20000).")] = 10000,
 ) -> dict:
     """Liefert den EXAKTEN Volltext eines Library-Dokuments (text_content). NIE client.*-Tools aufrufen (die gehoeren zum Vibe-Chat); nur dieses Server-Tool. IDs nur aus projektdateien_auflisten/dokument_finden. Pflicht bei Aufgaben mit wörtlichen Zitaten, IDs oder genauen Zahlen - niemals ueber RAG raten."""
     if not document_id:
@@ -375,8 +396,12 @@ async def dokument_lesen(
     content = await client.beta.libraries.documents.text_content_async(library_id=library_id, document_id=document_id)
     text = getattr(content, "text", None) or str(content)
     # Verlauf klein halten: Volltext kappen (in_dokument_suchen/zitat_pruefen liefern gezielte Ausschnitte)
-    volltext = text[:6000] + (" ... [gekürzt, Gesamtlänge %d Zeichen - für Details in_dokument_suchen/zitat_pruefen nutzen]" % len(text) if len(text) > 6000 else "")
-    return {"document_id": document_id, "library_id": library_id, "laenge": len(text), "volltext": volltext}
+    offset = max(offset, 0)
+    laenge = min(max(laenge, 500), 20000)
+    volltext = text[offset:offset + laenge]
+    if offset + laenge < len(text):
+        volltext += " ... [gekuerzt, Gesamtlaenge %d Zeichen - naechster Abschnitt mit offset=%d]" % (len(text), offset + laenge)
+    return {"document_id": document_id, "library_id": library_id, "laenge_gesamt": len(text), "offset": offset, "volltext": volltext}
 
 
 @agents.tool
@@ -427,16 +452,25 @@ async def doi_pruefen(
 ) -> dict:
     """PFLICHT vor jeder DOI-Angabe: loest den DOI ueber doi.org auf und liefert Titel/Autoren/Jahr. Falsch transkribierte DOIs (z. B. vertauschte Ziffern) werden so erkannt."""
     import httpx
+    _ck = "doi:" + _norm(doi)
+    if _ck in _TOOL_CACHE:
+        return _TOOL_CACHE[_ck]
     try:
         async with httpx.AsyncClient(timeout=30, follow_redirects=False, headers={"Accept": "application/vnd.citationstyles.csl+json", "User-Agent": "Mozilla/5.0"}) as hc:
             r = await hc.get(f"https://doi.org/{_norm(doi)}", headers={"Accept": "application/vnd.citationstyles.csl+json"})
             if r.status_code in (200, 302, 303):
                 if r.status_code == 200:
                     meta = r.json()
-                    return {"doi": doi, "existiert": True, "titel": meta.get("title"), "autoren": [f"{a.get('family','')} {a.get('given','')}" for a in meta.get("author", [])], "jahr": (meta.get("issued", {}).get("date-parts", [[None]])[0][0])}
+                    _out = {"doi": doi, "existiert": True, "titel": meta.get("title"), "autoren": [f"{a.get('family','')} {a.get('given','')}" for a in meta.get("author", [])], "jahr": (meta.get("issued", {}).get("date-parts", [[None]])[0][0])}
+                    _TOOL_CACHE[_ck] = _out
+                    return _out
                 loc = r.headers.get("location", "")
-                return {"doi": doi, "existiert": True, "redirect": loc, "titel": None}
-            return {"doi": doi, "existiert": False, "http_status": r.status_code}
+                _out = {"doi": doi, "existiert": True, "redirect": loc, "titel": None}
+                _TOOL_CACHE[_ck] = _out
+                return _out
+            _out = {"doi": doi, "existiert": False, "http_status": r.status_code}
+            _TOOL_CACHE[_ck] = _out
+            return _out
     except Exception as e:
         return {"doi": doi, "existiert": None, "fehler": str(e)}
 
@@ -447,11 +481,16 @@ async def url_status_pruefen(
 ) -> dict:
     """Prueft HTTP-Status einer URL. UNTERSCHEIDET Sperre (403/Cloudflare) von echtem 404 - Sperre heisst 'nicht pruefbar', nie 'nicht gefunden'."""
     import httpx
+    _ck = "url:" + url
+    if _ck in _TOOL_CACHE:
+        return _TOOL_CACHE[_ck]
     try:
         async with httpx.AsyncClient(timeout=20, follow_redirects=True, headers={"User-Agent": "Mozilla/5.0"}) as hc:
             r = await hc.get(url)
             blocked = r.status_code in (403, 429) or "cloudflare" in r.text[:2000].lower()
-            return {"url": url, "http_status": r.status_code, "gesperrt": blocked, "pruefbar": not blocked}
+            _out = {"url": url, "http_status": r.status_code, "gesperrt": blocked, "pruefbar": not blocked}
+            _TOOL_CACHE[_ck] = _out
+            return _out
     except Exception as e:
         return {"url": url, "http_status": None, "gesperrt": None, "pruefbar": False, "fehler": str(e)}
 
@@ -533,7 +572,7 @@ async def pdf_ocr(
         resp = await client.ocr.process_async(model="mistral-ocr-4-1", document={"type": "document_url", "document_url": url})
         pages = getattr(resp, "pages", []) or []
         text = "\n\n".join(getattr(p, "markdown", "") or "" for p in pages)
-        return {"url": url, "seiten": len(pages), "laenge": len(text), "text": text[:8000] + (" ... [gekürzt]" if len(text) > 8000 else "")}
+        return {"url": url, "seiten": len(pages), "laenge": len(text), "text": text[:10000] + (" ... [gekürzt]" if len(text) > 10000 else "")}
     except Exception as e:
         return {"url": url, "fehler": str(e)[:300]}
 
@@ -565,7 +604,35 @@ async def pdf_in_ablage_speichern(
 
 
 
-KNOWN_TOOL_NAMES = {"web_recherche", "projektquellen_suchen", "ablage_durchsuchen", "projektdateien_auflisten", "bibliotheken_auflisten", "dokument_finden", "research_note_ablegen", "zitat_pruefen", "web_zitat_pruefen", "dokument_lesen", "doi_pruefen", "url_status_pruefen", "in_dokument_suchen", "aktuelles_datum", "pdf_ocr", "pdf_in_ablage_speichern", "json_api_abfrage"}
+@agents.tool
+async def webseite_lesen(
+    url: Annotated[str, Field(description="Exakte URL (aus Tool-Ausgabe/Quelle, nie geraten).")] = "",
+    max_zeichen: Annotated[int, Field(description="Max. Zeichen (Default 20000, max 40000).")] = 20000,
+) -> dict:
+    """Laedt eine Webseite und liefert den kompletten lesbaren Text (HTML-Tags entfernt, gekuerzt). Fuer Volltext-Sichtung von Webquellen."""
+    import httpx, re as _re3, html as _html
+    if not url:
+        return {"fehler": "url fehlt - nur exakte URLs aus Tool-Ausgaben verwenden."}
+    try:
+        async with httpx.AsyncClient(timeout=40, follow_redirects=True, headers={"User-Agent": "Mozilla/5.0"}) as hc:
+            resp = await hc.get(url)
+        if resp.status_code != 200:
+            return {"url": url, "http_status": resp.status_code, "fehler": "HTTP %d - url_status_pruefen fuer Sperre/404-Unterscheidung." % resp.status_code}
+        raw = _re3.sub(r"(?is)<(script|style)[^>]*>.*?</\1>", " ", resp.text)
+        raw = _re3.sub(r"(?s)<[^>]+>", " ", raw)
+        text = _html.unescape(raw)
+        text = _re3.sub(r"[ \t]+", " ", text)
+        text = _re3.sub(r"\n\s*\n+", "\n\n", text).strip()
+        max_zeichen = min(max(max_zeichen, 500), 40000)
+        return {"url": url, "http_status": 200, "laenge_gesamt": len(text), "text": text[:max_zeichen] + (" ... [gekuerzt]" if len(text) > max_zeichen else "")}
+    except Exception as e:
+        return {"url": url, "fehler": str(e)[:300]}
+
+
+_TOOL_CACHE: dict = {}
+
+
+KNOWN_TOOL_NAMES = {"web_recherche", "projektquellen_suchen", "ablage_durchsuchen", "projektdateien_auflisten", "bibliotheken_auflisten", "dokument_finden", "research_note_ablegen", "zitat_pruefen", "web_zitat_pruefen", "dokument_lesen", "doi_pruefen", "url_status_pruefen", "in_dokument_suchen", "aktuelles_datum", "pdf_ocr", "pdf_in_ablage_speichern", "json_api_abfrage", "webseite_lesen"}
 
 
 class QuoteAuditHook(agents.Hook):
@@ -676,7 +743,7 @@ class QuoteAuditHook(agents.Hook):
             qt = _norm(str(q.get("text", "")))
             if qt and _hl2.sha256(qt.encode()).hexdigest() not in self.verified:
                 problems.append("unverifiziertes Zitat: " + qt[:100])
-        search_tools = {"dokument_lesen", "zitat_pruefen", "web_zitat_pruefen", "ablage_durchsuchen", "projektquellen_suchen", "projektdateien_auflisten", "web_recherche", "dokument_finden", "bibliotheken_auflisten", "aktuelles_datum", "pdf_ocr", "pdf_in_ablage_speichern", "json_api_abfrage"}
+        search_tools = {"dokument_lesen", "zitat_pruefen", "web_zitat_pruefen", "ablage_durchsuchen", "projektquellen_suchen", "projektdateien_auflisten", "web_recherche", "dokument_finden", "bibliotheken_auflisten", "aktuelles_datum", "pdf_ocr", "pdf_in_ablage_speichern", "json_api_abfrage", "webseite_lesen"}
         all_text = _norm(str(data.get("zusammenfassung", "")) + " " + str(data.get("offene_punkte", "")) + " " + str(data.get("belegte_aussagen", "")))
         neg_words = ["nicht gefunden", "nicht lesbar", "nicht existiert", "nicht auffindbar", "keine treffer"]
         # nur bei echtem Dokument-/Quellenbezug pruefen (UUID, URL, DOI, "Dokument"), nicht bei reinen Chat-Antworten
@@ -709,6 +776,8 @@ class QuoteAuditHook(agents.Hook):
         for i in ids_in_answer:
             if _norm(i) not in tool_blob and i not in known_libs:
                 problems.append("ID nicht aus Tool-Output/Library-Konstante: " + i)
+        if data.get("belegte_aussagen") and (set(self.tools_called) & search_tools) and "research_note_ablegen" not in self.tools_called:
+            problems.append("substanzielle Recherche mit belegten Aussagen, aber keine research_note_ablegen-Ablage im selben Turn")
         if not problems:
             return None
         feedback = ("VERBOTEN: " + " | ".join(problems) +
@@ -718,6 +787,43 @@ class QuoteAuditHook(agents.Hook):
             self.retries = self.retries + 1
             return agents.retry(feedback)
         return agents.reject("Turn abgelehnt: " + feedback)
+
+    async def post_agent_turn(self, ctx, answer):
+        # Auto-Gedaechtnis: bei substanziellem Turn (Tool-Calls) kompaktes Summary in die Research-Ablage schreiben,
+        # damit Wissen auch bei Session-Ende erhalten bleibt (naechste Session laedt es ueber SESSION-START-REGEL).
+        try:
+            if not self.tools_called:
+                return None
+            import json as _json2
+            from datetime import datetime as _dt2, timezone as _tz2
+            now = _dt2.now(_tz2.utc)
+            text = getattr(answer, "text", "") or ""
+            summary = text[:4000]
+            try:
+                data = _json2.loads(text)
+                if isinstance(data, dict):
+                    parts = []
+                    if data.get("zusammenfassung"):
+                        parts.append("Zusammenfassung: " + str(data["zusammenfassung"]))
+                    if data.get("arbeitsupdate"):
+                        parts.append("Arbeitsupdate: " + str(data["arbeitsupdate"]))
+                    if data.get("offene_punkte"):
+                        parts.append("Offene Punkte: " + "; ".join(map(str, data["offene_punkte"]))[:1500])
+                    if parts:
+                        summary = "\n".join(parts)
+            except Exception:
+                pass
+            sid = str(getattr(getattr(ctx, "session", None), "id", "unknown"))
+            titel = f"session-summary {sid[:8]} {now.strftime('%Y-%m-%dT%H-%M-%S')}"
+            note = f"# {titel}\n\n- Session: {sid}\n- Datum (UTC): {now.isoformat()}\n- Tools im Turn: {', '.join(self.tools_called[:20])}\n\n## Summary\n{summary}\n"
+            client = _client()
+            await client.beta.libraries.documents.upload_async(
+                library_id=NOTES_LIBRARY_ID,
+                file=File(fileName=(titel[:80] + ".md"), content=note.encode("utf-8")),
+            )
+        except Exception:
+            pass
+        return None
 
 
 
@@ -793,6 +899,7 @@ agent = agents.Agent(
         url_status_pruefen,
         in_dokument_suchen,
         research_note_ablegen,
+        webseite_lesen,
     ],
-    max_iterations=25,
+    max_iterations=18,
 )

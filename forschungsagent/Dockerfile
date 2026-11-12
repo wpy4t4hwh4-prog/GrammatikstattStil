@@ -4,7 +4,10 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 ENV UV_COMPILE_BYTECODE=1 \
     UV_PYTHON_INSTALL_DIR=/opt/python \
-    PATH="/app/.venv/bin:$PATH"
+    PATH="/app/.venv/bin:$PATH" \
+    AGENTS_SDK_IDLE_TIMEOUT_SECONDS=86400 \
+    AGENTS_SDK_LIFETIME_LIMIT_SECONDS=604800 \
+    AGENTS_SDK_EXECUTION_TIMEOUT_SECONDS=691200
 WORKDIR /app
 COPY . .
 RUN uv sync --frozen --no-dev \
