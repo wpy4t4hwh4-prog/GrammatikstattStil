@@ -404,5 +404,77 @@ class SdkRetryTests(unittest.TestCase):
         self.assertEqual(res, "listed")
 
 
+
+
+class ToolGuardAndLaengenTests(unittest.TestCase):
+    def setUp(self):
+        self._old = main._SDK_RETRY_BASE
+        main._SDK_RETRY_BASE = 0.0
+        self.hook = main.QuoteAuditHook()
+        asyncio.run(self.hook.pre_agent_turn(None, None))
+
+    def tearDown(self):
+        main._SDK_RETRY_BASE = self._old
+
+    @staticmethod
+    def _sdk_err(sc, body="{}"):
+        class FakeSDKError(Exception):
+            pass
+        e = FakeSDKError("API error occurred: Status %d" % sc)
+        e.status_code = sc
+        e.body = body
+        return e
+
+    def test_tool_guard_returns_dict_on_520(self):
+        async def t():
+            raise self._sdk_err(520)
+        w = main._tool_guard(t)
+        res = asyncio.run(w())
+        self.assertIsInstance(res, dict)
+        self.assertIn("fehler", res)
+        self.assertEqual(res["http_status"], 520)
+        self.assertTrue(res["retryable"])
+
+    def test_tool_guard_400_open_not_supported_hint(self):
+        async def t():
+            raise self._sdk_err(400, '{"detail":"Open not supported for this filetype."}')
+        w = main._tool_guard(t)
+        res = asyncio.run(w())
+        self.assertIn("pdf_ocr", res["fehler"])
+        self.assertFalse(res["retryable"])
+
+    def test_tool_guard_passes_result(self):
+        async def t():
+            return {"ok": True}
+        res = asyncio.run(main._tool_guard(t)())
+        self.assertEqual(res, {"ok": True})
+
+    def _post(self, text="", tool_calls=None):
+        return asyncio.run(self.hook.post_llm_call(None, _reply(text, tool_calls)))
+
+    def test_arbeitsupdate_zu_lang_retry(self):
+        import json
+        payload = json.dumps({"zusammenfassung": "ok", "arbeitsupdate": "x" * 2501, "belegte_aussagen": [], "double_check": [], "verifizierungsquote": 1.0})
+        res = self._post(payload)
+        self.assertIsNotNone(res)
+        self.assertIn("zu lang", str(getattr(res, "message", res)))
+
+    def test_zusammenfassung_zu_lang_retry(self):
+        import json
+        payload = json.dumps({"zusammenfassung": "x" * 1501, "arbeitsupdate": "kurz", "belegte_aussagen": [], "double_check": [], "verifizierungsquote": 1.0})
+        res = self._post(payload)
+        self.assertIsNotNone(res)
+
+    def test_kurze_antwort_ok(self):
+        import json
+        payload = json.dumps({"zusammenfassung": "x" * 1500, "arbeitsupdate": "y" * 2500, "belegte_aussagen": [], "double_check": [], "verifizierungsquote": 1.0})
+        self.assertIsNone(self._post(payload))
+
+    def test_alle_tools_guarded(self):
+        with open(main.__file__, encoding="utf-8") as _f:
+            s = _f.read()
+        self.assertEqual(s.count("@_tool_guard\n@agents.tool"), 19)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

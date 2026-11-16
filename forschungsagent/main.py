@@ -88,7 +88,7 @@ Dein dauerhaftes Gedächtnis ist die Research-Ablage. Innerhalb einer laufenden 
 
 TURN-ABSCHLUSS (verbindlich): Sobald der Arbeitsauftrag vollständig abgearbeitet und die Abschluss-Zusammenfassung geliefert ist, beendest du den Turn sofort und vollständig: genau eine Abschlussnachricht, keine weiteren Werkzeugaufrufe, kein Nachschieben weiterer Abschluss-Bekundungen oder ähnlich klingender Wiederholungen. Der Turn endet von selbst, sobald du keine weiteren Ausgaben mehr erzeugst; versuche nicht, den Prozess von innen zu beenden, und verfalle nicht in eine Schleife aus wiederholten Abschluss-Aussagen. Bleibt eine Aufgabe offen oder blockiert, dokumentiere das nach E6 und schließe dann ebenfalls mit einer einzigen Abschlussnachricht.
 
-ABSCHLUSS-ANTWORT-FORMAT (verbindlich): Die letzte Antwort eines Turns ist AUSSCHLIEßLICH ein einzelnes nacktes JSON-Objekt (ResearchAnswer) — KEIN Markdown-Fence (```json), KEIN Text davor oder danach, KEINE zweite oder dritte JSON-Antwort. Alle Keys und String-Werte nur mit ASCII-Double-Quotes (U+0022 "), niemals typografische Anführungszeichen („ “ ‚ ‘). zusammenfassung max. 1500 Zeichen, arbeitsupdate max. 2500 Zeichen.
+ABSCHLUSS-ANTWORT-FORMAT (verbindlich): Die letzte Antwort eines Turns ist AUSSCHLIEßLICH ein einzelnes nacktes JSON-Objekt (ResearchAnswer) — KEIN Markdown-Fence (```json), KEIN Text davor oder danach, KEINE zweite oder dritte JSON-Antwort. Alle Keys und String-Werte nur mit ASCII-Double-Quotes (U+0022 "), niemals typografische Anführungszeichen („ “ ‚ ‘). zusammenfassung max. 1500 Zeichen, arbeitsupdate max. 2500 Zeichen (Harte QA im Hook). UMFANG: Die sichtbare Abschlussantwort bleibt KURZ - zusammenfassung/arbeitsupdate nur Kernbefunde und kurzes Protokoll (was wurde gemacht). Das AUSFUEHRLICHE, praezise Protokoll gehoert AUSSCHLIESSLICH in die Research-Ablage (research_note_ablegen / research_note_aktualisieren; session-summary schreibt der Hook automatisch) - niemals als langer Text in die Abschlussantwort.
 
 ABLAGE-PFLICHT (verbindlich): Jeder Turn, in dem du Recherche-Werkzeuge aufgerufen hast (ablage_durchsuchen, projektquellen_suchen, web_recherche, dokument_lesen, in_dokument_suchen, zitat_pruefen, web_zitat_pruefen, projektdateien_auflisten, dokument_finden, bibliotheken_auflisten, aktuelles_datum, pdf_ocr, pdf_in_ablage_speichern, json_api_abfrage, webseite_lesen, doi_pruefen, url_status_pruefen), MUSS vor der JSON-Abschlussantwort genau eine Notiz per research_note_ablegen (bzw. research_note_aktualisieren bei Korrektur) in der Research-Ablage ablegen.
 
@@ -221,6 +221,13 @@ async def _sdk_retry(fn, *args, **kwargs):
             if attempt == 3 or not _is_retryable_sdk_error(e):
                 raise
             delay = min(_SDK_RETRY_BASE * (3 ** attempt), 60.0)
+            try:
+                import json as _jr
+                _ra = float((_jr.loads(getattr(e, "body", "") or "{}") or {}).get("retry_after") or 0)
+                if _ra:
+                    delay = max(delay, min(_ra, 120.0))
+            except Exception:
+                pass
             logger.warning("sdk_retry %s attempt %d/3 in %.0fs: %.200s", getattr(fn, "__qualname__", "sdk-call"), attempt + 1, delay, e)
             await asyncio.sleep(delay)
     raise last
@@ -239,6 +246,25 @@ class _ClientWrap:
                 return await _sdk_retry(attr, *a, **kw)
             return _w
         return attr
+
+
+def _tool_guard(fn):
+    """Kein nackter SDKError/Timeout als Tool-Wert: Exception -> strukturiertes Fehler-Dict.
+    Retryable (429/5xx/Timeout) nach exhausting Retries: retryable=true; 400 'Open not supported' -> Hinweis auf pdf_ocr."""
+    import functools
+    @functools.wraps(fn)
+    async def _w(*a, **kw):
+        try:
+            return await fn(*a, **kw)
+        except Exception as e:
+            sc = getattr(e, "status_code", None)
+            retryable = _is_retryable_sdk_error(e)
+            msg = str(e)[:300]
+            if sc == 400 and "open not supported" in (msg + " " + str(getattr(e, "body", ""))).lower():
+                msg += " - Datei nicht als Text lesbar; pdf_ocr oder pdf_in_ablage_speichern nutzen."
+            logger.warning("tool_guard %s: %s", getattr(fn, "__name__", "tool"), msg[:200])
+            return {"fehler": msg, "http_status": sc, "retryable": retryable}
+    return _w
 
 
 def _client():
@@ -297,6 +323,7 @@ async def _resolve_library(client, library_id: str, document_id: str) -> str:
     return library_id
 
 
+@_tool_guard
 @agents.tool
 async def web_recherche(
     query: Annotated[str, Field(description="Präzise Such-/Recherchefrage.")] = "",
@@ -321,6 +348,7 @@ async def web_recherche(
     return _extract_conversation(response)
 
 
+@_tool_guard
 @agents.tool
 async def projektquellen_suchen(
     query: Annotated[str, Field(description="Frage oder Suchbegriff in den Projekt-Dokumenten.")] = "",
@@ -345,6 +373,7 @@ async def projektquellen_suchen(
     return _extract_conversation(response)
 
 
+@_tool_guard
 @agents.tool
 async def ablage_durchsuchen(
     query: Annotated[str, Field(description="Wonach in den Research-Notizen gesucht werden soll.")] = "",
@@ -363,6 +392,7 @@ async def ablage_durchsuchen(
     return _extract_conversation(response)
 
 
+@_tool_guard
 @agents.tool
 async def projektdateien_auflisten() -> dict:
     """Listet die Dokumente der beiden Projekt-Libraries mit Namen, ID und Verarbeitungsstatus auf."""
@@ -395,6 +425,7 @@ async def projektdateien_auflisten() -> dict:
     return result
 
 
+@_tool_guard
 @agents.tool
 async def research_note_ablegen(
     titel: Annotated[str, Field(description="Titel der Notiz (kurz, eindeutig).")] = "",
@@ -442,6 +473,7 @@ async def research_note_ablegen(
     }
 
 
+@_tool_guard
 @agents.tool
 async def research_note_aktualisieren(
     document_id: Annotated[str, Field(description="Dokument-ID der bestehenden Notiz in der Research-Ablage (aus projektdateien_auflisten/dokument_finden).")] = "",
@@ -471,6 +503,7 @@ async def research_note_aktualisieren(
     return {"document_id": document.id, "vorgaenger_id": document_id, "name": document.name, "library_id": NOTES_LIBRARY_ID, "processing_status": document.processing_status, "hinweis": "Aktualisierte Fassung unter gleichem Dateinamen abgelegt; Vorgaenger-Dokument geloescht (sonst same-name-Duplikat). Neue document_id verwenden."}
 
 
+@_tool_guard
 @agents.tool
 async def zitat_pruefen(
     document_id: Annotated[str, Field(description="Dokument-ID.")],
@@ -490,6 +523,7 @@ async def zitat_pruefen(
     return {"found": found_norm, "found_exact_inkl_leerzeichen": found_exact, "zitat": zitat, "kontext": kontext}
 
 
+@_tool_guard
 @agents.tool
 async def dokument_lesen(
     document_id: Annotated[str, Field(description="Dokument-ID.")] = "",
@@ -512,6 +546,7 @@ async def dokument_lesen(
     return {"document_id": document_id, "library_id": library_id, "laenge_gesamt": len(text), "offset": offset, "volltext": volltext}
 
 
+@_tool_guard
 @agents.tool
 async def web_zitat_pruefen(
     zitat: Annotated[str, Field(description="Das angebliche wörtliche Zitat.")],
@@ -558,6 +593,7 @@ async def web_zitat_pruefen(
     return out
 
 
+@_tool_guard
 @agents.tool
 async def doi_pruefen(
     doi: Annotated[str, Field(description="DOI, z. B. 10.1016/j.autcon.2008.09.006.")] = "",
@@ -586,6 +622,7 @@ async def doi_pruefen(
         return {"doi": doi, "existiert": None, "fehler": str(e)}
 
 
+@_tool_guard
 @agents.tool
 async def url_status_pruefen(
     url: Annotated[str, Field(description="URL, deren Erreichbarkeit geprueft wird.")],
@@ -605,6 +642,7 @@ async def url_status_pruefen(
         return {"url": url, "http_status": None, "gesperrt": None, "pruefbar": False, "fehler": str(e)}
 
 
+@_tool_guard
 @agents.tool
 async def in_dokument_suchen(
     document_id: Annotated[str, Field(description="Dokument-ID.")],
@@ -627,6 +665,7 @@ async def in_dokument_suchen(
     return {"document_id": document_id, "begriff": begriff, "anzahl": len(hits), "treffer": hits}
 
 
+@_tool_guard
 @agents.tool
 async def bibliotheken_auflisten() -> dict:
     """Liefert ALLE Bibliotheken des Workspace mit kanonischen IDs und Namen (aus der API, nicht aus Erinnerung). VOR jeder Angabe einer Bibliotheks-ID dieses Tool aufrufen und die ID daraus kopieren (E7)."""
@@ -636,6 +675,7 @@ async def bibliotheken_auflisten() -> dict:
     return {"bibliotheken": [{"id": l.id, "name": l.name} for l in items]}
 
 
+@_tool_guard
 @agents.tool
 async def dokument_finden(
     document_id: Annotated[str, Field(description="Dokument-ID (UUID) - wird automatisch ueber ALLE Libraries aufgeloest.")] = "",
@@ -654,6 +694,7 @@ async def dokument_finden(
     return {"document_id": document_id, "library_id": None, "gefunden": False}
 
 
+@_tool_guard
 @agents.tool
 async def aktuelles_datum() -> dict:
     """Liefert das aktuelle Datum/Uhrzeit (UTC) aus der Worker-Systemuhr. PFLICHT vor jeder Datumsangabe (Zugriffsdatum, Fristen, Titel mit Datum): niemals ein Datum aus Erinnerung oder Annahme verwenden."""
@@ -662,6 +703,7 @@ async def aktuelles_datum() -> dict:
     return {"utc": now.isoformat(), "datum": now.date().isoformat(), "uhrzeit": now.strftime("%H:%M:%S")}
 
 
+@_tool_guard
 @agents.tool
 async def pdf_ocr(
     url: Annotated[str, Field(description="Exakte URL eines PDFs (aus Tool-Ausgabe/Quelle, nie geraten).")],
@@ -688,6 +730,7 @@ async def pdf_ocr(
         return {"url": url, "fehler": str(e)[:300]}
 
 
+@_tool_guard
 @agents.tool
 async def pdf_in_ablage_speichern(
     url: Annotated[str, Field(description="Exakte PDF-URL (aus Tool-Ausgabe).")],
@@ -714,6 +757,7 @@ async def pdf_in_ablage_speichern(
 
 
 
+@_tool_guard
 @agents.tool
 async def webseite_lesen(
     url: Annotated[str, Field(description="Exakte URL (aus Tool-Ausgabe/Quelle, nie geraten).")] = "",
@@ -1075,6 +1119,11 @@ class QuoteAuditHook(agents.Hook):
                 problems.append("Verifizierungsquote zu niedrig: %.0f%% der belegten Aussagen haben double_check-Nachweis (min. 50%%)" % (_q * 100))
             elif abs(_angegeben - _q) > 0.2:
                 problems.append("verifizierungsquote (%.2f) weicht von tatsaechlicher Quote (%.2f) ab" % (_angegeben, _q))
+        # Harte Laengen-QA: sichtbare Abschlussantwort bleibt kurz; Ausfuehrliches gehoert in die Ablage
+        if len(str(data.get("zusammenfassung", ""))) > 1500:
+            problems.append("zusammenfassung zu lang (>1500 Zeichen) - nur Kernbefunde in der Antwort, Details in die Ablage-Notiz")
+        if len(str(data.get("arbeitsupdate", ""))) > 2500:
+            problems.append("arbeitsupdate zu lang (>2500 Zeichen) - kurzes Protokoll in der Antwort, AUSFUEHRLICHES nur in der Research-Ablage (research_note_ablegen)")
         if not problems:
             return None
         feedback = ("VERBOTEN: " + " | ".join(problems) +
@@ -1127,6 +1176,7 @@ class QuoteAuditHook(agents.Hook):
 
 
 
+@_tool_guard
 @agents.tool
 async def json_api_abfrage(
     url: Annotated[str, Field(description="Vollstaendige API-URL mit Query-Parametern (z. B. export.arxiv.org/api/query?search_query=...), aus Tool-Ausgabe/Quelle.")],
