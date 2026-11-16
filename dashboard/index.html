@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Grammatik statt Stil — Research Dashboard</title>
+<style>
+  :root {
+    --bg: #f5f5f7; --card: #ffffff; --text: #1d1d1f; --muted: #86868b;
+    --accent: #0a84ff; --border: rgba(0,0,0,.08); --shadow: 0 1px 2px rgba(0,0,0,.05), 0 8px 24px rgba(0,0,0,.05);
+    --k1: #30d158; --k2: #64d2ff; --k3: #ffd60a; --k4: #ff453a; --k5: #bf5af2; --v: #8e8e93;
+    --radius: 18px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #000000; --card: #1c1c1e; --text: #f5f5f7; --muted: #98989d;
+      --accent: #0a84ff; --border: rgba(255,255,255,.12); --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.4);
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+         background: var(--bg); color: var(--text); -webkit-font-smoothing: antialiased; }
+  header { position: sticky; top: 0; z-index: 10; backdrop-filter: saturate(180%) blur(20px);
+           background: color-mix(in srgb, var(--bg) 75%, transparent); border-bottom: 1px solid var(--border); }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+  header .wrap { display: flex; align-items: center; justify-content: space-between; height: 60px; }
+  h1 { font-size: 17px; font-weight: 650; letter-spacing: -.01em; }
+  .badge { font-size: 11px; font-weight: 600; color: var(--muted); border: 1px solid var(--border);
+           border-radius: 999px; padding: 3px 10px; display: inline-flex; align-items: center; gap: 6px; }
+  .badge .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--k1); }
+  .badge.off .dot { background: var(--muted); }
+  nav { display: flex; gap: 4px; }
+  nav button { border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 14px; font-weight: 500;
+               padding: 7px 14px; border-radius: 999px; cursor: pointer; }
+  nav button.active { background: var(--card); color: var(--text); box-shadow: var(--shadow); }
+  main { padding: 28px 0 64px; }
+  section.page { display: none; }
+  section.page.active { display: block; animation: fade .18s ease; }
+  @keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+  .grid { display: grid; gap: 16px; }
+  .stats { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+          box-shadow: var(--shadow); padding: 18px; }
+  .card h3 { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 8px; }
+  .card .big { font-size: 30px; font-weight: 700; letter-spacing: -.02em; }
+  .card .sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .charts { grid-template-columns: 1fr 1fr; }
+  @media (max-width: 760px) { .charts { grid-template-columns: 1fr; } }
+  .chart-title { font-size: 15px; font-weight: 650; margin-bottom: 12px; }
+  svg { display: block; width: 100%; height: auto; }
+  .legend { display: flex; flex-wrap: wrap; gap: 10px 16px; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted);
+       font-weight: 600; padding: 8px 10px; border-bottom: 1px solid var(--border); position: sticky; top: 60px; background: var(--card); }
+  td { padding: 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:hover td { background: color-mix(in srgb, var(--accent) 4%, transparent); }
+  .k { font-weight: 650; font-size: 12px; padding: 2px 8px; border-radius: 999px; color: #fff; white-space: nowrap; }
+  .k.K1 { background: var(--k1); } .k.K2 { background: var(--k2); color: #111; } .k.K3 { background: var(--k3); color: #111; }
+  .k.K4 { background: var(--k4); } .k.K5 { background: var(--k5); } .k.V { background: var(--v); }
+  .toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
+  input[type="search"], select { font: inherit; font-size: 14px; padding: 8px 12px; border-radius: 10px;
+    border: 1px solid var(--border); background: var(--card); color: var(--text); }
+  input[type="search"] { flex: 1; min-width: 200px; }
+  .count { font-size: 12px; color: var(--muted); }
+  .glossar { grid-template-columns: 1fr; }
+  .glossar .card { display: flex; gap: 14px; align-items: baseline; }
+  .glossar .begriff { font-weight: 700; font-size: 14px; min-width: 120px; color: var(--accent); }
+  .glossar .text { font-size: 14px; line-height: 1.5; }
+  .chat { display: flex; flex-direction: column; gap: 12px; }
+  .thread { display: flex; flex-direction: column; gap: 8px; max-height: 380px; overflow-y: auto; padding: 4px; }
+  .msg { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 10px 14px; font-size: 14px; max-width: 80%; }
+  .msg .ts { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+  .msg.mine { align-self: flex-end; background: var(--accent); color: #fff; border-color: transparent; }
+  .msg.mine .ts { color: rgba(255,255,255,.75); }
+  .composer { display: flex; gap: 10px; }
+  .composer textarea { flex: 1; font: inherit; font-size: 14px; padding: 10px 12px; border-radius: 12px; resize: vertical; min-height: 44px;
+    border: 1px solid var(--border); background: var(--card); color: var(--text); }
+  .composer button { font: inherit; font-size: 14px; font-weight: 600; color: #fff; background: var(--accent); border: 0;
+    border-radius: 12px; padding: 0 20px; cursor: pointer; }
+  .note { font-size: 12px; color: var(--muted); line-height: 1.5; }
+  footer { border-top: 1px solid var(--border); padding: 18px 0 28px; font-size: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1>Grammatik statt Stil <span style="color:var(--muted);font-weight:500">— Research Dashboard</span></h1>
+    <div style="display:flex;gap:10px;align-items:center">
+      <span class="badge" id="liveBadge"><span class="dot"></span><span id="liveLabel">lokal</span></span>
+      <nav>
+        <button data-page="uebersicht" class="active">Übersicht</button>
+        <button data-page="verzeichnis">Verzeichnis</button>
+        <button data-page="glossar">Glossar</button>
+        <button data-page="komm">Kommunikation</button>
+      </nav>
+    </div>
+  </div>
+</header>
+<main class="wrap">
+
+  <section class="page active" id="page-uebersicht">
+    <div class="grid stats" id="statCards"></div>
+    <div class="grid charts" style="margin-top:16px">
+      <div class="card"><div class="chart-title">Zugriffsstatus (K1–K5, V)</div><div id="chartK"></div><div class="legend" id="legendK"></div></div>
+      <div class="card"><div class="chart-title">Quellendichte pro Gruppe (Positionen je Gruppe)</div><div id="chartGruppen"></div><div class="legend" id="legendG"></div></div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <div class="chart-title">Relevanzverteilung der geladenen Verzeichniszeilen</div>
+      <div id="chartRel"></div><div class="legend" id="legendR"></div>
+    </div>
+    <p class="note" style="margin-top:14px" id="metaNote"></p>
+  </section>
+
+  <section class="page" id="page-verzeichnis">
+    <div class="toolbar">
+      <input type="search" id="q" placeholder="Verzeichnis durchsuchen (Titel, Quelle, ID, Vermerk) …">
+      <select id="fK"><option value="">alle K-Stufen</option><option>K1</option><option>K2</option><option>K3</option><option>K4</option><option>K5</option><option>V</option></select>
+      <select id="fR"><option value="">alle Relevanz</option><option>A</option><option>B</option><option>C</option><option>P</option><option>–</option></select>
+      <span class="count" id="count"></span>
+    </div>
+    <div class="card" style="padding:0;overflow:auto">
+      <table>
+        <thead><tr><th>ID</th><th>Titel / Beleg</th><th>Quelle / Fundstelle</th><th>K</th><th>Rel.</th><th>Vermerk</th></tr></thead>
+        <tbody id="vRows"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="page" id="page-glossar">
+    <div class="grid glossar" id="glossar"></div>
+  </section>
+
+  <section class="page" id="page-komm">
+    <div class="card chat">
+      <div class="chart-title">Kommunikationsschnittstelle (lokaler Postausgang)</div>
+      <div class="thread" id="thread"></div>
+      <div class="composer">
+        <textarea id="msgInput" placeholder="Nachricht an den Forschungsagenten … (wird lokal in data/outbox.jsonl protokolliert)"></textarea>
+        <button id="sendBtn">Senden</button>
+      </div>
+      <p class="note">Versand an den produktiven Agenten (Deployment <code>grammatik-statt-stil-research</code>) erfolgt über die MCP-/Studio-Schnittstelle
+      (<code>execute_workflow</code> bzw. Signal <code>submit_command</code>/<code>send_message</code>) — siehe README. Das Dashboard speichert nur lokal.</p>
+    </div>
+  </section>
+
+</main>
+<footer><div class="wrap">Grammatik statt Stil — lokales Research-Dashboard · Daten: <span id="dataSrc">data/project.json</span> · kein Netzwerk nötig (außer optionaler Live-Modus)</div></footer>
+
+<script src="data/sample-data.js"></script>
+<script>
+const $ = s => document.querySelector(s);
+let DATA = window.DASHBOARD_DATA || null;
+
+async function loadData() {
+  try {
+    const r = await fetch('data/project.json', { cache: 'no-store' });
+    if (r.ok) { DATA = await r.json(); $('#dataSrc').textContent = 'data/project.json (live vom Server)'; }
+  } catch (e) { /* file:// Fallback auf sample-data.js */ }
+  if (!DATA) return;
+  renderStats(); renderCharts(); renderVerzeichnis(); renderGlossar(); loadMessages();
+}
+
+async function api(path, opts) {
+  try { const r = await fetch(path, opts); return r.ok ? await r.json() : null; } catch (e) { return null; }
+}
+
+/* ---- Übersicht ---- */
+function renderStats() {
+  const k = DATA.kstand, K = k.K;
+  const vt = ((K.K1 + K.K2) / k.positionen * 100);
+  const gruppen = k.gruppen_enden;
+  const avg = (k.positionen / gruppen.length);
+  const cards = [
+    ['Positionen gesamt', k.positionen, 'Stand: ' + DATA.meta.stand],
+    ['Volltextquote (VT)', vt.toFixed(1) + ' %', '(' + (K.K1 + K.K2) + '/' + k.positionen + ' = K1+K2)'],
+    ['K1 geprüft', K.K1, ''],
+    ['K2 zugänglich', K.K2, ''],
+    ['K3 nur Metadaten', K.K3, ''],
+    ['K4 blockiert', K.K4, 'W-Vermerk nötig'],
+    ['K5 offen', K.K5, 'Klärung ausstehend'],
+    ['Ø Quellen / Gruppe', avg.toFixed(1), 'min ' + Math.min(...gruppen) + ' · max ' + Math.max(...gruppen)],
+  ];
+  $('#statCards').innerHTML = cards.map(c =>
+    `<div class="card"><h3>${c[0]}</h3><div class="big">${c[1]}</div><div class="sub">${c[2] || ''}</div></div>`).join('');
+  $('#metaNote').textContent = 'Quelle: ' + DATA.meta.quelle + ' · ' + (DATA.meta.hinweis || '');
+}
+
+function donut(el, parts, colors) {
+  const total = parts.reduce((a, p) => a + p.value, 0) || 1;
+  const R = 60, C = 2 * Math.PI * R; let off = 0, svg = `<svg viewBox="0 0 160 160">`;
+  svg += `<circle cx="80" cy="80" r="${R}" fill="none" stroke="var(--border)" stroke-width="22"/>`;
+  parts.forEach((p, i) => {
+    const len = p.value / total * C;
+    svg += `<circle cx="80" cy="80" r="${R}" fill="none" stroke="${colors[i]}" stroke-width="22" stroke-dasharray="${len} ${C - len}" stroke-dashoffset="${-off}" transform="rotate(-90 80 80)" stroke-linecap="butt"/>`;
+    off += len;
+  });
+  svg += `<text x="80" y="76" text-anchor="middle" font-size="22" font-weight="700" fill="var(--text)">${total}</text>`;
+  svg += `<text x="80" y="94" text-anchor="middle" font-size="10" fill="var(--muted)">gesamt</text></svg>`;
+  el.innerHTML = svg;
+}
+function bars(el, labels, values, color) {
+  const max = Math.max(...values) || 1, W = 100, n = values.length, bw = W / n;
+  let svg = `<svg viewBox="0 0 ${W} 60" preserveAspectRatio="none" style="height:180px">`;
+  values.forEach((v, i) => {
+    const h = v / max * 52;
+    svg += `<rect x="${i * bw + 1.5}" y="${58 - h}" width="${bw - 3}" height="${h}" rx="2" fill="${color}"/>`;
+    svg += `<text x="${i * bw + bw / 2}" y="59.5" text-anchor="middle" font-size="3.4" fill="var(--muted)">${labels[i]}</text>`;
+  });
+  el.innerHTML = svg + '</svg>';
+}
+
+const KCOLORS = { K1: 'var(--k1)', K2: 'var(--k2)', K3: 'var(--k3)', K4: 'var(--k4)', K5: 'var(--k5)', V: 'var(--v)' };
+function renderCharts() {
+  const K = DATA.kstand.K;
+  const kparts = Object.keys(KCOLORS).map(k => ({ label: k, value: K[k] }));
+  donut($('#chartK'), kparts, kparts.map(p => KCOLORS[p.label]));
+  $('#legendK').innerHTML = kparts.map(p => `<span><i style="background:${KCOLORS[p.label]}"></i>${p.label} ${p.value}</span>`).join('');
+  const g = DATA.kstand.gruppen_enden;
+  bars($('#chartGruppen'), g.map((_, i) => 'G' + (i + 1)), g, 'var(--accent)');
+  $('#legendG').innerHTML = `<span>Gruppen-Enden: ${g.join(' / ')}</span><span>Ø ${(DATA.kstand.positionen / g.length).toFixed(1)}/Gruppe</span>`;
+  const rel = {};
+  DATA.verzeichnis.forEach(r => { rel[r.rel || '–'] = (rel[r.rel || '–'] || 0) + 1; });
+  const rparts = Object.entries(rel).map(([label, value]) => ({ label, value }));
+  const rcolors = ['#0a84ff', '#30d158', '#ffd60a', '#8e8e93'];
+  donut($('#chartRel'), rparts, rparts.map((_, i) => rcolors[i % rcolors.length]));
+  $('#legendR').innerHTML = rparts.map((p, i) => `<span><i style="background:${rcolors[i % rcolors.length]}"></i>${p.label} ${p.value}</span>`).join('');
+}
+
+/* ---- Verzeichnis ---- */
+function renderVerzeichnis() {
+  const q = ($('#q').value || '').toLowerCase(), fk = $('#fK').value, fr = $('#fR').value;
+  const rows = DATA.verzeichnis.filter(r =>
+    (!fk || r.k === fk) && (!fr || (r.rel || '–') === fr) &&
+    (!q || (r.id + ' ' + r.titel + ' ' + r.quelle + ' ' + (r.vermerk || '')).toLowerCase().includes(q)));
+  $('#vRows').innerHTML = rows.map(r =>
+    `<tr><td style="font-weight:600;white-space:nowrap">${r.id}</td><td>${r.titel}</td><td style="color:var(--muted)">${r.quelle}</td><td><span class="k ${r.k}">${r.k}</span></td><td>${r.rel || '–'}</td><td style="color:var(--muted);font-size:12px">${r.vermerk || ''}</td></tr>`).join('');
+  $('#count').textContent = rows.length + ' / ' + DATA.verzeichnis.length + ' Zeilen';
+}
+$('#q').addEventListener('input', renderVerzeichnis);
+$('#fK').addEventListener('change', renderVerzeichnis);
+$('#fR').addEventListener('change', renderVerzeichnis);
+
+/* ---- Glossar ---- */
+function renderGlossar() {
+  $('#glossar').innerHTML = DATA.glossar.map(g =>
+    `<div class="card"><span class="begriff">${g.begriff}</span><span class="text">${g.text}</span></div>`).join('');
+}
+
+/* ---- Kommunikation ---- */
+async function loadMessages() {
+  const msgs = (await api('/api/messages')) || DATA.outbox || [];
+  $('#thread').innerHTML = msgs.map(m =>
+    `<div class="msg mine"><div class="ts">${m.ts}</div>${escapeHtml(m.text)}</div>`).join('') || '<p class="note">Noch keine Nachrichten.</p>';
+  $('#thread').scrollTop = $('#thread').scrollHeight;
+}
+function escapeHtml(s) { return s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+$('#sendBtn').addEventListener('click', async () => {
+  const t = $('#msgInput').value.trim(); if (!t) return;
+  $('#msgInput').value = '';
+  const saved = await api('/api/message', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: t }) });
+  if (saved) loadMessages(); else alert('Server nicht erreichbar (file://-Modus?) — lokal mit serve.py starten.');
+});
+$('#msgInput').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('#sendBtn').click(); } });
+
+/* ---- Live-Status (optional) ---- */
+async function liveTick() {
+  const live = await api('/api/live');
+  const b = $('#liveBadge');
+  if (live && live.live) { b.classList.remove('off'); $('#liveLabel').textContent = 'live · ' + (live.anzahl || 0) + ' Ablage-Docs · ' + (live.zeitstempel || ''); }
+  else { b.classList.add('off'); $('#liveLabel').textContent = 'lokal'; }
+}
+
+/* ---- Tabs ---- */
+document.querySelectorAll('nav button').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('nav button').forEach(x => x.classList.toggle('active', x === b));
+  document.querySelectorAll('section.page').forEach(s => s.classList.toggle('active', s.id === 'page-' + b.dataset.page));
+}));
+
+loadData(); liveTick(); setInterval(liveTick, 30000);
+</script>
+</body>
+</html>
