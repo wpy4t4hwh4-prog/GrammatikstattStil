@@ -198,12 +198,61 @@ def _extract_conversation(response) -> dict:
     return {"antwort": "".join(text_parts).strip(), "quellen": quellen}
 
 
+_SDK_RETRY_STATUSES = {429, 500, 502, 503, 504, 520, 521, 522, 524}
+_SDK_RETRY_BASE = 5.0  # Sekunden; Tests patchen das auf 0
+
+
+def _is_retryable_sdk_error(e) -> bool:
+    """Transient: httpx-Timeouts/Transportfehler und HTTP 429/5xx (inkl. Cloudflare 520)."""
+    if type(e).__name__ in ("ReadTimeout", "ConnectTimeout", "ReadError", "ConnectError", "RemoteProtocolError"):
+        return True
+    return getattr(e, "status_code", None) in _SDK_RETRY_STATUSES
+
+
+async def _sdk_retry(fn, *args, **kwargs):
+    """Retry bei transienten Plattformfehlern (httpx-Timeout, HTTP 429/5xx): 1 + 3 Versuche, Backoff base*3^n (cap 60s)."""
+    import asyncio
+    last = None
+    for attempt in range(4):
+        try:
+            return await fn(*args, **kwargs)
+        except Exception as e:
+            last = e
+            if attempt == 3 or not _is_retryable_sdk_error(e):
+                raise
+            delay = min(_SDK_RETRY_BASE * (3 ** attempt), 60.0)
+            logger.warning("sdk_retry %s attempt %d/3 in %.0fs: %.200s", getattr(fn, "__qualname__", "sdk-call"), attempt + 1, delay, e)
+            await asyncio.sleep(delay)
+    raise last
+
+
+class _ClientWrap:
+    """Wrappt den Mistral-Client: jeder *_async-Aufruf laeuft ueber _sdk_retry (Retry bei 520/429/Timeout)."""
+
+    def __init__(self, c):
+        object.__setattr__(self, "_c", c)
+
+    def __getattr__(self, name):
+        attr = getattr(self._c, name)
+        if callable(attr) and name.endswith("_async"):
+            async def _w(*a, **kw):
+                return await _sdk_retry(attr, *a, **kw)
+            return _w
+        return attr
+
+
 def _client():
-    """Mistral client: explicit workspace API key (user identity) wins over the worker SA token."""
+    """Mistral client: explicit workspace API key (user identity) wins over the worker SA token.
+    Expliziter Timeout (120s) + _ClientWrap: alle SDK-Calls mit Retry bei transienten Fehlern."""
     key = os.environ.get("PROJECT_MISTRAL_API_KEY")
-    if key:
-        return get_mistral_client(api_key=key)
-    return get_mistral_client(run_as="auto")
+    try:
+        if key:
+            return _ClientWrap(get_mistral_client(api_key=key, timeout=120))
+        return _ClientWrap(get_mistral_client(run_as="auto", timeout=120))
+    except TypeError:
+        if key:
+            return _ClientWrap(get_mistral_client(api_key=key))
+        return _ClientWrap(get_mistral_client(run_as="auto"))
 
 
 class BelegteAussage(BaseModel):

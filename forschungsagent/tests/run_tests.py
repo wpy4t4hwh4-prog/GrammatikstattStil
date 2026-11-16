@@ -337,5 +337,72 @@ class SessionStartRegelTests(unittest.TestCase):
         self.assertIn("GENAU EINES", s)
 
 
+
+
+class SdkRetryTests(unittest.TestCase):
+    def setUp(self):
+        self._old = main._SDK_RETRY_BASE
+        main._SDK_RETRY_BASE = 0.0
+
+    def tearDown(self):
+        main._SDK_RETRY_BASE = self._old
+
+    @staticmethod
+    def _sdk_err(sc):
+        class FakeSDKError(Exception):
+            pass
+        e = FakeSDKError("API error occurred: Status %d" % sc)
+        e.status_code = sc
+        return e
+
+    def test_retry_eventual_success(self):
+        calls = {"n": 0}
+        async def flaky():
+            calls["n"] += 1
+            if calls["n"] < 3:
+                raise self._sdk_err(520)
+            return "ok"
+        res = asyncio.run(main._sdk_retry(flaky))
+        self.assertEqual(res, "ok")
+        self.assertEqual(calls["n"], 3)
+
+    def test_retry_gives_up_after_4(self):
+        calls = {"n": 0}
+        async def always520():
+            calls["n"] += 1
+            raise self._sdk_err(520)
+        with self.assertRaises(Exception):
+            asyncio.run(main._sdk_retry(always520))
+        self.assertEqual(calls["n"], 4)
+
+    def test_non_retryable_raises_immediately(self):
+        calls = {"n": 0}
+        async def bad400():
+            calls["n"] += 1
+            raise self._sdk_err(400)
+        with self.assertRaises(Exception):
+            asyncio.run(main._sdk_retry(bad400))
+        self.assertEqual(calls["n"], 1)
+
+    def test_timeout_retryable(self):
+        ReadTimeout = type("ReadTimeout", (Exception,), {})
+        self.assertTrue(main._is_retryable_sdk_error(ReadTimeout("t")))
+        self.assertTrue(main._is_retryable_sdk_error(self._sdk_err(429)))
+        self.assertFalse(main._is_retryable_sdk_error(self._sdk_err(400)))
+        self.assertFalse(main._is_retryable_sdk_error(ValueError("x")))
+
+    def test_client_wrap_wraps_async_calls(self):
+        class FakeDocs:
+            async def list_async(self, **kw):
+                return "listed"
+        class FakeBeta:
+            documents = FakeDocs()
+        class FakeClient:
+            beta = FakeBeta()
+        w = main._ClientWrap(FakeClient())
+        res = asyncio.run(w.beta.documents.list_async(library_id="x"))
+        self.assertEqual(res, "listed")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
