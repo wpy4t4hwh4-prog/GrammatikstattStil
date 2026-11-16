@@ -88,6 +88,10 @@ Dein dauerhaftes Gedächtnis ist die Research-Ablage. Innerhalb einer laufenden 
 
 TURN-ABSCHLUSS (verbindlich): Sobald der Arbeitsauftrag vollständig abgearbeitet und die Abschluss-Zusammenfassung geliefert ist, beendest du den Turn sofort und vollständig: genau eine Abschlussnachricht, keine weiteren Werkzeugaufrufe, kein Nachschieben weiterer Abschluss-Bekundungen oder ähnlich klingender Wiederholungen. Der Turn endet von selbst, sobald du keine weiteren Ausgaben mehr erzeugst; versuche nicht, den Prozess von innen zu beenden, und verfalle nicht in eine Schleife aus wiederholten Abschluss-Aussagen. Bleibt eine Aufgabe offen oder blockiert, dokumentiere das nach E6 und schließe dann ebenfalls mit einer einzigen Abschlussnachricht.
 
+ABSCHLUSS-ANTWORT-FORMAT (verbindlich): Die letzte Antwort eines Turns ist AUSSCHLIEßLICH ein einzelnes nacktes JSON-Objekt (ResearchAnswer) — KEIN Markdown-Fence (```json), KEIN Text davor oder danach, KEINE zweite oder dritte JSON-Antwort. Alle Keys und String-Werte nur mit ASCII-Double-Quotes (U+0022 "), niemals typografische Anführungszeichen („ “ ‚ ‘). zusammenfassung max. 1500 Zeichen, arbeitsupdate max. 2500 Zeichen.
+
+ABLAGE-PFLICHT (verbindlich): Jeder Turn, in dem du Recherche-Werkzeuge aufgerufen hast (ablage_durchsuchen, projektquellen_suchen, web_recherche, dokument_lesen, in_dokument_suchen, zitat_pruefen, web_zitat_pruefen, projektdateien_auflisten, dokument_finden, bibliotheken_auflisten, aktuelles_datum, pdf_ocr, pdf_in_ablage_speichern, json_api_abfrage, webseite_lesen, doi_pruefen, url_status_pruefen), MUSS vor der JSON-Abschlussantwort genau eine Notiz per research_note_ablegen (bzw. research_note_aktualisieren bei Korrektur) in der Research-Ablage ablegen.
+
 ## 6. Hook-Transparenz
 
 Ist ein Prüfhook in deiner Sitzung aktiv, ordnest du zu Beginn jeder Abgabe eine Transparenzmeldung (maximal fünf Sätze) an, die ausschließlich die tatsächlich implementierten Prüfungen benennt: Benenne keine Prüfung, die nicht existiert, und lasse keine bestehende aus. Führe wörtliche Zitate als solche durch die Zitatprüfung, statt sie als paraphrasierte Aussagen mit Evidenzgrad an der Prüfung vorbeizuführen.
@@ -221,13 +225,13 @@ class DoubleCheck(BaseModel):
 
 
 class ResearchAnswer(BaseModel):
-    zusammenfassung: str = Field(description="Praegnanate Zusammenfassung der Antwort.")
+    zusammenfassung: str = Field(description="Praegnanate Zusammenfassung der Antwort (max. 1500 Zeichen).")
     belegte_aussagen: list[BelegteAussage] = Field(default_factory=list, description="Alle faktischen Aussagen mit Pflichtquelle.")
     deutungen: list[str] = Field(default_factory=list, description="Eigene Einordnungen, klar als Deutung markiert.")
     offene_punkte: list[str] = Field(default_factory=list, description="Ungeklaerte Fragen / nicht belegbare Punkte.")
     verbatim_zitate: list[VerbatimZitat] = Field(default_factory=list, description="Alle wörtlichen Zitate, jeweils per zitat_pruefen verifiziert. Leer lassen, wenn keins verifiziert ist.")
     double_check: list[DoubleCheck] = Field(default_factory=list, description="PFLICHT: jede wörtliche Angabe und jede Zahl/ID, jeweils mit Tool-Ergebnis verifiziert.")
-    arbeitsupdate: str = Field(default="", description="PFLICHT nach jeder Arbeitsrunde: Klartext-Update in vollen Saetzen, was in diesem Turn recherchiert/gelesen/abgelegt wurde (plain text, keine Stichpunkte).")
+    arbeitsupdate: str = Field(default="", description="PFLICHT nach jeder Arbeitsrunde: Klartext-Update in vollen Saetzen, was in diesem Turn recherchiert/gelesen/abgelegt wurde (plain text, keine Stichpunkte; max. 2500 Zeichen).")
     verifizierungsquote: float = Field(default=0.0, description="Anteil der belegte_aussagen mit double_check-Nachweis (0.0-1.0). Wird vom Hook gegen die tatsaechlichen double_check-Eintraege geprueft; Abweichung >0.2 oder Quote <0.5 bei belegten Aussagen -> Retry.")
 
 
@@ -751,6 +755,8 @@ async def _upsert_document(client, library_id: str, name: str, content: str):
 
 
 KNOWN_TOOL_NAMES = {"web_recherche", "projektquellen_suchen", "ablage_durchsuchen", "projektdateien_auflisten", "bibliotheken_auflisten", "dokument_finden", "research_note_ablegen", "research_note_aktualisieren", "zitat_pruefen", "web_zitat_pruefen", "dokument_lesen", "doi_pruefen", "url_status_pruefen", "in_dokument_suchen", "aktuelles_datum", "pdf_ocr", "pdf_in_ablage_speichern", "json_api_abfrage", "webseite_lesen"}
+_SEARCH_TOOLS = {"dokument_lesen", "zitat_pruefen", "web_zitat_pruefen", "ablage_durchsuchen", "projektquellen_suchen", "projektdateien_auflisten", "web_recherche", "dokument_finden", "bibliotheken_auflisten", "aktuelles_datum", "pdf_ocr", "pdf_in_ablage_speichern", "json_api_abfrage", "webseite_lesen", "doi_pruefen", "url_status_pruefen"}
+_NOTE_TOOLS = {"research_note_ablegen", "research_note_aktualisieren"}
 
 
 class QuoteAuditHook(agents.Hook):
@@ -776,6 +782,12 @@ class QuoteAuditHook(agents.Hook):
     res_streak: int = 0
     last_res_hash: str = ""
     noprog_warned: bool = False
+    turn_fences: int = 0
+    turn_zus: int = 0
+    turn_chars: int = 0
+    wave_streak: int = 0
+    typo_streak: int = 0
+    abl_warned: bool = False
 
 
     async def pre_agent_turn(self, ctx, request):
@@ -797,6 +809,12 @@ class QuoteAuditHook(agents.Hook):
         self.res_streak = 0
         self.last_res_hash = ""
         self.noprog_warned = False
+        self.turn_fences = 0
+        self.turn_zus = 0
+        self.turn_chars = 0
+        self.wave_streak = 0
+        self.typo_streak = 0
+        self.abl_warned = False
         return None
 
     tool_texts: list[str] = Field(default_factory=list)
@@ -898,13 +916,30 @@ class QuoteAuditHook(agents.Hook):
         self.deg_total += deg
         if deg >= 4 or (self.no_tool_streak >= 3 and self.deg_total >= 3):
             self.turn_rejected = True; logger.warning("hook reject"); return agents.reject("Turn beendet: degenerativer Endlos-Text erkannt. Bitte naechsten Auftrag stellen.")
-        # Wellen-Loop: EINE text-only Antwort enthaelt mehrere Answer-Bloecke (mehrere ```json-Fences oder mehrere "zusammenfassung"-Felder) -> wie Wiederholung behandeln
-        _wellen = text.count("```json") + len(_re.findall(r'"zusammenfassung"\s*:', text))
-        if _wellen >= 2 or len(text) > 30000:
-            self.rep_streak += 1
-            if self.rep_streak >= 2:
-                self.turn_rejected = True; logger.warning("hook reject"); return agents.reject("Turn beendet: Antwort enthaelt mehrere Wellen/Answer-Bloecke ohne neuen Tool-Call. Bitte naechsten Auftrag stellen.")
-            return agents.retry("STOPP: genau EINE Antwort abgeben - keine weiteren Wellen, keine zweiten JSON-Bloecke, keine wiederholte Zusammenfassung nach der ersten Antwort. Turn sofort beenden.")
+        # Kumulative Wellen-Erkennung ueber ALLE text-only Antworten des Turns (nicht nur eine einzelne)
+        self.turn_fences += text.count("```json")
+        self.turn_zus += len(_re.findall(r'["\u201e\u201c]zusammenfassung["\u201c\u201d]\s*:', text))
+        self.turn_chars += len(text)
+        # Root-Cause json_invalid: typografische Anfuehrungszeichen in einer JSON-artigen Abschlussantwort
+        _looks_json = ("zusammenfassung" in text) or text.lstrip().startswith("{") or "```json" in text
+        if _looks_json and any(c in text for c in "\u201e\u201c\u201d\u201a\u2018\u2019"):
+            self.typo_streak += 1
+            if self.typo_streak >= 2:
+                self.turn_rejected = True; logger.warning("hook reject typo-quotes"); return agents.reject("Turn beendet: JSON-Antwort mit typografischen Anfuehrungszeichen (nur ASCII-Double-Quote erlaubt). Bitte naechsten Auftrag stellen.")
+            return agents.retry("STOPP: JSON nur mit ASCII-Double-Quotes (U+0022) - niemals typografische Anfuehrungszeichen. Ausserdem: nacktes JSON ohne Markdown-Fence, ohne Text davor/danach, genau EIN Objekt.")
+        # ABLAGE-PFLICHT: Recherche im Turn ohne abgelegte Notiz -> erst Retry, dann Reject
+        if (set(self.tools_called) & _SEARCH_TOOLS) and not (set(self.tools_called) & _NOTE_TOOLS):
+            if not self.abl_warned:
+                self.abl_warned = True
+                logger.warning("ablage-pflicht: recherche ohne notiz")
+                return agents.retry("PFLICHT: Es wurde recherchiert, aber noch keine Notiz abgelegt. Lege JETZT mit research_note_ablegen (bzw. research_note_aktualisieren bei Korrektur) eine Notiz in der Research-Ablage ab - DANACH die einzelne JSON-Abschlussantwort, dann Turnende.")
+            self.turn_rejected = True; logger.warning("hook reject ablage-pflicht"); return agents.reject("Turn abgelehnt: Protokoll-Pflicht nicht erfuellt (Recherche ohne research_note_ablegen). Bitte naechsten Auftrag stellen.")
+        # Wellen-Loop kumulativ ueber den Turn: mehrere Fences/zusammenfassung-Felder oder >30000 Zeichen insgesamt
+        if self.turn_fences + self.turn_zus >= 2 or self.turn_chars > 30000:
+            self.wave_streak += 1
+            if self.wave_streak >= 2:
+                self.turn_rejected = True; logger.warning("hook reject wellen kumulativ"); return agents.reject("Turn beendet: mehrere Answer-Bloecke oder ueberlange Antworten ueber den Turn verteilt. Bitte naechsten Auftrag stellen.")
+            return agents.retry("STOPP: genau EINE JSON-Abschlussantwort abgeben - keine weiteren Wellen, keine zweiten JSON-Bloecke, keine wiederholte Zusammenfassung. Turn sofort beenden.")
         # Wiederholungs-Loop in der Texterstellung (z. B. Dokumentation): aehnliche Antworten ohne Tool-Calls
         import difflib
         norm_text = _norm(text)
@@ -946,7 +981,7 @@ class QuoteAuditHook(agents.Hook):
             qt = _norm(str(q.get("text", "")))
             if qt and _hl2.sha256(qt.encode()).hexdigest() not in self.verified:
                 problems.append("unverifiziertes Zitat: " + qt[:100])
-        search_tools = {"dokument_lesen", "zitat_pruefen", "web_zitat_pruefen", "ablage_durchsuchen", "projektquellen_suchen", "projektdateien_auflisten", "web_recherche", "dokument_finden", "bibliotheken_auflisten", "aktuelles_datum", "pdf_ocr", "pdf_in_ablage_speichern", "json_api_abfrage", "webseite_lesen"}
+        search_tools = _SEARCH_TOOLS
         all_text = _norm(str(data.get("zusammenfassung", "")) + " " + str(data.get("offene_punkte", "")) + " " + str(data.get("belegte_aussagen", "")))
         neg_words = ["nicht gefunden", "nicht lesbar", "nicht existiert", "nicht auffindbar", "keine treffer"]
         # nur bei echtem Dokument-/Quellenbezug pruefen (UUID, URL, DOI, "Dokument"), nicht bei reinen Chat-Antworten

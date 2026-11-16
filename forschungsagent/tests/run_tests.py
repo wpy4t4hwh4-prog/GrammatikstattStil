@@ -122,10 +122,61 @@ class HookLoopTests(unittest.TestCase):
         wellig = '```json\n{"zusammenfassung": "A", "belegte_aussagen": []}\n```\nZwischenfazit.\n```json\n{"zusammenfassung": "B"}\n```'
         res1 = self._post(wellig)
         self.assertIsNotNone(res1)  # erster Welle -> Retry
-        self.assertEqual(self.hook.rep_streak, 1)
+        self.assertEqual(self.hook.wave_streak, 1)
         res2 = self._post(wellig)
         self.assertIsNotNone(res2)  # zweite Welle -> Reject
         self.assertTrue(self.hook.turn_rejected)
+
+    def test_wellen_kumulativ_ueber_turn(self):
+        # zwei EINZELNE text-only Antworten mit je einem json-Block -> kumulativ Welle
+        b1 = '```json\n{"zusammenfassung": "A"}\n```'
+        b2 = '```json\n{"zusammenfassung": "B"}\n```'
+        r1 = self._post(b1)
+        self.assertIsNotNone(r1)  # kumulativ 2 -> Retry
+        self.assertEqual(self.hook.wave_streak, 1)
+        r2 = self._post(b2)
+        self.assertIsNotNone(r2)  # weiterhin kumulativ -> Reject
+        self.assertTrue(self.hook.turn_rejected)
+
+    def test_typo_quotes_retry_then_reject(self):
+        bad = '{\u201ezusammenfassung\u201c: \u201eWelle mit deutschen Anfuehrungszeichen\u201c}'
+        r1 = self._post(bad)
+        self.assertIsNotNone(r1)  # Retry mit ASCII-Hinweis
+        self.assertEqual(self.hook.typo_streak, 1)
+        r2 = self._post(bad)
+        self.assertIsNotNone(r2)  # Reject
+        self.assertTrue(self.hook.turn_rejected)
+
+    def test_typo_quotes_in_plain_text_ok(self):
+        # gewoehnlicher deutscher Text mit \u201e \u201c ist KEIN JSON-versuch -> kein typo-retry
+        self.assertIsNone(self._post("Das Ergebnis ist \u201eeindeutig\u201c belegt."))
+
+    def test_ablage_pflicht_text_only_retry_then_reject(self):
+        res = types.SimpleNamespace(tool_name="web_recherche", tool_result=types.SimpleNamespace(content=[types.SimpleNamespace(text="treffer")]))
+        asyncio.run(self.hook.post_tool_call(None, res))
+        r1 = self._post("recherche abgeschlossen")
+        self.assertIsNotNone(r1)  # Retry: Notiz fehlt
+        self.assertTrue(self.hook.abl_warned)
+        r2 = self._post("immer noch keine notiz")
+        self.assertIsNotNone(r2)  # Reject
+        self.assertTrue(self.hook.turn_rejected)
+
+    def test_ablage_erfuellt_kein_retry(self):
+        for name in ("web_recherche", "research_note_ablegen"):
+            res = types.SimpleNamespace(tool_name=name, tool_result=types.SimpleNamespace(content=[types.SimpleNamespace(text="ok")]))
+            asyncio.run(self.hook.post_tool_call(None, res))
+        self.assertIsNone(self._post("alles protokolliert"))
+
+    def test_keine_recherche_keine_ablage_pflicht(self):
+        # reine Chat-Antwort ohne Recherche-Tools -> kein Ablage-Retry
+        self.assertIsNone(self._post("allgemeine erlaeuterung ohne werkzeug"))
+
+    def test_instructions_formatregeln_present(self):
+        with open(main.__file__, encoding="utf-8") as _f:
+            s = _f.read()
+        self.assertIn("ABSCHLUSS-ANTWORT-FORMAT", s)
+        self.assertIn("ASCII-Double-Quotes", s)
+        self.assertIn("ABLAGE-PFLICHT", s)
 
     def test_single_answer_block_not_flagged(self):
         import json
