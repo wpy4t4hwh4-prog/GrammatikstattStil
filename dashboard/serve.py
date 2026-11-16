@@ -26,6 +26,30 @@ from pathlib import Path
 BASE = Path(__file__).resolve().parent
 DATA = BASE / "data"
 NOTES_LIBRARY_ID = "01a1b7a7-d3b3-7603-9601-7efb317d38ee"  # Research-Ablage (Agent)
+APPARAT_LIBRARY_ID = "01a1c18b-fe93-75a4-8c2b-871c9f112cd9"  # Apparat-Bibliothek
+
+import re as _re
+
+
+def parse_qv_standzeile(text):
+    """Parst die Standzeile des Apparat_Quellenverzeichnis.md (K-Stand, Positionen, Quote)."""
+    out = {"stand": None, "positionen": None, "k": None, "vermerke": None, "erschliessung": None}
+    m = _re.search(r"Stand:\s*([^\n]+)", text)
+    if m:
+        out["stand"] = m.group(1).strip()[:200]
+    m = _re.search(r"(\d+)\s*Verzeichnispositionen", text)
+    if m:
+        out["positionen"] = int(m.group(1))
+    m = _re.search(r"K1\s+(\d+),\s*K2\s+(\d+),\s*K3\s+(\d+),\s*K4\s+(\d+),\s*K5\s+(\d+)", text)
+    if m:
+        out["k"] = {"K1": int(m.group(1)), "K2": int(m.group(2)), "K3": int(m.group(3)), "K4": int(m.group(4)), "K5": int(m.group(5))}
+    m = _re.search(r"Vermerke\s+(\d+)", text)
+    if m:
+        out["vermerke"] = int(m.group(1))
+    m = _re.search(r"Erschlie\S*ungsquote.{0,40}?(\d+)\s*/\s*(\d+)", text, _re.DOTALL)
+    if m:
+        out["erschliessung"] = {"zaehler": m.group(1) + "/" + m.group(2)}
+    return out
 
 
 def load_project():
@@ -49,7 +73,7 @@ def load_outbox():
 
 
 def live_info():
-    """Optional: letzte Ablage-Dokumente via Mistral-SDK (nur lokal, Key aus Env)."""
+    """Optional live: neueste Ablage-Doks + QV-Standzeile aus dem Apparat (Key nur aus Env)."""
     key = os.environ.get("PROJECT_MISTRAL_API_KEY") or os.environ.get("MISTRAL_API_KEY")
     if not key:
         return {"live": False, "grund": "kein API-Key in Umgebung (MISTRAL_API_KEY/PROJECT_MISTRAL_API_KEY)"}
@@ -60,12 +84,23 @@ def live_info():
 
         async def _go():
             listing = await client.beta.libraries.documents.list_async(library_id=NOTES_LIBRARY_ID, page_size=8)
-            return [{"name": d.name, "status": getattr(d, "processing_status", None)} for d in (listing.data or [])]
+            ablage = [{"name": d.name, "status": getattr(d, "processing_status", None)} for d in (listing.data or [])]
+            qv = None
+            try:
+                ql = await client.beta.libraries.documents.list_async(library_id=APPARAT_LIBRARY_ID, search="Quellenverzeichnis", page_size=5)
+                qvdoc = next((d for d in (ql.data or []) if "Quellenverzeichnis" in (d.name or "")), None)
+                if qvdoc is not None:
+                    content = await client.beta.libraries.documents.text_content_async(library_id=APPARAT_LIBRARY_ID, document_id=qvdoc.id)
+                    text = getattr(content, "text", None) or str(content)
+                    qv = parse_qv_standzeile(text[:6000])
+            except Exception:
+                qv = None
+            return ablage, qv
 
         import asyncio
 
-        docs = asyncio.run(_go())
-        return {"live": True, "anzahl": len(docs), "zeitstempel": time.strftime("%H:%M:%S"), "doks": docs}
+        docs, qv = asyncio.run(_go())
+        return {"live": True, "anzahl": len(docs), "zeitstempel": time.strftime("%H:%M:%S"), "doks": docs, "qv": qv}
     except Exception as e:  # kein SDK / kein Netz / kein Key -> lokal bleiben
         return {"live": False, "grund": f"{type(e).__name__}: {e}"[:200]}
 

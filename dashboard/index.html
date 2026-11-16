@@ -268,8 +268,17 @@ $('#msgInput').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.sh
 async function liveTick() {
   const live = await api('/api/live');
   const b = $('#liveBadge');
-  if (live && live.live) { b.classList.remove('off'); $('#liveLabel').textContent = 'live · ' + (live.anzahl || 0) + ' Ablage-Docs · ' + (live.zeitstempel || ''); }
-  else { b.classList.add('off'); $('#liveLabel').textContent = 'lokal'; }
+  if (live && live.live) {
+    b.classList.remove('off');
+    let label = 'live · ' + (live.anzahl || 0) + ' Ablage-Docs · ' + (live.zeitstempel || '');
+    if (live.qv && live.qv.k) {
+      const K = live.qv.k;
+      label = 'live · QV ' + (live.qv.positionen || '?') + ' Pos. · K1 ' + K.K1 + ' K2 ' + K.K2 + ' K3 ' + K.K3 + ' K4 ' + K.K4 + ' K5 ' + K.K5 + ' · ' + (live.zeitstempel || '');
+      const mn = $('#metaNote');
+      if (mn && live.qv.stand) mn.textContent = 'Live-Stand (Apparat): ' + live.qv.stand + (live.qv.erschliessung ? ' · Erschließungsquote ' + live.qv.erschliessung.zaehler : '');
+    }
+    $('#liveLabel').textContent = label;
+  } else { b.classList.add('off'); $('#liveLabel').textContent = 'lokal'; }
 }
 
 /* ---- Tabs ---- */
