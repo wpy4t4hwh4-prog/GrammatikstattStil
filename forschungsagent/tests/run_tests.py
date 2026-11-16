@@ -327,5 +327,15 @@ class StaticSourceTests(unittest.TestCase):
         self.assertNotIn("KI-Nutzung: mit KI-Assistenz", self.src)
 
 
+class SessionStartRegelTests(unittest.TestCase):
+    def test_session_start_regel_robust(self):
+        with open(main.__file__, encoding="utf-8") as _f:
+            s = _f.read()
+        self.assertIn("dokument_finden mit dem Namen", s)
+        self.assertIn("NIEMALS eine ID raten", s)
+        self.assertIn("NICHT blind ein neues Projektstand-Dokument anlegen", s)
+        self.assertIn("GENAU EINES", s)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
