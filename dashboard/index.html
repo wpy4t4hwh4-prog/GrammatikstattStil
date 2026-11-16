@@ -80,6 +80,29 @@
   .composer button { font: inherit; font-size: 14px; font-weight: 600; color: #fff; background: var(--accent); border: 0;
     border-radius: 12px; padding: 0 20px; cursor: pointer; }
   .note { font-size: 12px; color: var(--muted); line-height: 1.5; }
+  .btn { font: inherit; font-size: 13px; font-weight: 600; color: var(--text); background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 8px 14px; cursor: pointer; box-shadow: var(--shadow); }
+  .btn:hover { background: color-mix(in srgb, var(--accent) 6%, var(--card)); }
+  .split { display: grid; grid-template-columns: 320px 1fr; gap: 16px; align-items: start; }
+  @media (max-width: 760px) { .split { grid-template-columns: 1fr; } }
+  .doclist { display: flex; flex-direction: column; gap: 6px; max-height: 480px; overflow-y: auto; }
+  .doclist button { text-align: left; font: inherit; font-size: 13px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border); background: var(--bg); color: var(--text); cursor: pointer; }
+  .doclist button.active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--bg)); }
+  .doclist button .st { color: var(--muted); font-size: 11px; display: block; margin-top: 2px; }
+  pre.preview { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 18px; font-size: 12.5px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; max-height: 480px; overflow-y: auto; }
+  .rowbtn { font: inherit; font-size: 12px; font-weight: 600; color: var(--accent); background: transparent; border: 1px solid var(--border); border-radius: 8px; padding: 3px 10px; cursor: pointer; }
+  .rowbtn:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+  #aenderungen { display: none; margin-top: 16px; }
+  #aenderungen.open { display: block; }
+  .logline { font-size: 12.5px; padding: 6px 0; border-bottom: 1px solid var(--border); color: var(--muted); }
+  .logline b { color: var(--text); }
+  dialog { border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); color: var(--text); box-shadow: var(--shadow); padding: 20px; width: min(420px, 92vw); }
+  dialog::backdrop { background: rgba(0,0,0,.35); backdrop-filter: blur(4px); }
+  dialog h3 { font-size: 15px; font-weight: 650; margin-bottom: 6px; }
+  dialog label { display: block; font-size: 12px; color: var(--muted); margin: 10px 0 4px; font-weight: 600; }
+  dialog input, dialog select { width: 100%; font: inherit; font-size: 14px; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); color: var(--text); }
+  dialog .actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
+  dialog .actions button { font: inherit; font-size: 14px; font-weight: 600; padding: 8px 16px; border-radius: 10px; border: 1px solid var(--border); background: transparent; color: var(--text); cursor: pointer; }
+  dialog .actions button.primary { background: var(--accent); color: #fff; border-color: transparent; }
   footer { border-top: 1px solid var(--border); padding: 18px 0 28px; font-size: 12px; color: var(--muted); }
 </style>
 </head>
@@ -94,6 +117,7 @@
         <button data-page="verzeichnis">Verzeichnis</button>
         <button data-page="glossar">Glossar</button>
         <button data-page="komm">Kommunikation</button>
+        <button data-page="ablage">Ablage</button>
       </nav>
     </div>
   </div>
@@ -119,13 +143,33 @@
       <select id="fK"><option value="">alle K-Stufen</option><option>K1</option><option>K2</option><option>K3</option><option>K4</option><option>K5</option><option>V</option></select>
       <select id="fR"><option value="">alle Relevanz</option><option>A</option><option>B</option><option>C</option><option>P</option><option>–</option></select>
       <span class="count" id="count"></span>
+      <span style="flex:1"></span>
+      <button class="btn" id="btnAenderungen" style="display:none" title="K-Hebungen (Log)">Änderungen</button>
+      <button class="btn" id="btnExport" style="display:none" title="QV als JSON exportieren (Download)">Export ⬇</button>
     </div>
     <div class="card" style="padding:0;overflow:auto">
       <table>
-        <thead><tr><th>ID</th><th>Titel / Beleg</th><th>Quelle / Fundstelle</th><th>K</th><th>Rel.</th><th>Vermerk</th></tr></thead>
+        <thead><tr><th>ID</th><th>Titel / Beleg</th><th>Quelle / Fundstelle</th><th>K</th><th>Rel.</th><th>Vermerk</th><th id="thAktion" style="display:none"></th></tr></thead>
         <tbody id="vRows"></tbody>
       </table>
     </div>
+    <div class="card" id="aenderungen">
+      <div class="chart-title">Änderungslog — K-Hebungen (neueste zuerst)</div>
+      <div id="aenderungenList"></div>
+    </div>
+    <dialog id="hebenDlg">
+      <h3>K-Hebung <span id="hId"></span></h3>
+      <label for="hK">neue K-Stufe (nur K1/K2)</label>
+      <select id="hK"><option>K1</option><option selected>K2</option></select>
+      <label for="hBeleg">Beleg (Pflicht — DOI / URL / Digitalisat / Campus)</label>
+      <input id="hBeleg" placeholder="z. B. Campus-Lizenz Cairn (manuelle Sichtung)">
+      <label for="hDatum">Datum (JJJJ-MM-TT, aus aktuelles_datum)</label>
+      <input id="hDatum" type="date">
+      <div class="actions">
+        <button id="hAbort">Abbrechen</button>
+        <button id="hOk" class="primary">Heben</button>
+      </div>
+    </dialog>
   </section>
 
   <section class="page" id="page-glossar">
@@ -145,6 +189,18 @@
     </div>
   </section>
 
+  <section class="page" id="page-ablage">
+    <div class="toolbar">
+      <input type="search" id="aq" placeholder="Research-Ablage durchsuchen … (live, nur mit Server + API-Key)">
+      <span class="count" id="acount"></span>
+    </div>
+    <p class="note" id="ablageNote" style="margin-bottom:12px"></p>
+    <div class="split">
+      <div class="card" style="padding:10px"><div class="doclist" id="ablageList"></div></div>
+      <pre class="preview" id="ablagePreview">Dokument links wählen — Vorschau (erste 4000 Zeichen) erscheint hier.</pre>
+    </div>
+  </section>
+
 </main>
 <footer><div class="wrap">Grammatik statt Stil — lokales Research-Dashboard · Daten: <span id="dataSrc">data/project.json</span> · kein Netzwerk nötig (außer optionaler Live-Modus)</div></footer>
 
@@ -159,7 +215,9 @@ async function loadData() {
     if (r.ok) { DATA = await r.json(); $('#dataSrc').textContent = 'data/project.json (live vom Server)'; }
   } catch (e) { /* file:// Fallback auf sample-data.js */ }
   if (!DATA) return;
-  renderStats(); renderCharts(); renderVerzeichnis(); renderGlossar(); loadMessages();
+  renderStats(); renderCharts(); renderGlossar(); loadMessages();
+  await probeServer();
+  loadQv(); loadAblage();
 }
 
 async function api(path, opts) {
@@ -228,19 +286,113 @@ function renderCharts() {
   $('#legendR').innerHTML = rparts.map((p, i) => `<span><i style="background:${rcolors[i % rcolors.length]}"></i>${p.label} ${p.value}</span>`).join('');
 }
 
-/* ---- Verzeichnis ---- */
-function renderVerzeichnis() {
+/* ---- Verzeichnis (Server-QV via SQLite/FTS wenn erreichbar, sonst lokal) ---- */
+let SERVER = false, qvRows = [], qvTotal = 0, hebPos = null;
+
+async function probeServer() {
+  const r = await api('/api/qv?limit=1');
+  SERVER = !!(r && r.rows);
+  const on = SERVER ? '' : 'none';
+  $('#thAktion').style.display = on;
+  $('#btnAenderungen').style.display = on;
+  $('#btnExport').style.display = on;
+}
+
+function rowHtml(r) {
+  const heb = SERVER ? `<td><button class="rowbtn" data-heb="${escapeHtml(r.id)}">Heben</button></td>` : '';
+  return `<tr><td style="font-weight:600;white-space:nowrap">${escapeHtml(r.id)}</td><td>${escapeHtml(r.titel)}</td>` +
+    `<td style="color:var(--muted)">${escapeHtml(r.quelle)}</td><td><span class="k ${r.k}">${r.k}</span></td>` +
+    `<td>${r.rel || '–'}</td><td style="color:var(--muted);font-size:12px">${escapeHtml(r.vermerk || '')}</td>${heb}</tr>`;
+}
+
+async function loadQv() {
+  if (!SERVER) return renderVerzeichnisLocal();
+  const q = $('#q').value, fk = $('#fK').value, fr = $('#fR').value;
+  const r = await api('/api/qv?q=' + encodeURIComponent(q) + '&k=' + encodeURIComponent(fk) + '&rel=' + encodeURIComponent(fr) + '&limit=400');
+  if (!r) { SERVER = false; return renderVerzeichnisLocal(); }
+  qvRows = r.rows; qvTotal = r.total;
+  $('#vRows').innerHTML = qvRows.map(rowHtml).join('');
+  $('#count').textContent = qvRows.length + ' / ' + qvTotal + ' Zeilen (DB)';
+}
+
+function renderVerzeichnisLocal() {
   const q = ($('#q').value || '').toLowerCase(), fk = $('#fK').value, fr = $('#fR').value;
   const rows = DATA.verzeichnis.filter(r =>
     (!fk || r.k === fk) && (!fr || (r.rel || '–') === fr) &&
     (!q || (r.id + ' ' + r.titel + ' ' + r.quelle + ' ' + (r.vermerk || '')).toLowerCase().includes(q)));
-  $('#vRows').innerHTML = rows.map(r =>
-    `<tr><td style="font-weight:600;white-space:nowrap">${r.id}</td><td>${r.titel}</td><td style="color:var(--muted)">${r.quelle}</td><td><span class="k ${r.k}">${r.k}</span></td><td>${r.rel || '–'}</td><td style="color:var(--muted);font-size:12px">${r.vermerk || ''}</td></tr>`).join('');
+  $('#vRows').innerHTML = rows.map(rowHtml).join('');
   $('#count').textContent = rows.length + ' / ' + DATA.verzeichnis.length + ' Zeilen';
 }
-$('#q').addEventListener('input', renderVerzeichnis);
-$('#fK').addEventListener('change', renderVerzeichnis);
-$('#fR').addEventListener('change', renderVerzeichnis);
+
+let qvDeb = null;
+$('#q').addEventListener('input', () => { clearTimeout(qvDeb); qvDeb = setTimeout(loadQv, 250); });
+$('#fK').addEventListener('change', loadQv);
+$('#fR').addEventListener('change', loadQv);
+
+/* ---- K-Hebung (Dialog) ---- */
+$('#vRows').addEventListener('click', e => {
+  const b = e.target.closest('[data-heb]'); if (!b) return;
+  hebPos = b.dataset.heb;
+  $('#hId').textContent = '— ' + hebPos;
+  $('#hBeleg').value = '';
+  const d = new Date();
+  $('#hDatum').value = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  $('#hebenDlg').showModal();
+});
+$('#hAbort').addEventListener('click', () => $('#hebenDlg').close());
+$('#hOk').addEventListener('click', async () => {
+  const payload = { id: hebPos, neu_k: $('#hK').value, beleg: $('#hBeleg').value.trim(), datum: $('#hDatum').value };
+  let j = {};
+  try {
+    const r = await fetch('/api/qv/hebung', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    j = await r.json();
+    if (!r.ok) { alert('Hebung abgelehnt: ' + (j.fehler || ('HTTP ' + r.status))); return; }
+  } catch (e) { alert('Server nicht erreichbar: ' + e); return; }
+  $('#hebenDlg').close();
+  await loadQv(); loadAenderungen(); await loadData();
+});
+
+/* ---- Änderungslog + Export ---- */
+async function loadAenderungen() {
+  if (!SERVER) return;
+  const rows = await api('/api/qv/aenderungen') || [];
+  $('#aenderungenList').innerHTML = rows.map(a =>
+    `<div class="logline"><b>${escapeHtml(a.pos_id)}</b>: ${a.alt_k} → ${a.neu_k} · ${escapeHtml(a.datum)} · Beleg: ${escapeHtml(a.beleg)} <span style="opacity:.65">(${escapeHtml(a.ts)})</span></div>`).join('')
+    || '<p class="note">Noch keine Änderungen.</p>';
+}
+$('#btnAenderungen').addEventListener('click', () => {
+  const p = $('#aenderungen');
+  p.classList.toggle('open');
+  if (p.classList.contains('open')) loadAenderungen();
+});
+$('#btnExport').addEventListener('click', () => { window.location = '/api/qv/export'; });
+
+/* ---- Ablage-Browser (live) ---- */
+let ablageDeb = null;
+async function loadAblage() {
+  const q = $('#aq').value;
+  const r = await api('/api/ablage?q=' + encodeURIComponent(q));
+  const list = $('#ablageList');
+  if (!r || !r.live) {
+    $('#ablageNote').textContent = 'Live-Modus nicht aktiv (' + ((r && r.grund) || 'Server nicht erreichbar') + ') — Ablage-Browser braucht serve.py + MISTRAL_API_KEY/PROJECT_MISTRAL_API_KEY in der Umgebung.';
+    list.innerHTML = '';
+    $('#acount').textContent = '';
+    return;
+  }
+  $('#ablageNote').textContent = 'Research-Ablage (Mistral Library) — live: ' + r.docs.length + ' Dokumente' + (q ? ' für „' + q + '“' : '') + '. Klick lädt die Vorschau.';
+  $('#acount').textContent = r.docs.length + ' Doks';
+  list.innerHTML = r.docs.map(d =>
+    `<button data-doc="${escapeHtml(d.id)}"><span>${escapeHtml(d.name)}</span><span class="st">${escapeHtml(String(d.id).slice(0, 8))}… · ${escapeHtml(String(d.status || ''))}</span></button>`).join('')
+    || '<p class="note">Keine Dokumente gefunden.</p>';
+}
+$('#aq').addEventListener('input', () => { clearTimeout(ablageDeb); ablageDeb = setTimeout(loadAblage, 300); });
+$('#ablageList').addEventListener('click', async e => {
+  const b = e.target.closest('[data-doc]'); if (!b) return;
+  document.querySelectorAll('#ablageList button').forEach(x => x.classList.toggle('active', x === b));
+  $('#ablagePreview').textContent = 'lädt …';
+  const r = await api('/api/ablage/doc?id=' + encodeURIComponent(b.dataset.doc));
+  $('#ablagePreview').textContent = (r && r.live) ? (r.text || '') : ('Fehler: ' + ((r && r.grund) || 'nicht erreichbar'));
+});
 
 /* ---- Glossar ---- */
 function renderGlossar() {
@@ -285,6 +437,8 @@ async function liveTick() {
 document.querySelectorAll('nav button').forEach(b => b.addEventListener('click', () => {
   document.querySelectorAll('nav button').forEach(x => x.classList.toggle('active', x === b));
   document.querySelectorAll('section.page').forEach(s => s.classList.toggle('active', s.id === 'page-' + b.dataset.page));
+  if (b.dataset.page === 'ablage') loadAblage();
+  if (b.dataset.page === 'verzeichnis') loadQv();
 }));
 
 loadData(); liveTick(); setInterval(liveTick, 30000);

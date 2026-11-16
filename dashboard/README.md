@@ -15,10 +15,11 @@ Aufruf im Browser: **http://127.0.0.1:8765/** — der Server bindet nur an `127.
 
 Ohne Server genügt auch das direkte Öffnen von `index.html` (file://) — dann dienen die Fallback-Daten aus `data/sample-data.js` und der Postausgang ist deaktiviert.
 
-## Inhalte
+## Inhalte (Module)
 
 - **Übersicht** — Live-Kennzahlen: Positionen gesamt, Volltextquote (K1+K2)/N, K1–K5/V, Ø Quellendichte pro Gruppe; Charts (Donut K-Verteilung, Balken Quellendichte je Gruppe, Relevanzverteilung).
-- **Verzeichnis** — durchsuchbares/filterbares wissenschaftliches Verzeichnis (ID G/Nr., Titel, Quelle, K-Stufe, Relevanz, Vermerk).
+- **Verzeichnis** — wissenschaftliches Verzeichnis (ID G/Nr., Titel, Quelle, K-Stufe, Relevanz, Vermerk). Mit Server: Suche direkt in der QV-Datenbank (SQLite, FTS5 falls verfügbar, sonst LIKE), Filter K/Rel., pro Zeile **Heben**-Button (K-Hebung nach K1/K2 mit Beleg-Pflicht), **Änderungslog** und **JSON-Export**. Ohne Server (file://): lokaler Filter auf `data/sample-data.js`.
+- **Ablage** — Live-Browser für die Research-Ablage (Mistral Library): Suche, Dokumentliste, Vorschau (erste 4000 Zeichen). Nur mit Server + API-Key in der Umgebung; sonst Hinweis „lokal“.
 - **Glossar** — K1–K5, V, W1/W2/W4, VT-Quote, G/Nr., A/B/C/P, Sammelposition.
 - **Kommunikation** — zentrale Eingabemaske; Nachrichten werden lokal in `data/outbox.jsonl` protokolliert (Postausgang).
 
@@ -34,7 +35,29 @@ python3 -c "import json;d=json.load(open('data/project.json',encoding='utf-8'));
 
 ## Optionaler Live-Modus (Ablage)
 
-`GET /api/live` listet die neuesten Dokumente der Research-Ablage, **nur wenn** `mistralai` installiert ist und `MISTRAL_API_KEY` (oder `PROJECT_MISTRAL_API_KEY`) in der Umgebung gesetzt ist. Der Key wird nie fest im Code hinterlegt. Ohne Key bleibt das Dashboard rein lokal (Badge „lokal“).
+`GET /api/live` listet die neuesten Dokumente der Research-Ablage plus die QV-Standzeile aus dem Apparat, **nur wenn** `mistralai` installiert ist und `MISTRAL_API_KEY` (oder `PROJECT_MISTRAL_API_KEY`) in der Umgebung gesetzt ist. Der Key wird nie fest im Code hinterlegt. Ohne Key bleibt das Dashboard rein lokal (Badge „lokal“).
+
+## QV-Datenbank, K-Hebung, Export (Server-Modus)
+
+Beim Start legt `serve.py` `data/qv.db` an (SQLite; FTS5-Volltexttabelle `pos_fts` falls verfügbar, sonst LIKE-Fallback) und befüllt sie aus `data/project.json` (`verzeichnis`). K-Hebungen werden in `qv.db` **und** zurück in `data/project.json` geschrieben (Write-Through inkl. `kstand` und Vermerk).
+
+- `GET /api/qv?q=&k=&rel=&limit=` — Suche/Filter über alle Positionen (debounced aus der UI)
+- `POST /api/qv/hebung` — `{"id","neu_k":"K1|K2","beleg","datum":"JJJJ-MM-TT"}`; nur K1/K2 erlaubt, Beleg ist Pflicht, Datum darf nicht in der Zukunft liegen; jeder Vorgang landet in der Tabelle `aenderungen`
+- `GET /api/qv/aenderungen` — Änderungslog (neueste zuerst, max 200)
+- `GET /api/qv/export` — kompletter QV als JSON-Download (inkl. DB-Stand + Änderungslog)
+
+`data/qv.db` und `data/outbox.jsonl` sind via `.gitignore` vom Repo ausgeschlossen.
+
+## Ablage-Browser (live)
+
+- `GET /api/ablage?q=` — Dokumentliste der Research-Ablage (Library-ID fest im Code), optional mit Suchbegriff
+- `GET /api/ablage/doc?id=` — Text-Vorschau (erste 4000 Zeichen) eines Dokuments
+
+Beide antworten ohne Key mit `{"live": false, "grund": ...}`.
+
+## API-Übersicht
+
+`GET /api/stats` · `/api/verzeichnis` · `/api/glossar` · `/api/messages` · `/api/live` · `/api/ablage` · `/api/ablage/doc` · `/api/qv` · `/api/qv/aenderungen` · `/api/qv/export` — sowie `POST /api/message` · `POST /api/qv/hebung`.
 
 ## Versand an den produktiven Agenten
 
