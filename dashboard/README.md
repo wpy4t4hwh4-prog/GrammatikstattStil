@@ -39,3 +39,17 @@ python3 -c "import json;d=json.load(open('data/project.json',encoding='utf-8'));
 ## Versand an den produktiven Agenten
 
 Das Deployment `grammatik-statt-stil-research` (Branch `vibe/forschungsagent-b21b74`) wird über die Mistral-Plattform betrieben. Nachrichten vom Dashboard werden lokal im Postausgang (`data/outbox.jsonl`) gehalten; der Versand an den Agenten erfolgt über die MCP-/Studio-Schnittstelle (`execute_workflow` bzw. Signale `submit_command` / `send_message` / `start_turn`) mit dem eigenen Workspace-Key.
+
+## Zugriff vom iPhone / anderen Geräten (gleiches WLAN)
+
+Standardmäßig bindet der Server nur an `127.0.0.1` — dann ist nur der lokale Rechner dran. Für Zugriff aus dem Heimnetz:
+
+```bash
+python3 serve.py --host 0.0.0.0 --port 8765
+```
+
+IP des Mac ablesen (Systemeinstellungen → WLAN → Details), z. B. `192.168.1.23`; am iPhone im **gleichen WLAN** Safari öffnen: `http://192.168.1.23:8765/`. macOS-Firewall ggf. freigeben. Achtung: dann ist das Dashboard im LAN ohne Auth sichtbar — nur in vertrauenswürdigen Netzen nutzen, nie öffentlich ins Internet exponieren (kein Tunnel/Port-Forwarding).
+
+**Offline ohne Server:** Ordner `dashboard/` aufs iPhone kopieren (AirDrop/iCloud) und `index.html` direkt in Safari öffnen — Fallback-Daten aus `data/sample-data.js`, Postausgang deaktiviert.
+
+Das Dashboard ist bewusst **nicht** Teil des Workflow-Deployments (`grammatik-statt-stil-research` serviert den Agenten, nicht das Dashboard).
