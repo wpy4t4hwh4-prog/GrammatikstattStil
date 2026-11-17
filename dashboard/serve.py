@@ -75,6 +75,14 @@ def save_project(d):
         json.dump(d, f, ensure_ascii=False, indent=2)
 
 
+def _qint(qs, name, default, lo=1, hi=1000):
+    """Query-Param robust als int (Default bei Fehler), geclampt auf [lo, hi]."""
+    try:
+        return max(lo, min(hi, int(qs.get(name, [str(default)])[0] or default)))
+    except (ValueError, TypeError):
+        return default
+
+
 def load_outbox():
     p = DATA / "outbox.jsonl"
     if not p.exists():
@@ -130,8 +138,9 @@ def init_db():
 
 
 def _fts_query(q):
+    """FTS5-MATCH-Ausdruck: Tokens als Praefix-Treffer (\"paris\"* matcht auch \"Pariser\")."""
     toks = [t for t in _re.split(r"[^\w\-/]+", q, flags=_re.UNICODE) if t]
-    return " ".join('"%s"' % t.replace('"', '""') for t in toks)
+    return " ".join('"%s"*' % t.replace('"', '""') for t in toks)
 
 
 def qv_search(q, k, rel, limit=200):
@@ -144,8 +153,10 @@ def qv_search(q, k, rel, limit=200):
                    "ORDER BY rank LIMIT ?")
             rows = con.execute(sql, (_fts_query(q), k, k, rel, rel, limit)).fetchall()
         else:
-            rows = con.execute("SELECT * FROM pos WHERE (? = '' OR k = ?) AND (? = '' OR rel = ?) ORDER BY id LIMIT ?",
-                               (k, k, rel, rel, limit)).fetchall()
+            like = "%" + (q or "") + "%"
+            rows = con.execute("SELECT * FROM pos WHERE (titel LIKE ? OR quelle LIKE ? OR vermerk LIKE ? OR id LIKE ?) "
+                               "AND (? = '' OR k = ?) AND (? = '' OR rel = ?) ORDER BY id LIMIT ?",
+                               (like, like, like, like, k, k, rel, rel, limit)).fetchall()
     except sqlite3.OperationalError:
         like = "%" + (q or "") + "%"
         rows = con.execute("SELECT * FROM pos WHERE (titel LIKE ? OR quelle LIKE ? OR vermerk LIKE ? OR id LIKE ?) "
@@ -474,7 +485,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(ablage_doc(qs.get("id", [""])[0]))
         if u.path == "/api/qv":
             return self._json(qv_search(qs.get("q", [""])[0], qs.get("k", [""])[0], qs.get("rel", [""])[0],
-                                         min(int(qs.get("limit", ["200"])[0] or 200), 1000)))
+                                         _qint(qs, "limit", 200)))
         if u.path == "/api/qv/aenderungen":
             return self._json(qv_aenderungen())
         if u.path == "/api/qv/export":
@@ -497,6 +508,8 @@ class Handler(BaseHTTPRequestHandler):
         if u.path in ("/api/message", "/api/qv/hebung", "/api/render", "/api/diff"):
             try:
                 length = int(self.headers.get("Content-Length") or 0)
+                if length > 1000000:
+                    return self._json({"fehler": "Body zu gross (max 1 MB)"}, 413)
                 payload = json.loads(self.rfile.read(length) or b"{}")
                 if u.path == "/api/message":
                     text = str(payload.get("text", "")).strip()

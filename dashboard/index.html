@@ -141,6 +141,7 @@
   dialog .actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
   dialog .actions button { font: inherit; font-size: 14px; font-weight: 600; padding: 8px 16px; border-radius: 10px; border: 1px solid var(--border); background: transparent; color: var(--text); cursor: pointer; }
   dialog .actions button.primary { background: var(--accent); color: #fff; border-color: transparent; }
+  dialog[open] { display: block; position: fixed; top: 10%; left: 50%; transform: translateX(-50%); z-index: 30; }
   .bib3 { display: grid; grid-template-columns: 240px 300px 1fr; gap: 16px; align-items: start; }
   @media (max-width: 1000px) { .bib3 { grid-template-columns: 1fr; } }
   .kbar { display: flex; height: 10px; border-radius: 5px; overflow: hidden; min-width: 130px; background: var(--border); }
@@ -448,6 +449,8 @@ $('#fK').addEventListener('change', loadQv);
 $('#fR').addEventListener('change', loadQv);
 
 /* ---- K-Hebung (Dialog) ---- */
+function dlgOpen() { const d = $('#hebenDlg'); if (typeof d.showModal === 'function') d.showModal(); else d.setAttribute('open', ''); }
+function dlgClose() { const d = $('#hebenDlg'); if (typeof d.close === 'function') d.close(); else d.removeAttribute('open'); }
 $('#vRows').addEventListener('click', e => {
   const b = e.target.closest('[data-heb]'); if (!b) return;
   hebPos = b.dataset.heb;
@@ -455,10 +458,10 @@ $('#vRows').addEventListener('click', e => {
   $('#hBeleg').value = '';
   const d = new Date();
   $('#hDatum').value = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-  $('#hebenDlg').showModal();
+  dlgOpen();
 });
-$('#hAbort').addEventListener('click', () => $('#hebenDlg').close());
-$('#hebenDlg').addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.close(); });
+$('#hAbort').addEventListener('click', dlgClose);
+$('#hebenDlg').addEventListener('click', e => { if (e.target === e.currentTarget) dlgClose(); });
 $('#hOk').addEventListener('click', async () => {
   const payload = { id: hebPos, neu_k: $('#hK').value, beleg: $('#hBeleg').value.trim(), datum: $('#hDatum').value };
   let j = {};
@@ -467,7 +470,7 @@ $('#hOk').addEventListener('click', async () => {
     j = await r.json();
     if (!r.ok) { alert('Hebung abgelehnt: ' + (j.fehler || ('HTTP ' + r.status))); return; }
   } catch (e) { alert('Server nicht erreichbar: ' + e); return; }
-  $('#hebenDlg').close();
+  dlgClose();
   await loadQv(); loadAenderungen(); await loadData();
 });
 
