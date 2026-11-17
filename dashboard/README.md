@@ -19,7 +19,10 @@ Ohne Server genügt auch das direkte Öffnen von `index.html` (file://) — dann
 
 - **Übersicht** — Live-Kennzahlen: Positionen gesamt, Volltextquote (K1+K2)/N, K1–K5/V, Ø Quellendichte pro Gruppe; Charts (Donut K-Verteilung, Balken Quellendichte je Gruppe, Relevanzverteilung).
 - **Verzeichnis** — wissenschaftliches Verzeichnis (ID G/Nr., Titel, Quelle, K-Stufe, Relevanz, Vermerk). Mit Server: Suche direkt in der QV-Datenbank (SQLite, FTS5 falls verfügbar, sonst LIKE), Filter K/Rel., pro Zeile **Heben**-Button (K-Hebung nach K1/K2 mit Beleg-Pflicht), **Änderungslog** und **JSON-Export**. Ohne Server (file://): lokaler Filter auf `data/sample-data.js`.
+- **Quellen** — Quellendatenbank: Positionen gruppiert nach Quelle/Fundstelle mit Anzahl, K-Verteilung (Balken) und Positions-IDs; Suche + JSON-Export. Server: Aggregation in SQLite (`/api/quellen`), offline: lokal aus `data/project.json`.
 - **Ablage** — Live-Browser für die Research-Ablage (Mistral Library): Suche, Dokumentliste, Vorschau (erste 4000 Zeichen). Nur mit Server + API-Key in der Umgebung; sonst Hinweis „lokal“.
+- **Bibliothek** — Live-Übersicht **aller** Libraries des Workspace mit Dokumentzahl, Drill-down Library → Dokumente (Suche) → Vorschau (`/api/libraries`, `/api/library/docs`, `/api/library/doc`).
+- **Text** — Textproduktion/Review/Export: Templates aus `data/templates.json` rendern (`{{key}}`-Platzhalter, Kontext aus QV-Position + Zusatzfeldern; `POST /api/render`), Ergebnis kopieren / als `.md` laden / drucken (`@media print`), zeilenweiser Diff A-vs-B (`POST /api/diff`, difflib serverseitig, LCS-Fallback offline).
 - **Glossar** — K1–K5, V, W1/W2/W4, VT-Quote, G/Nr., A/B/C/P, Sammelposition.
 - **Kommunikation** — zentrale Eingabemaske; Nachrichten werden lokal in `data/outbox.jsonl` protokolliert (Postausgang).
 
@@ -57,7 +60,7 @@ Beide antworten ohne Key mit `{"live": false, "grund": ...}`.
 
 ## API-Übersicht
 
-`GET /api/stats` · `/api/verzeichnis` · `/api/glossar` · `/api/messages` · `/api/live` · `/api/ablage` · `/api/ablage/doc` · `/api/qv` · `/api/qv/aenderungen` · `/api/qv/export` — sowie `POST /api/message` · `POST /api/qv/hebung`.
+`GET /api/stats` · `/api/verzeichnis` · `/api/glossar` · `/api/messages` · `/api/live` · `/api/ablage` · `/api/ablage/doc` · `/api/libraries` · `/api/library/docs` · `/api/library/doc` · `/api/qv` · `/api/qv/aenderungen` · `/api/qv/export` · `/api/quellen` · `/api/templates` — sowie `POST /api/message` · `POST /api/qv/hebung` · `POST /api/render` · `POST /api/diff`.
 
 ## Versand an den produktiven Agenten
 

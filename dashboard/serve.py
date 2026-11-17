@@ -17,6 +17,13 @@ APIs:
   POST /api/qv/hebung        {"id","neu_k"(K1|K2),"beleg","datum"} -> K-Hebung mit Beleg-Pflicht + Log
   GET  /api/qv/aenderungen   Aenderungslog (K-Hebungen)
   GET  /api/qv/export        QV als JSON (Download)
+  GET  /api/quellen?q=       Quellendatenbank: gruppiert nach Quelle (Pos., K-Verteilung, IDs)
+  GET  /api/libraries        optional live: alle Libraries (ID, Name, Dok-Zahl)
+  GET  /api/library/docs?lib=&q=   optional live: Dokumente einer Library
+  GET  /api/library/doc?lib=&id=   optional live: Text-Ausschnitt (4000 Zeichen) aus beliebiger Library
+  GET  /api/templates        Text-Vorlagen (data/templates.json)
+  POST /api/render           {"template","context"} -> gerenderter Text ({{key}}-Ersetzung)
+  POST /api/diff             {"a","b"} -> zeilenweiser Diff als JSON
 
 Kein Schreibzugriff nach außen; Default bindet der Server nur an 127.0.0.1.
 """
@@ -214,6 +221,74 @@ def qv_export():
     return d
 
 
+def qv_quellen(q):
+    """Quellendatenbank: Positionen gruppiert nach Quelle mit K-Verteilung und IDs."""
+    con = db()
+    base = ("SELECT quelle, COUNT(*) n, "
+            "SUM(CASE WHEN k='K1' THEN 1 ELSE 0 END) K1, SUM(CASE WHEN k='K2' THEN 1 ELSE 0 END) K2, "
+            "SUM(CASE WHEN k='K3' THEN 1 ELSE 0 END) K3, SUM(CASE WHEN k='K4' THEN 1 ELSE 0 END) K4, "
+            "SUM(CASE WHEN k='K5' THEN 1 ELSE 0 END) K5, GROUP_CONCAT(id, ', ') ids "
+            "FROM pos ")
+    if q:
+        rows = con.execute(base + "WHERE quelle LIKE ? GROUP BY quelle ORDER BY n DESC, quelle LIMIT 300",
+                           ("%" + q + "%",)).fetchall()
+    else:
+        rows = con.execute(base + "GROUP BY quelle ORDER BY n DESC, quelle LIMIT 300").fetchall()
+    out = [dict(r) for r in rows]
+    con.close()
+    return {"rows": out, "total": len(out)}
+
+
+def load_templates():
+    p = DATA / "templates.json"
+    try:
+        with open(p, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return {"templates": []}
+
+
+def render_template(payload):
+    """Einfache {{key}}-Ersetzung aus data/templates.json; context kommt vom Client (nur Loopback)."""
+    tid = str(payload.get("template", "")).strip()
+    ctx = payload.get("context")
+    if not isinstance(ctx, dict):
+        return {"fehler": "context muss ein Objekt sein"}, 400
+    tpl = next((t for t in load_templates().get("templates", []) if str(t.get("id")) == tid), None)
+    if not tpl:
+        return {"fehler": "Template nicht gefunden: %s" % tid}, 404
+
+    def repl(m):
+        v = ctx.get(m.group(1).strip())
+        return "" if v is None else str(v)
+
+    text = _re.sub(r"\{\{\s*([\w.]+)\s*\}\}", repl, str(tpl.get("text", "")))
+    return {"ok": True, "id": tid, "text": text, "laenge": len(text)}, 200
+
+
+def diff_lines(payload):
+    """Zeilenweiser Diff (difflib) als JSON: Liste von {t: ''|'+'|'-', line}."""
+    a = str(payload.get("a", ""))
+    b = str(payload.get("b", ""))
+    if len(a) > 200000 or len(b) > 200000:
+        return {"fehler": "Eingabe zu gross (max 200000 Zeichen je Seite)"}, 413
+    import difflib
+    al, bl = a.splitlines(), b.splitlines()
+    sm = difflib.SequenceMatcher(a=al, b=bl, autojunk=False)
+    out = []
+    for tag, i1, i2, j1, j2 in sm.get_opcodes():
+        if tag == "equal":
+            for line in al[i1:i2]:
+                out.append({"t": "", "line": line})
+            continue
+        for line in al[i1:i2]:
+            out.append({"t": "-", "line": line})
+        for line in bl[j1:j2]:
+            out.append({"t": "+", "line": line})
+    return {"ok": True, "lines": out,
+            "stats": {"ins": sum(1 for x in out if x["t"] == "+"), "del": sum(1 for x in out if x["t"] == "-")}}, 200
+
+
 # ---------- optional live (Mistral-Library; Key nur aus Env) ----------
 
 def _client():
@@ -254,24 +329,51 @@ def live_info():
         return {"live": False, "grund": f"{type(e).__name__}: {e}"[:200]}
 
 
-def ablage_search(q):
+def libraries_live():
+    """Optional live: alle Libraries des Workspace (Fallback: die zwei bekannten)."""
+    try:
+        client, err = _client()
+        if client is None:
+            return {"live": False, "grund": err, "libs": []}
+        import asyncio
+
+        async def _go():
+            libs = []
+            try:
+                res = await client.beta.libraries.list_async()
+                for l in (getattr(res, "data", None) or []):
+                    libs.append({"id": l.id, "name": l.name, "docs": getattr(l, "nb_documents", None)})
+            except Exception:
+                pass
+            if not libs:
+                libs = [{"id": NOTES_LIBRARY_ID, "name": "Grammatik statt Stil – Research-Ablage (Agent)"},
+                        {"id": APPARAT_LIBRARY_ID, "name": "Apparat-Bibliothek"}]
+            return libs
+
+        return {"live": True, "libs": asyncio.run(_go())}
+    except Exception as e:
+        return {"live": False, "grund": f"{type(e).__name__}: {e}"[:200], "libs": []}
+
+
+def library_docs(lib_id, q):
     try:
         client, err = _client()
         if client is None:
             return {"live": False, "grund": err, "docs": []}
-
-        async def _go():
-            l = await client.beta.libraries.documents.list_async(library_id=NOTES_LIBRARY_ID, search=(q or None), page_size=25)
-            return [{"id": d.id, "name": d.name, "status": getattr(d, "processing_status", None)} for d in (l.data or [])]
-
+        if not lib_id:
+            return {"live": False, "grund": "lib fehlt", "docs": []}
         import asyncio
 
-        return {"live": True, "docs": asyncio.run(_go())}
+        async def _go():
+            l = await client.beta.libraries.documents.list_async(library_id=lib_id, search=(q or None), page_size=50)
+            return [{"id": d.id, "name": d.name, "status": getattr(d, "processing_status", None)} for d in (l.data or [])]
+
+        return {"live": True, "lib": lib_id, "docs": asyncio.run(_go())}
     except Exception as e:
         return {"live": False, "grund": f"{type(e).__name__}: {e}"[:200], "docs": []}
 
 
-def ablage_doc(doc_id):
+def library_doc_text(lib_id, doc_id):
     try:
         client, err = _client()
         if client is None:
@@ -279,13 +381,21 @@ def ablage_doc(doc_id):
         import asyncio
 
         async def _go():
-            c = await client.beta.libraries.documents.text_content_async(library_id=NOTES_LIBRARY_ID, document_id=doc_id)
+            c = await client.beta.libraries.documents.text_content_async(library_id=lib_id, document_id=doc_id)
             t = getattr(c, "text", None) or str(c)
             return t[:4000] + (" … [gekürzt, Gesamtlänge %d]" % len(t) if len(t) > 4000 else "")
 
-        return {"live": True, "id": doc_id, "text": asyncio.run(_go())}
+        return {"live": True, "lib": lib_id, "id": doc_id, "text": asyncio.run(_go())}
     except Exception as e:
         return {"live": False, "grund": f"{type(e).__name__}: {e}"[:200]}
+
+
+def ablage_search(q):
+    return library_docs(NOTES_LIBRARY_ID, q)
+
+
+def ablage_doc(doc_id):
+    return library_doc_text(NOTES_LIBRARY_ID, doc_id)
 
 
 # ---------- HTTP ----------
@@ -363,12 +473,22 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(qv_aenderungen())
         if u.path == "/api/qv/export":
             return self._json(qv_export(), download_name="qv-export-%s.json" % time.strftime("%Y%m%d"))
+        if u.path == "/api/libraries":
+            return self._json(libraries_live())
+        if u.path == "/api/library/docs":
+            return self._json(library_docs(qs.get("lib", [""])[0], qs.get("q", [""])[0]))
+        if u.path == "/api/library/doc":
+            return self._json(library_doc_text(qs.get("lib", [""])[0], qs.get("id", [""])[0]))
+        if u.path == "/api/quellen":
+            return self._json(qv_quellen(qs.get("q", [""])[0]))
+        if u.path == "/api/templates":
+            return self._json(load_templates())
         return self._json({"fehler": "not found"}, 404)
 
     def do_POST(self):
         from urllib.parse import urlparse
         u = urlparse(self.path)
-        if u.path in ("/api/message", "/api/qv/hebung"):
+        if u.path in ("/api/message", "/api/qv/hebung", "/api/render", "/api/diff"):
             try:
                 length = int(self.headers.get("Content-Length") or 0)
                 payload = json.loads(self.rfile.read(length) or b"{}")
@@ -380,6 +500,12 @@ class Handler(BaseHTTPRequestHandler):
                     with open(DATA / "outbox.jsonl", "a", encoding="utf-8") as f:
                         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
                     return self._json(entry)
+                if u.path == "/api/render":
+                    obj, status = render_template(payload)
+                    return self._json(obj, status)
+                if u.path == "/api/diff":
+                    obj, status = diff_lines(payload)
+                    return self._json(obj, status)
                 obj, status = qv_heben(payload)
                 return self._json(obj, status)
             except Exception as e:
