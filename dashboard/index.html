@@ -2,10 +2,18 @@
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f5f5f7">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#000000">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="format-detection" content="telephone=no">
 <title>Grammatik statt Stil — Research Dashboard</title>
 <style>
   :root {
+    color-scheme: light;
     --bg: #f5f5f7; --card: #ffffff; --text: #1d1d1f; --muted: #86868b;
     --accent: #0a84ff; --border: rgba(0,0,0,.08); --shadow: 0 1px 2px rgba(0,0,0,.05), 0 8px 24px rgba(0,0,0,.05);
     --k1: #30d158; --k2: #64d2ff; --k3: #ffd60a; --k4: #ff453a; --k5: #bf5af2; --v: #8e8e93;
@@ -13,30 +21,52 @@
   }
   @media (prefers-color-scheme: dark) {
     :root {
+      color-scheme: dark;
       --bg: #000000; --card: #1c1c1e; --text: #f5f5f7; --muted: #98989d;
       --accent: #0a84ff; --border: rgba(255,255,255,.12); --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.4);
     }
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
-         background: var(--bg); color: var(--text); -webkit-font-smoothing: antialiased; }
-  header { position: sticky; top: 0; z-index: 10; backdrop-filter: saturate(180%) blur(20px);
-           background: color-mix(in srgb, var(--bg) 75%, transparent); border-bottom: 1px solid var(--border); }
-  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
-  header .wrap { display: flex; align-items: center; justify-content: space-between; height: 60px; }
+         background: var(--bg); color: var(--text); -webkit-font-smoothing: antialiased;
+         -webkit-text-size-adjust: 100%; -webkit-tap-highlight-color: transparent; }
+  header { position: sticky; top: 0; z-index: 10; -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px);
+           background: var(--bg); background: color-mix(in srgb, var(--bg) 75%, transparent); border-bottom: 1px solid var(--border);
+           padding-top: env(safe-area-inset-top); }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; padding-left: max(24px, env(safe-area-inset-left)); padding-right: max(24px, env(safe-area-inset-right)); }
+  @media (min-width: 1400px) { .wrap { max-width: 1240px; } }
+  header .wrap { display: flex; align-items: center; justify-content: space-between; gap: 12px; height: 60px; }
+  .hright { display: flex; gap: 10px; align-items: center; min-width: 0; }
+  @media (max-width: 640px) { h1 span { display: none; } }
   h1 { font-size: 17px; font-weight: 650; letter-spacing: -.01em; }
   .badge { font-size: 11px; font-weight: 600; color: var(--muted); border: 1px solid var(--border);
            border-radius: 999px; padding: 3px 10px; display: inline-flex; align-items: center; gap: 6px; }
   .badge .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--k1); }
   .badge.off .dot { background: var(--muted); }
-  nav { display: flex; gap: 4px; }
+  nav { display: flex; gap: 4px; overflow-x: auto; max-width: 100%; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  nav::-webkit-scrollbar { display: none; }
   nav button { border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 14px; font-weight: 500;
-               padding: 7px 14px; border-radius: 999px; cursor: pointer; }
+               padding: 7px 14px; border-radius: 999px; cursor: pointer; white-space: nowrap; flex: none; }
   nav button.active { background: var(--card); color: var(--text); box-shadow: var(--shadow); }
   main { padding: 28px 0 64px; }
   section.page { display: none; }
   section.page.active { display: block; animation: fade .18s ease; }
   @keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+  @keyframes pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(48,209,88,.45); } 50% { box-shadow: 0 0 0 5px rgba(48,209,88,0); } }
+  .badge:not(.off) .dot { animation: pulse 2.2s ease-in-out infinite; }
+  ::selection { background: rgba(10,132,255,.25); background: color-mix(in srgb, var(--accent) 25%, transparent); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  input[type="search"]:focus, select:focus, textarea:focus, dialog input:focus, dialog select:focus {
+    outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(10,132,255,.25); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+  @media (pointer: coarse) {
+    nav button { padding: 10px 16px; }
+    .btn { padding: 10px 16px; }
+    .rowbtn { padding: 7px 14px; font-size: 13px; }
+    .doclist button { padding: 13px 14px; }
+    .composer button { min-height: 44px; }
+    dialog .actions button { padding: 11px 18px; }
+  }
   .grid { display: grid; gap: 16px; }
   .stats { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
   .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
@@ -48,14 +78,19 @@
   @media (max-width: 760px) { .charts { grid-template-columns: 1fr; } }
   .chart-title { font-size: 15px; font-weight: 650; margin-bottom: 12px; }
   svg { display: block; width: 100%; height: auto; }
+  .bars { display: flex; align-items: stretch; gap: 8px; height: 190px; }
+  .bars .bar { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: flex-end; }
+  .bars .fill { flex: 1; display: flex; align-items: flex-end; }
+  .bars .bar i { display: block; width: 100%; border-radius: 6px 6px 3px 3px; background: var(--accent); min-height: 3px; transition: height .45s cubic-bezier(.2,.8,.2,1); }
+  .bars .bar span { font-size: 11px; color: var(--muted); text-align: center; padding-top: 6px; }
   .legend { display: flex; flex-wrap: wrap; gap: 10px 16px; margin-top: 10px; font-size: 12px; color: var(--muted); }
   .legend span { display: inline-flex; align-items: center; gap: 6px; }
   .legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted);
-       font-weight: 600; padding: 8px 10px; border-bottom: 1px solid var(--border); position: sticky; top: 60px; background: var(--card); }
+       font-weight: 600; padding: 8px 10px; border-bottom: 1px solid var(--border); position: sticky; top: calc(60px + env(safe-area-inset-top)); background: var(--card); }
   td { padding: 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
-  tr:hover td { background: color-mix(in srgb, var(--accent) 4%, transparent); }
+  tr:hover td { background: rgba(10,132,255,.05); background: color-mix(in srgb, var(--accent) 4%, transparent); }
   .k { font-weight: 650; font-size: 12px; padding: 2px 8px; border-radius: 999px; color: #fff; white-space: nowrap; }
   .k.K1 { background: var(--k1); } .k.K2 { background: var(--k2); color: #111; } .k.K3 { background: var(--k3); color: #111; }
   .k.K4 { background: var(--k4); } .k.K5 { background: var(--k5); } .k.V { background: var(--v); }
@@ -81,38 +116,38 @@
     border-radius: 12px; padding: 0 20px; cursor: pointer; }
   .note { font-size: 12px; color: var(--muted); line-height: 1.5; }
   .btn { font: inherit; font-size: 13px; font-weight: 600; color: var(--text); background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 8px 14px; cursor: pointer; box-shadow: var(--shadow); }
-  .btn:hover { background: color-mix(in srgb, var(--accent) 6%, var(--card)); }
+  .btn:hover { background: var(--border); background: color-mix(in srgb, var(--accent) 6%, var(--card)); }
   .split { display: grid; grid-template-columns: 320px 1fr; gap: 16px; align-items: start; }
   @media (max-width: 760px) { .split { grid-template-columns: 1fr; } }
   .doclist { display: flex; flex-direction: column; gap: 6px; max-height: 480px; overflow-y: auto; }
   .doclist button { text-align: left; font: inherit; font-size: 13px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border); background: var(--bg); color: var(--text); cursor: pointer; }
-  .doclist button.active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--bg)); }
+  .doclist button.active { border-color: var(--accent); background: var(--border); background: color-mix(in srgb, var(--accent) 8%, var(--bg)); }
   .doclist button .st { color: var(--muted); font-size: 11px; display: block; margin-top: 2px; }
   pre.preview { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 18px; font-size: 12.5px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; max-height: 480px; overflow-y: auto; }
   .rowbtn { font: inherit; font-size: 12px; font-weight: 600; color: var(--accent); background: transparent; border: 1px solid var(--border); border-radius: 8px; padding: 3px 10px; cursor: pointer; }
-  .rowbtn:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+  .rowbtn:hover { background: rgba(10,132,255,.08); background: color-mix(in srgb, var(--accent) 8%, transparent); }
   #aenderungen { display: none; margin-top: 16px; }
   #aenderungen.open { display: block; }
   .logline { font-size: 12.5px; padding: 6px 0; border-bottom: 1px solid var(--border); color: var(--muted); }
   .logline b { color: var(--text); }
   dialog { border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); color: var(--text); box-shadow: var(--shadow); padding: 20px; width: min(420px, 92vw); }
-  dialog::backdrop { background: rgba(0,0,0,.35); backdrop-filter: blur(4px); }
+  dialog::backdrop { background: rgba(0,0,0,.35); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }
   dialog h3 { font-size: 15px; font-weight: 650; margin-bottom: 6px; }
   dialog label { display: block; font-size: 12px; color: var(--muted); margin: 10px 0 4px; font-weight: 600; }
   dialog input, dialog select { width: 100%; font: inherit; font-size: 14px; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); color: var(--text); }
   dialog .actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
   dialog .actions button { font: inherit; font-size: 14px; font-weight: 600; padding: 8px 16px; border-radius: 10px; border: 1px solid var(--border); background: transparent; color: var(--text); cursor: pointer; }
   dialog .actions button.primary { background: var(--accent); color: #fff; border-color: transparent; }
-  footer { border-top: 1px solid var(--border); padding: 18px 0 28px; font-size: 12px; color: var(--muted); }
+  footer { border-top: 1px solid var(--border); padding: 18px 0 calc(28px + env(safe-area-inset-bottom)); font-size: 12px; color: var(--muted); }
 </style>
 </head>
 <body>
 <header>
   <div class="wrap">
     <h1>Grammatik statt Stil <span style="color:var(--muted);font-weight:500">— Research Dashboard</span></h1>
-    <div style="display:flex;gap:10px;align-items:center">
-      <span class="badge" id="liveBadge"><span class="dot"></span><span id="liveLabel">lokal</span></span>
-      <nav>
+    <div class="hright">
+      <span class="badge" id="liveBadge" aria-live="polite"><span class="dot"></span><span id="liveLabel">lokal</span></span>
+      <nav aria-label="Hauptnavigation">
         <button data-page="uebersicht" class="active">Übersicht</button>
         <button data-page="verzeichnis">Verzeichnis</button>
         <button data-page="glossar">Glossar</button>
@@ -142,7 +177,7 @@
       <input type="search" id="q" placeholder="Verzeichnis durchsuchen (Titel, Quelle, ID, Vermerk) …">
       <select id="fK"><option value="">alle K-Stufen</option><option>K1</option><option>K2</option><option>K3</option><option>K4</option><option>K5</option><option>V</option></select>
       <select id="fR"><option value="">alle Relevanz</option><option>A</option><option>B</option><option>C</option><option>P</option><option>–</option></select>
-      <span class="count" id="count"></span>
+      <span class="count" id="count" aria-live="polite"></span>
       <span style="flex:1"></span>
       <button class="btn" id="btnAenderungen" style="display:none" title="K-Hebungen (Log)">Änderungen</button>
       <button class="btn" id="btnExport" style="display:none" title="QV als JSON exportieren (Download)">Export ⬇</button>
@@ -192,7 +227,7 @@
   <section class="page" id="page-ablage">
     <div class="toolbar">
       <input type="search" id="aq" placeholder="Research-Ablage durchsuchen … (live, nur mit Server + API-Key)">
-      <span class="count" id="acount"></span>
+      <span class="count" id="acount" aria-live="polite"></span>
     </div>
     <p class="note" id="ablageNote" style="margin-bottom:12px"></p>
     <div class="split">
@@ -202,7 +237,7 @@
   </section>
 
 </main>
-<footer><div class="wrap">Grammatik statt Stil — lokales Research-Dashboard · Daten: <span id="dataSrc">data/project.json</span> · kein Netzwerk nötig (außer optionaler Live-Modus)</div></footer>
+<footer><div class="wrap">Grammatik statt Stil — lokales Research-Dashboard · Daten: <span id="dataSrc">data/project.json</span> · kein Netzwerk nötig (außer optionaler Live-Modus) · aktualisiert <span id="upd">–</span></div></footer>
 
 <script src="data/sample-data.js"></script>
 <script>
@@ -259,14 +294,10 @@ function donut(el, parts, colors) {
   el.innerHTML = svg;
 }
 function bars(el, labels, values, color) {
-  const max = Math.max(...values) || 1, W = 100, n = values.length, bw = W / n;
-  let svg = `<svg viewBox="0 0 ${W} 60" preserveAspectRatio="none" style="height:180px">`;
-  values.forEach((v, i) => {
-    const h = v / max * 52;
-    svg += `<rect x="${i * bw + 1.5}" y="${58 - h}" width="${bw - 3}" height="${h}" rx="2" fill="${color}"/>`;
-    svg += `<text x="${i * bw + bw / 2}" y="59.5" text-anchor="middle" font-size="3.4" fill="var(--muted)">${labels[i]}</text>`;
-  });
-  el.innerHTML = svg + '</svg>';
+  const max = Math.max(...values) || 1;
+  el.innerHTML = '<div class="bars">' + values.map((v, i) =>
+    `<div class="bar"><div class="fill"><i style="height:${(v / max * 100).toFixed(1)}%;background:${color}" title="${labels[i]}: ${v}"></i></div><span>${labels[i]}</span></div>`
+  ).join('') + '</div>';
 }
 
 const KCOLORS = { K1: 'var(--k1)', K2: 'var(--k2)', K3: 'var(--k3)', K4: 'var(--k4)', K5: 'var(--k5)', V: 'var(--v)' };
@@ -340,6 +371,7 @@ $('#vRows').addEventListener('click', e => {
   $('#hebenDlg').showModal();
 });
 $('#hAbort').addEventListener('click', () => $('#hebenDlg').close());
+$('#hebenDlg').addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.close(); });
 $('#hOk').addEventListener('click', async () => {
   const payload = { id: hebPos, neu_k: $('#hK').value, beleg: $('#hBeleg').value.trim(), datum: $('#hDatum').value };
   let j = {};
@@ -431,17 +463,23 @@ async function liveTick() {
     }
     $('#liveLabel').textContent = label;
   } else { b.classList.add('off'); $('#liveLabel').textContent = 'lokal'; }
+  touchUpd();
+  if (SERVER && $('#page-verzeichnis').classList.contains('active')) loadQv();
 }
+function touchUpd() { const u = $('#upd'); if (u) u.textContent = new Date().toLocaleTimeString('de-DE'); }
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') { liveTick(); loadData(); }
+});
 
 /* ---- Tabs ---- */
 document.querySelectorAll('nav button').forEach(b => b.addEventListener('click', () => {
-  document.querySelectorAll('nav button').forEach(x => x.classList.toggle('active', x === b));
+  document.querySelectorAll('nav button').forEach(x => { x.classList.toggle('active', x === b); if (x === b) x.setAttribute('aria-current', 'page'); else x.removeAttribute('aria-current'); });
   document.querySelectorAll('section.page').forEach(s => s.classList.toggle('active', s.id === 'page-' + b.dataset.page));
   if (b.dataset.page === 'ablage') loadAblage();
   if (b.dataset.page === 'verzeichnis') loadQv();
 }));
 
-loadData(); liveTick(); setInterval(liveTick, 30000);
+loadData(); liveTick(); touchUpd(); setInterval(liveTick, 30000);
 </script>
 </body>
 </html>
