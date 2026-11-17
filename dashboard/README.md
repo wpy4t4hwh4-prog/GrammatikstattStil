@@ -78,4 +78,8 @@ IP des Mac ablesen (Systemeinstellungen → WLAN → Details), z. B. `192.168.1.
 
 **Offline ohne Server:** Ordner `dashboard/` aufs iPhone kopieren (AirDrop/iCloud) und `index.html` direkt in Safari öffnen — Fallback-Daten aus `data/sample-data.js`, Postausgang deaktiviert.
 
+## PWA („Zum Home-Bildschirm“ / Standalone-App)
+
+`manifest.webmanifest` + `sw.js` + Icons (`icons/`, erzeugt mit `python3 tools/make_icons.py`, reines stdlib) sind enthalten. Safari/iOS: „Zum Home-Bildschirm“ — die App läuft dann standalone mit Icon. Service Worker: statische Assets cache-first, `/api/*` network-first (Offline-Fallback: gecachte Antwort bzw. `{"live": false, "grund": "offline"}`); nur bei http(s) aktiv, nicht bei file://. Tastatur: **⌘/Strg+1–8** wechselt den Tab, **/** fokussiert die Suche des aktiven Tabs.
+
 Das Dashboard ist bewusst **nicht** Teil des Workflow-Deployments (`grammatik-statt-stil-research` serviert den Agenten, nicht das Dashboard).

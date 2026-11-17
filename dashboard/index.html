@@ -10,6 +10,9 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="format-detection" content="telephone=no">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<meta name="apple-mobile-web-app-title" content="Research Hub">
 <title>Grammatik statt Stil — Research Dashboard</title>
 <style>
   :root {
@@ -167,14 +170,14 @@
     <div class="hright">
       <span class="badge" id="liveBadge" aria-live="polite"><span class="dot"></span><span id="liveLabel">lokal</span></span>
       <nav aria-label="Hauptnavigation">
-        <button data-page="uebersicht" class="active">Übersicht</button>
-        <button data-page="verzeichnis">Verzeichnis</button>
-        <button data-page="quellen">Quellen</button>
-        <button data-page="ablage">Ablage</button>
-        <button data-page="bib">Bibliothek</button>
-        <button data-page="text">Text</button>
-        <button data-page="glossar">Glossar</button>
-        <button data-page="komm">Kommunikation</button>
+        <button data-page="uebersicht" class="active" title="Übersicht (⌘1)">Übersicht</button>
+        <button data-page="verzeichnis" title="Verzeichnis (⌘2)">Verzeichnis</button>
+        <button data-page="quellen" title="Quellen (⌘3)">Quellen</button>
+        <button data-page="ablage" title="Ablage (⌘4)">Ablage</button>
+        <button data-page="bib" title="Bibliothek (⌘5)">Bibliothek</button>
+        <button data-page="text" title="Text (⌘6)">Text</button>
+        <button data-page="glossar" title="Glossar (⌘7)">Glossar</button>
+        <button data-page="komm" title="Kommunikation (⌘8)">Kommunikation</button>
       </nav>
     </div>
   </div>
@@ -750,6 +753,29 @@ document.querySelectorAll('nav button').forEach(b => b.addEventListener('click',
 }));
 
 loadData(); liveTick(); touchUpd(); setInterval(liveTick, 30000);
+
+/* ---- PWA: Service Worker registrieren (nur http/https, nicht file://) ---- */
+if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+
+/* ---- Tastatur: ⌘/Strg+1..8 = Tab, / = Suche im aktiven Tab ---- */
+document.addEventListener('keydown', e => {
+  const ae = document.activeElement;
+  const typing = ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName);
+  if ((e.metaKey || e.ctrlKey) && /^[1-8]$/.test(e.key)) {
+    const btns = document.querySelectorAll('nav button');
+    const b = btns[Number(e.key) - 1];
+    if (b) { e.preventDefault(); b.click(); }
+    return;
+  }
+  if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key === '/') {
+    const page = document.querySelector('section.page.active');
+    const inp = page && page.querySelector('input[type="search"]');
+    if (inp) { e.preventDefault(); inp.focus(); inp.select(); }
+  }
+});
 </script>
 </body>
 </html>

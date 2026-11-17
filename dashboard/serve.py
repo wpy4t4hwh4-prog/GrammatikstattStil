@@ -25,7 +25,7 @@ APIs:
   POST /api/render           {"template","context"} -> gerenderter Text ({{key}}-Ersetzung)
   POST /api/diff             {"a","b"} -> zeilenweiser Diff als JSON
 
-Kein Schreibzugriff nach außen; Default bindet der Server nur an 127.0.0.1.
+Kein Schreibzugriff nach außen; Default bindet der Server nur an 127.0.0.1. Statisch serviert: /, index.html, sw.js, manifest.webmanifest, icons/, data/ (PWA: Manifest + Service Worker + Icons).
 """
 import argparse
 import datetime
@@ -425,7 +425,8 @@ class Handler(BaseHTTPRequestHandler):
             return
         ctype = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
                  ".json": "application/json; charset=utf-8", ".md": "text/markdown; charset=utf-8",
-                 ".db": "application/octet-stream"}.get(path.suffix, "application/octet-stream")
+                 ".webmanifest": "application/manifest+json", ".png": "image/png", ".svg": "image/svg+xml",
+                 ".ico": "image/x-icon", ".db": "application/octet-stream"}.get(path.suffix, "application/octet-stream")
         self.send_response(200)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
@@ -444,6 +445,11 @@ class Handler(BaseHTTPRequestHandler):
             if ".." in rel:
                 return self._json({"fehler": "bad path"}, 400)
             return self._file(DATA / rel)
+        rel = u.path.lstrip("/")
+        if rel and ".." not in rel:
+            cand = (BASE / rel).resolve()
+            if str(cand).startswith(str(BASE) + os.sep) and cand.is_file():
+                return self._file(cand)
         if u.path == "/api/stats":
             d = load_project()
             k = d["kstand"]["K"]
