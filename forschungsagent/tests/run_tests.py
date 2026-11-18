@@ -476,5 +476,14 @@ class ToolGuardAndLaengenTests(unittest.TestCase):
         self.assertEqual(s.count("@_tool_guard\n@agents.tool"), 19)
 
 
+
+
+class MkdirRegelTests(unittest.TestCase):
+    def test_mkdir_regel_in_instructions(self):
+        with open(main.__file__, encoding="utf-8") as _f:
+            s = _f.read()
+        self.assertIn("mkdir -p", s)
+        self.assertIn("/tmp/ext", s)
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
