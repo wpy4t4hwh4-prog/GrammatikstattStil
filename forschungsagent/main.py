@@ -786,6 +786,31 @@ async def webseite_lesen(
 _TOOL_CACHE: dict = {}
 _TOOL_CACHE_MAX = 2000
 
+_ABLAGE_WRITE_LOCK = None  # lazy asyncio.Lock fuer post_agent_turn (session-summary + 00-projektstand)
+
+
+def _assert_public_url(url: str) -> None:
+    """SSRF-Schutz (Senior-Dev-Review): nur http(s) an oeffentliche Hosts.
+    Blockiert file://, ftp://, Loopback, Private Ranges (10/8, 172.16/12, 192.168/16),
+    Link-Local inkl. Cloud-Metadata (169.254.169.254), 0.0.0.0, ::1, *.internal/*.local.
+    Restrisiko DNS-Rebinding (kein DNS-Resolve hier) ist im Deep-Review dokumentiert."""
+    from urllib.parse import urlparse
+    import ipaddress
+    p = urlparse(url)
+    if p.scheme not in ("http", "https"):
+        raise ValueError("URL-Schema nicht erlaubt (nur http/https): %r" % url)
+    host = (p.hostname or "").lower().rstrip(".")
+    if not host:
+        raise ValueError("URL ohne Host nicht erlaubt: %r" % url)
+    if host == "localhost" or host == "metadata.google.internal" or host.endswith(".internal") or host.endswith(".local"):
+        raise ValueError("interner Host nicht erlaubt: %r" % host)
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return  # Hostname (kein IP-Literal) -> erlaubt
+    if not ip.is_global:
+        raise ValueError("private/loopback/link-local IP nicht erlaubt: %r" % host)
+
 
 def _cache_set(key: str, val) -> None:
     if len(_TOOL_CACHE) >= _TOOL_CACHE_MAX and key not in _TOOL_CACHE:
@@ -819,6 +844,7 @@ async def _get_text(client, library_id: str, document_id: str) -> str:
 
 
 async def _http_fetch(url: str, *, method: str = "GET", timeout: float = 40, follow_redirects: bool = True, headers: dict | None = None, max_retries: int = 2):
+    _assert_public_url(url)
     import asyncio
     import httpx
     hdrs = {"User-Agent": "Mozilla/5.0"}
@@ -860,6 +886,7 @@ class QuoteAuditHook(agents.Hook):
       "nicht existiert") ohne Such-Tool-Call im selben Turn -> Retry mit Feedback (max 2), dann Reject."""
 
     verified: list[str] = Field(default_factory=list)
+    verified_exact: list[str] = Field(default_factory=list)
     tools_called: list[str] = Field(default_factory=list)
     retries: int = 0
     consec_errors: int = 0
@@ -886,6 +913,7 @@ class QuoteAuditHook(agents.Hook):
 
     async def pre_agent_turn(self, ctx, request):
         self.verified = []
+        self.verified_exact = []
         self.tools_called = []
         self.tool_texts = []
         self.retries = 0
@@ -978,6 +1006,8 @@ class QuoteAuditHook(agents.Hook):
                 import hashlib as _hl
                 h = _hl.sha256(_norm(str(data.get("zitat", ""))).encode()).hexdigest()
                 self.verified = (self.verified + [h])[:100]
+                if data.get("found_exact_inkl_leerzeichen") is True:
+                    self.verified_exact = (self.verified_exact + [h])[:100]
         return None
 
     async def post_llm_call(self, ctx, result):
@@ -1073,8 +1103,13 @@ class QuoteAuditHook(agents.Hook):
         import hashlib as _hl2
         for q in quotes:
             qt = _norm(str(q.get("text", "")))
-            if qt and _hl2.sha256(qt.encode()).hexdigest() not in self.verified:
+            if not qt:
+                continue
+            _hq = _hl2.sha256(qt.encode()).hexdigest()
+            if _hq not in self.verified:
                 problems.append("unverifiziertes Zitat: " + qt[:100])
+            elif _hq not in self.verified_exact:
+                problems.append("Zitat nur normalisiert verifiziert (found=True, nicht zeichen-exakt) - laut Woertlichkeitsregel nur als Paraphrase, nicht in verbatim_zitate: " + qt[:80])
         search_tools = _SEARCH_TOOLS
         all_text = _norm(str(data.get("zusammenfassung", "")) + " " + str(data.get("offene_punkte", "")) + " " + str(data.get("belegte_aussagen", "")))
         neg_words = ["nicht gefunden", "nicht lesbar", "nicht existiert", "nicht auffindbar", "keine treffer"]
@@ -1163,14 +1198,19 @@ class QuoteAuditHook(agents.Hook):
             sid = str(getattr(getattr(ctx, "session", None), "id", "unknown"))
             titel = f"session-summary {sid[:8]} {now.strftime('%Y-%m-%dT%H-%M-%S')}"
             note = f"# {titel}\n\n- Session: {sid}\n- Datum (UTC): {now.isoformat()}\n- Tools im Turn: {', '.join(self.tools_called[:20])}\n\n## Summary\n{summary}\n"
-            client = _client()
-            await client.beta.libraries.documents.upload_async(
-                library_id=NOTES_LIBRARY_ID,
-                file=File(fileName=(titel[:80] + ".md"), content=note.encode("utf-8")),
-            )
-            stand = f"# 00-projektstand (automatisch aktualisiert)\n\n- Aktualisiert: {now.isoformat()} UTC (Session {sid[:8]})\n- Tools im Turn: {', '.join(self.tools_called[:20])}\n\n## Letzter Stand\n{summary[:2500]}\n"
-            await _upsert_document(client, NOTES_LIBRARY_ID, "00-projektstand.md", stand)
-            logger.info("session-summary + 00-projektstand aktualisiert (session %s)", sid[:8])
+            global _ABLAGE_WRITE_LOCK
+            if _ABLAGE_WRITE_LOCK is None:
+                import asyncio as _aio
+                _ABLAGE_WRITE_LOCK = _aio.Lock()
+            async with _ABLAGE_WRITE_LOCK:
+                client = _client()
+                await client.beta.libraries.documents.upload_async(
+                    library_id=NOTES_LIBRARY_ID,
+                    file=File(fileName=(titel[:80] + ".md"), content=note.encode("utf-8")),
+                )
+                stand = f"# 00-projektstand (automatisch aktualisiert)\n\n- Aktualisiert: {now.isoformat()} UTC (Session {sid[:8]})\n- Tools im Turn: {', '.join(self.tools_called[:20])}\n\n## Letzter Stand\n{summary[:2500]}\n"
+                await _upsert_document(client, NOTES_LIBRARY_ID, "00-projektstand.md", stand)
+                logger.info("session-summary + 00-projektstand aktualisiert (session %s)", sid[:8])
         except Exception as e:
             logger.warning("post_agent_turn summary/projektstand fehlgeschlagen: %s", e)
         return None

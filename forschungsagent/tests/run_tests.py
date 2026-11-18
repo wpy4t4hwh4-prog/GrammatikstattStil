@@ -485,5 +485,71 @@ class MkdirRegelTests(unittest.TestCase):
         self.assertIn("mkdir -p", s)
         self.assertIn("/tmp/ext", s)
 
+
+class UrlGuardTests(unittest.TestCase):
+    """SSRF-Schutz (Deep-Review): _assert_public_url blockiert interne/private Ziele."""
+
+    def test_blocks_internal_and_private(self):
+        for u in (
+            "http://127.0.0.1/", "http://localhost/x", "http://0.0.0.0/",
+            "http://169.254.169.254/latest/meta-data", "http://10.1.2.3/",
+            "http://172.16.0.9/", "http://192.168.0.1/", "http://[::1]/",
+            "http://metadata.google.internal/", "http://foo.internal/",
+            "file:///etc/passwd", "ftp://example.com/x", "gopher://127.0.0.1/",
+        ):
+            with self.assertRaises(ValueError, msg=u):
+                main._assert_public_url(u)
+
+    def test_allows_public_urls(self):
+        for u in ("https://export.arxiv.org/api/query?search_query=all:x",
+                  "https://doi.org/10.1000/xyz123", "http://93.184.216.34/"):
+            main._assert_public_url(u)  # darf nicht werfen
+
+    def test_http_fetch_guards_before_network(self):
+        with self.assertRaises(ValueError):
+            asyncio.run(main._http_fetch("http://169.254.169.254/latest/meta-data", max_retries=0))
+        with self.assertRaises(ValueError):
+            asyncio.run(main._http_fetch("file:///etc/passwd", max_retries=0))
+
+
+class ExactQuoteTests(unittest.TestCase):
+    """Deep-Review (wissenschaftliche Integritaet): verbatim_zitate brauchen found_exact."""
+
+    def setUp(self):
+        self.hook = main.QuoteAuditHook()
+        asyncio.run(self.hook.pre_agent_turn(None, None))
+
+    def _tool_result(self, name, payload):
+        import json as _j
+        tr = types.SimpleNamespace(content=[types.SimpleNamespace(text=_j.dumps(payload))])
+        return types.SimpleNamespace(tool_name=name, tool_result=tr)
+
+    def _answer_json(self, quote_text):
+        import json as _j
+        return _j.dumps({
+            "zusammenfassung": "kurze Zusammenfassung", "arbeitsupdate": "kurz",
+            "belegte_aussagen": [], "deutungen": [], "offene_punkte": [],
+            "verbatim_zitate": [{"text": quote_text, "quelle": "Dokument X", "geprueft_mit": "zitat_pruefen"}],
+            "double_check": [], "verifizierungsquote": 0.0,
+        })
+
+    def test_exact_quote_accepted(self):
+        asyncio.run(self.hook.post_tool_call(None, self._tool_result("research_note_ablegen", {"document_id": "11111111-2222-3333-4444-555555555555"})))
+        asyncio.run(self.hook.post_tool_call(None, self._tool_result("zitat_pruefen", {"found": True, "found_exact_inkl_leerzeichen": True, "zitat": "Hallo Welt"})))
+        res = asyncio.run(self.hook.post_llm_call(None, _reply(self._answer_json("Hallo Welt"))))
+        self.assertIsNone(res)
+
+    def test_normalized_only_quote_flagged(self):
+        asyncio.run(self.hook.post_tool_call(None, self._tool_result("research_note_ablegen", {"document_id": "11111111-2222-3333-4444-555555555555"})))
+        asyncio.run(self.hook.post_tool_call(None, self._tool_result("zitat_pruefen", {"found": True, "found_exact_inkl_leerzeichen": False, "zitat": "Hallo  Welt"})))
+        res = asyncio.run(self.hook.post_llm_call(None, _reply(self._answer_json("Hallo  Welt"))))
+        self.assertIsNotNone(res)  # Retry wegen nicht zeichen-exakt
+
+    def test_unverified_quote_still_flagged(self):
+        asyncio.run(self.hook.post_tool_call(None, self._tool_result("research_note_ablegen", {"document_id": "11111111-2222-3333-4444-555555555555"})))
+        res = asyncio.run(self.hook.post_llm_call(None, _reply(self._answer_json("nicht geprueft"))))
+        self.assertIsNotNone(res)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
