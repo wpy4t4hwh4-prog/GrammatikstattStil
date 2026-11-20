@@ -551,5 +551,157 @@ class ExactQuoteTests(unittest.TestCase):
         self.assertIsNotNone(res)
 
 
+class Runde2B3Tests(unittest.TestCase):
+    """Deep Review Runde 2 + Subagenten Arm B: B3-1 Session-Scoping, B3-2 pro-Claim/Backstop 0.8,
+    B3-3 Lizenz-Sidecar, B3-4 URL-Check 404/403, B3-7 Skills gepinnt, B3-8 Subagenten-Konfig."""
+
+    def setUp(self):
+        self.hook = main.QuoteAuditHook()
+        asyncio.run(self.hook.pre_agent_turn(None, None))
+
+    def _post(self, text="", tool_calls=None):
+        return asyncio.run(self.hook.post_llm_call(None, _reply(text, tool_calls)))
+
+    def test_hook_session_id_gesetzt(self):
+        ctx = types.SimpleNamespace(session=types.SimpleNamespace(id="sess-42"))
+        h = main.QuoteAuditHook()
+        asyncio.run(h.pre_agent_turn(ctx, None))
+        self.assertEqual(h.session_id, "sess-42")
+
+    def test_proclaim_doublecheck_fehlt(self):
+        import json
+        payload = json.dumps({
+            "zusammenfassung": "x",
+            "belegte_aussagen": [
+                {"aussage": "Haussmann leitete die Pariser Stadterneuerung 1853-1870", "quelle": "q", "evidenzgrad": "wahrscheinlich"},
+                {"aussage": "Die Wiener Ringstrasse wurde 1865 eroeffnet", "quelle": "q", "evidenzgrad": "wahrscheinlich"},
+            ],
+            "double_check": [{"angabe": "Haussmann leitete die Pariser Stadterneuerung 1853-1870", "pruef_tool": "dokument_lesen", "ergebnis": "ok"}],
+            "verifizierungsquote": 0.5,
+        })
+        res = self._post(payload)
+        self.assertIsNotNone(res)
+        msg = str(getattr(res, "message", res))
+        self.assertIn("pro-Claim", msg)
+        self.assertIn("80%", msg)  # Backstop 0.8 erklaert
+
+    def test_proclaim_ok_bei_vollstaendiger_abdeckung(self):
+        import json
+        a = "Haussmann leitete die Pariser Stadterneuerung 1853-1870"
+        asyncio.run(self.hook.post_tool_call(None, self._tool_res("dokument_lesen", "volltext mit claim und jahr 1853")))  # Such-Tool-Call im Turn
+        asyncio.run(self.hook.post_tool_call(None, self._tool_res("research_note_ablegen", "notiz abgelegt")))  # Ablage-Pflicht erfuellt
+        payload = json.dumps({
+            "zusammenfassung": "x",
+            "belegte_aussagen": [{"aussage": a, "quelle": "q", "evidenzgrad": "wahrscheinlich"}],
+            "double_check": [{"angabe": a, "pruef_tool": "dokument_lesen", "ergebnis": "ok"}],
+            "verifizierungsquote": 1.0,
+        })
+        self.assertIsNone(self._post(payload))
+
+    def test_license_sidecar_pflicht_volltext(self):
+        import json
+        payload = json.dumps({
+            "zusammenfassung": "x",
+            "quellen": [{"titel": "Scan X", "url": "https://example.com/x.pdf", "zugangsstufe": "Volltext", "license_access": {}}],
+            "belegte_aussagen": [], "double_check": [], "verifizierungsquote": 1.0,
+        })
+        res = self._post(payload)
+        self.assertIsNotNone(res)
+        self.assertIn("Sidecar", str(getattr(res, "message", res)))
+
+    def test_license_sidecar_ok(self):
+        import json
+        payload = json.dumps({
+            "zusammenfassung": "x",
+            "quellen": [{"titel": "Scan X", "url": "https://example.com/x.pdf", "zugangsstufe": "Volltext", "license_access": {"lizenz": "Archiv-Scan (legitim)", "zugang": "scan", "abgerufen_am": "2026-11-20"}}],
+            "belegte_aussagen": [], "double_check": [], "verifizierungsquote": 1.0,
+        })
+        self.assertIsNone(self._post(payload))
+
+    def _tool_res(self, name, text):
+        return types.SimpleNamespace(tool_name=name, tool_result=types.SimpleNamespace(content=[types.SimpleNamespace(text=text)]))
+
+    def test_url_check_404_retry_dann_reject(self):
+        from unittest.mock import patch
+
+        class Resp:
+            status_code = 404
+            headers = {}
+            text = ""
+
+        async def fake_fetch(url, **kw):
+            return Resp()
+
+        with patch.object(main, "_http_fetch", fake_fetch):
+            r1 = asyncio.run(self.hook.post_tool_call(None, self._tool_res("web_recherche", "siehe https://example.com/tot")))
+            self.assertIsNotNone(r1)
+            self.assertIn("404", str(getattr(r1, "message", r1)))
+            r2 = asyncio.run(self.hook.post_tool_call(None, self._tool_res("web_recherche", "siehe https://example.com/tot")))
+            self.assertIsNotNone(r2)
+            self.assertTrue(self.hook.turn_rejected)
+
+    def test_url_check_403_ist_kein_404(self):
+        from unittest.mock import patch
+
+        class Resp:
+            status_code = 403
+            headers = {}
+            text = ""
+
+        async def fake_fetch(url, **kw):
+            return Resp()
+
+        with patch.object(main, "_http_fetch", fake_fetch):
+            r = asyncio.run(self.hook.post_tool_call(None, self._tool_res("web_recherche", "siehe https://example.com/gesperrt")))
+            self.assertIsNone(r)
+            self.assertIn("gesperrt", str(self.hook.url_checks.get("https://example.com/gesperrt")))
+
+    def test_subagent_konfiguration_arm_b(self):
+        names = [getattr(s, "name", "") for s in (getattr(main.agent, "subagents", None) or [])]
+        self.assertIn("screener", names)
+        self.assertIn("verifier", names)
+        self.assertEqual(main.SCREENER_MODEL, "mistral-small-2603")
+        self.assertEqual(main.VERIFIER_MODEL, "mistral-large-4-0")
+        self.assertEqual(main.MAX_CONCURRENT_SUBTURNS, 10)
+        pol = getattr(main.agent, "subagent_policy", None)
+        self.assertIsNotNone(pol)
+        self.assertEqual(pol.concurrent_child_turn_limit, 10)
+
+    def test_subagenten_hooks_ohne_ablage_summary(self):
+        for s in (main.screener_subagent, main.verifier_subagent):
+            hk = (getattr(s, "hooks", None) or [None])[0]
+            self.assertIsNotNone(hk)
+            self.assertFalse(hk.enforce_ablage_pflicht)
+            self.assertFalse(hk.write_session_summary)
+            self.assertTrue(hk.check_urls)
+
+    def test_subagenten_keine_note_tools(self):
+        for s in (main.screener_subagent, main.verifier_subagent):
+            tnames = {getattr(t, "tool_definition", None) and getattr(t.tool_definition, "name", "") or getattr(t, "name", "") for t in (getattr(s, "tools", None) or [])}
+            self.assertNotIn("research_note_ablegen", tnames)
+            self.assertNotIn("research_note_aktualisieren", tnames)
+
+    def test_skills_gepinnt(self):
+        import uuid as _uuid
+        self.assertEqual(len(main.PINNED_SKILLS), 19)
+        for sid, v in main.PINNED_SKILLS:
+            _uuid.UUID(sid)
+            self.assertGreaterEqual(v, 1)
+        self.assertEqual(len(main._SKILLS), 19)
+
+    def test_sandbox_default_mistral(self):
+        self.assertEqual(main._SANDBOX_KIND, "mistral")
+        self.assertEqual(type(main._AGENT_ENVIRONMENT).__name__, "MistralSandbox")
+
+    def test_instructions_neue_bloecke(self):
+        with open(main.__file__, encoding="utf-8") as _f:
+            s = _f.read()
+        self.assertIn("SUBAGENTEN-DELEGATION", s)
+        self.assertIn("PROJEKT-/FACHKONTEXT", s)
+        self.assertIn("PRO CLAIM", s)
+        self.assertIn("license_access", s)
+        self.assertIn("Hook-Durchsetzung", s)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
