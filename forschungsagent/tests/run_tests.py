@@ -621,40 +621,43 @@ class Runde2B3Tests(unittest.TestCase):
     def _tool_res(self, name, text):
         return types.SimpleNamespace(tool_name=name, tool_result=types.SimpleNamespace(content=[types.SimpleNamespace(text=text)]))
 
-    def test_url_check_404_retry_dann_reject(self):
-        from unittest.mock import patch
-
-        class Resp:
-            status_code = 404
-            headers = {}
-            text = ""
-
-        async def fake_fetch(url, **kw):
-            return Resp()
-
-        with patch.object(main, "_http_fetch", fake_fetch):
-            r1 = asyncio.run(self.hook.post_tool_call(None, self._tool_res("web_recherche", "siehe https://example.com/tot")))
-            self.assertIsNotNone(r1)
-            self.assertIn("404", str(getattr(r1, "message", r1)))
-            r2 = asyncio.run(self.hook.post_tool_call(None, self._tool_res("web_recherche", "siehe https://example.com/tot")))
-            self.assertIsNotNone(r2)
-            self.assertTrue(self.hook.turn_rejected)
+    def test_url_check_404_wird_erfasst_und_in_post_llm_durchgesetzt(self):
+        # Harness-Vertrag: post_tool_call darf nur Continue (None) liefern - keine Decision, kein I/O
+        import json
+        url = "https://example.com/tot"
+        res = self._tool_res("url_status_pruefen", json.dumps({"url": url, "http_status": 404, "gesperrt": False, "pruefbar": True}))
+        r = asyncio.run(self.hook.post_tool_call(None, res))
+        self.assertIsNone(r)
+        self.assertEqual(self.hook.url_checks.get(main._norm(url)), 404)
+        asyncio.run(self.hook.post_tool_call(None, self._tool_res("research_note_ablegen", "ok")))
+        payload = json.dumps({"zusammenfassung": "Quelle: " + url, "belegte_aussagen": [], "double_check": [], "verifizierungsquote": 1.0})
+        r1 = self._post(payload)
+        self.assertIsNotNone(r1)  # Retry wegen 404-URL in der Antwort
+        self.assertIn("404", str(getattr(r1, "message", r1)))
+        r2 = self._post(payload)
+        self.assertIsNotNone(r2)  # zweites Retry (retries<2)
+        r3 = self._post(payload)
+        self.assertIsNotNone(r3)  # drittes Mal -> Reject
+        self.assertTrue(self.hook.turn_rejected)
 
     def test_url_check_403_ist_kein_404(self):
-        from unittest.mock import patch
+        import json
+        url = "https://example.com/gesperrt"
+        res = self._tool_res("url_status_pruefen", json.dumps({"url": url, "http_status": 403, "gesperrt": True, "pruefbar": False}))
+        r = asyncio.run(self.hook.post_tool_call(None, res))
+        self.assertIsNone(r)
+        self.assertIn("gesperrt", str(self.hook.url_checks.get(main._norm(url))))
+        asyncio.run(self.hook.post_tool_call(None, self._tool_res("research_note_ablegen", "ok")))
+        payload = json.dumps({"zusammenfassung": "Quelle gesperrt (403): " + url, "belegte_aussagen": [], "double_check": [], "verifizierungsquote": 1.0})
+        self.assertIsNone(self._post(payload))  # 403 != 404 -> kein Problem
 
-        class Resp:
-            status_code = 403
-            headers = {}
-            text = ""
-
-        async def fake_fetch(url, **kw):
-            return Resp()
-
-        with patch.object(main, "_http_fetch", fake_fetch):
-            r = asyncio.run(self.hook.post_tool_call(None, self._tool_res("web_recherche", "siehe https://example.com/gesperrt")))
-            self.assertIsNone(r)
-            self.assertIn("gesperrt", str(self.hook.url_checks.get("https://example.com/gesperrt")))
+    def test_url_ohne_check_wird_flagged(self):
+        import json
+        asyncio.run(self.hook.post_tool_call(None, self._tool_res("research_note_ablegen", "ok")))
+        payload = json.dumps({"zusammenfassung": "siehe https://example.com/ungeprueft", "belegte_aussagen": [], "double_check": [], "verifizierungsquote": 1.0})
+        r = self._post(payload)
+        self.assertIsNotNone(r)
+        self.assertIn("Existenz-Check", str(getattr(r, "message", r)))
 
     def test_subagent_konfiguration_arm_b(self):
         names = [getattr(s, "name", "") for s in (getattr(main.agent, "subagents", None) or [])]

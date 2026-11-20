@@ -1084,33 +1084,34 @@ class QuoteAuditHook(agents.Hook):
                 self.verified = (self.verified + [h])[:100]
                 if data.get("found_exact_inkl_leerzeichen") is True:
                     self.verified_exact = (self.verified_exact + [h])[:100]
-        # B3-4: deterministischer URL-Existenz-Check im Hook (nicht per Prompt): 404 -> erst Retry,
-        # dann Reject; 403/429 = gesperrt (existiert, Zugriff verweigert; 403 != 404) -> nur vermerken;
-        # Timeout/5xx -> einmal Retry, dann "unpruefbar" (kein Reject)
-        if self.check_urls and name in _SEARCH_TOOLS:
-            _urls = _re.findall(r"https?://[^\s\"'<>)\]]+", txt)
-            _new = [u for u in _urls if u not in self.url_checks][:5]
-            for u in _new:
-                try:
-                    _r = await _http_fetch(u, method="HEAD", timeout=15, max_retries=1)
-                except Exception as e:
-                    if u in self.url404_warned:
-                        self.url_checks[u] = "unpruefbar"
-                        continue
-                    self.url404_warned[u] = True
-                    self.url_checks[u] = "unpruefbar:%s" % type(e).__name__
-                    logger.warning("url-check %s unpruefbar: %s", u, e)
-                    return agents.retry("URL-Existenz-Check (Hook): %s nicht erreichbar (%s). Einmalig mit url_status_pruefen nachpruefen; wenn weiterhin nicht erreichbar, Grenzangabe nach E6 und ohne diese Quelle weiterarbeiten." % (u, type(e).__name__))
-                if _r.status_code == 404:
-                    if u in self.url404_warned:
-                        self.turn_rejected = True; logger.warning("hook reject url-404"); return agents.reject("Turn abgelehnt: URL %s existiert nicht (HTTP 404, deterministisch im Hook geprueft)." % u)
-                    self.url404_warned[u] = True
-                    logger.warning("url-check 404: %s", u)
-                    return agents.retry("URL-Existenz-Check (Hook): %s -> HTTP 404. Pruefe die URL auf Transkriptionsfehler (ID-REGEL); ist sie korrekt, melde 404 als Negativbefund mit Suchweg (E5/E6) und arbeite ohne diese Quelle weiter." % u)
-                if _r.status_code in (403, 429):
-                    self.url_checks[u] = "gesperrt:%d" % _r.status_code  # 403 != 404: existiert, Zugriff verweigert
-                else:
-                    self.url_checks[u] = _r.status_code
+        # B3-4: deterministischer URL-Existenz-Check - KEIN I/O und KEINE Decision in post_tool_call
+        # (Harness-Vertrag: post_tool_call darf nur Continue liefern; I/O in Hooks ist im Temporal-
+        # Replay nondeterministisch -> "Hook failed after the tool ran"). Status wird rein aus den
+        # Tool-Ergebnissen eingesammelt; Durchsetzung (Retry/Reject) in post_llm_call.
+        # 404 = nicht gefunden; 403/429 = "gesperrt" (403 != 404); ohne Check = "ungeprueft".
+        try:
+            if self.check_urls:
+                if name in ("url_status_pruefen", "doi_pruefen", "web_zitat_pruefen"):
+                    try:
+                        _d = _json.loads(txt)
+                    except Exception:
+                        _d = {}
+                    if isinstance(_d, dict):
+                        _u = _d.get("url") or (("https://doi.org/" + str(_d.get("doi"))) if _d.get("doi") else "")
+                        if _u:
+                            _k = _norm(_u)
+                            if _d.get("existiert") is False:
+                                self.url_checks[_k] = 404
+                            elif isinstance(_d.get("http_status"), int):
+                                _hs = _d["http_status"]
+                                self.url_checks[_k] = ("gesperrt:%d" % _hs) if _hs in (403, 429) else _hs
+                            elif _d.get("gesperrt"):
+                                self.url_checks[_k] = "gesperrt"
+                elif name in _SEARCH_TOOLS:
+                    for _u in _re.findall(r"https?://[^\s\"'<>)\]]+", txt)[:10]:
+                        self.url_checks.setdefault(_norm(_u), "ungeprueft")
+        except Exception as _e:
+            logger.warning("url-check parse fehlgeschlagen: %s", _e)
         return None
 
     async def post_llm_call(self, ctx, result):
@@ -1246,6 +1247,17 @@ class QuoteAuditHook(agents.Hook):
         for i in ids_in_answer:
             if _norm(i) not in tool_blob and i not in known_libs:
                 problems.append("ID nicht aus Tool-Output/Library-Konstante: " + i)
+        # B3-4 Durchsetzung (deterministisch, im Hook): jede in der Antwort genannte URL/DOI braucht
+        # einen Existenz-Check im selben Turn (url_status_pruefen/doi_pruefen); 404 als Quelle -> Problem
+        if self.check_urls:
+            _cited = set(_re.findall(r"https?://[^\s\"'<>)\]]+", all_text))
+            _cited |= {"https://doi.org/" + d for d in _re.findall(r"doi:\s*(10\.\d{4,9}/[^\s\"'<>)\]]+)", all_text, _re.IGNORECASE)}
+            for _cu in _cited:
+                _st = self.url_checks.get(_norm(_cu), "ungeprueft")
+                if _st in (None, "ungeprueft"):
+                    problems.append("URL/DOI ohne Existenz-Check im selben Turn (url_status_pruefen/doi_pruefen aufrufen): " + _cu[:100])
+                elif _st == 404:
+                    problems.append("URL/DOI im Hook als 404 verifiziert - nicht als Quelle verwendbar (403/429 waeren gesperrt; 404 ist 404): " + _cu[:100])
         if self.enforce_ablage_pflicht and data.get("belegte_aussagen") and (set(self.tools_called) & search_tools) and "research_note_ablegen" not in self.tools_called:
             problems.append("substanzielle Recherche mit belegten Aussagen, aber keine research_note_ablegen-Ablage im selben Turn")
         # Verifizierungsquote (DRACO-artig) + B3-2: pro-Claim-Pflicht und Backstop >= 0.8
