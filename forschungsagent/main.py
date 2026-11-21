@@ -212,7 +212,7 @@ Regeln (ANTI-HALLUZINATION, strikt einzuhalten):
 - ID-REGEL: Bibliotheks-IDs, Dokument-IDs, DOIs, PIIs NUR aus Tool-Ergebnissen kopieren - niemals eintippen oder aus dem Gedaechtnis. Vor Ausgabe in double_check eintragen. Bei DOI/PII zusaetzlich gegen doi.org/Verlag verifizieren (web_zitat_pruefen), Transpositionen sind typische Fehler.
 - BOUNDARIES: Schreiben NUR in die Research-Ablage (research_note_ablegen); Projekt-Libraries sind fuer den Agenten LESEN-only (dokument_lesen/zitat_pruefen/in_dokument_suchen). DOIs/PIIs vor Ausgabe mit doi_pruefen/url_status_pruefen verifizieren; Sperre (403) != 404.
 - NEGATIVBEFUND-REGEL (verbindlich): Eine Aussage wie "X existiert nicht" oder "keine Treffer" darf NUR als gesichert ausgegeben werden, wenn ALLE drei Libraries durchsucht wurden: projektdateien_auflisten (alle 3 Libraries) + projektquellen_suchen (Projekt-Libraries) + ablage_durchsuchen (Research-Ablage) + ggf. web_recherche. Sonst muss der Negativbefund als wahrscheinlich/offene_punkte deklariert werden mit Angabe, welche Libraries geprueft wurden.
-- DOUBLE-CHECK (PFLICHT vor jeder Antwort): Jede wörtliche Angabe, jede Zahl, jede ID MUSS mit zitat_pruefen / web_zitat_pruefen / dokument_lesen gegen die Quelle verifiziert und im Feld double_check mit Tool-Ergebnis eingetragen werden. B3-2 PRO CLAIM: Jede belegte_aussage braucht einen passenden double_check-Eintrag (angabe deckt die Aussage ab); zusaetzlich globaler Backstop Verifizierungsquote >= 0.8 (0.5 hiesse: im Mittel jeder 2. Claim ohne Nachweis). Wird hart im Hook durchgesetzt. Nicht verifizierbare Angaben duerfen nicht als Fakt ausgegeben werden - nur als offene_punkte.
+- DOUBLE-CHECK (PFLICHT vor jeder Antwort): Jede wörtliche Angabe, jede Zahl, jede ID MUSS mit zitat_pruefen / web_zitat_pruefen / dokument_lesen gegen die Quelle verifiziert und im Feld double_check mit Tool-Ergebnis eingetragen werden. B3-2 PRO CLAIM: Jede belegte_aussage braucht einen passenden double_check-Eintrag (angabe deckt die Aussage ab); zusaetzlich globaler Backstop Verifizierungsquote >= 0.8 (0.5 hiesse: im Mittel jeder 2. Claim ohne Nachweis). Wird hart im Hook durchgesetzt. double_check.ergebnis kurz halten (max 500 Zeichen: Befund found=true/false + Fundstelle/Seite - KEIN Tool-Protokoll; das Langprotokoll gehoert in die Ablage-Notiz, nicht in die Antwort; gesamt max 4000 Zeichen). Nicht verifizierbare Angaben duerfen nicht als Fakt ausgegeben werden - nur als offene_punkte.
 - ARITHMETIK: Zahlen immer gegen die Quelle pruefen und auf interne Konsistenz (z. B. Teilsummen) kontrollieren; bei Widerspruch -> offene_punkte, nie runden/erfinden.
 - ABLAGE: Bei Ablage-Anforderungen entweder Datei mit research_note_ablegen sichern oder ausdruecklich "nicht abgelegt" melden - keine konditionalen Angaben.
 - TOOL-LIBRARY-ZUORDNUNG (verbindlich): projektquellen_suchen = NUR Grammatik-statt-Stil-Bibliothek (01a1843c-...) + Katalogstadt (01a182d2-...); ablage_durchsuchen = NUR Research-Ablage (01a1b7a7-...); projektdateien_auflisten = ALLE vier Libraries (2 Projekt-Libraries + Research-Ablage + Apparat-Bibliothek); zitat_pruefen/text_content = exakter Volltext fuer Zitate aus JEDER Library.
@@ -325,8 +325,8 @@ def _client():
     key = os.environ.get("PROJECT_MISTRAL_API_KEY")
     try:
         if key:
-            return _ClientWrap(get_mistral_client(api_key=key, timeout=120))
-        return _ClientWrap(get_mistral_client(run_as="auto", timeout=120))
+            return _ClientWrap(get_mistral_client(api_key=key, timeout=300))
+        return _ClientWrap(get_mistral_client(run_as="auto", timeout=300))
     except TypeError:
         if key:
             return _ClientWrap(get_mistral_client(api_key=key))
@@ -1300,6 +1300,13 @@ class QuoteAuditHook(agents.Hook):
                 problems.append("Verifizierungsquote zu niedrig: %.0f%% (Backstop min. 80%%; 0.5 hiesse im Mittel jeder 2. Claim ohne Nachweis)" % (_q * 100))
             if abs(_angegeben - _q) > 0.2:
                 problems.append("verifizierungsquote (%.2f) weicht von tatsaechlicher Quote (%.2f) ab" % (_angegeben, _q))
+        # Protokoll-Kurzregel: double_check.ergebnis kompakt halten (Hook-QA); Langprotokoll -> Ablage-Notiz
+        for _d in data.get("double_check") or []:
+            if isinstance(_d, dict) and len(str(_d.get("ergebnis", ""))) > 500:
+                problems.append("double_check.ergebnis zu lang (>500 Zeichen) - nur Kurzergebnis mit Fundstelle, kein Protokoll: " + str(_d.get("ergebnis", ""))[:80])
+        _dc_ges = sum(len(str(_d.get("ergebnis", ""))) for _d in (data.get("double_check") or []) if isinstance(_d, dict))
+        if _dc_ges > 4000:
+            problems.append("double_check gesamt zu lang (%d Zeichen, max 4000) - Langprotokoll in die Ablage-Notiz, nicht in die Antwort" % _dc_ges)
         # B3-3: Lizenz-/Zugangs-Sidecar bei Volltext-Quellen (Rechtsrisiko, Scan-Fall)
         for q in data.get("quellen") or []:
             if not isinstance(q, dict):
