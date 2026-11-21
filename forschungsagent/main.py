@@ -1115,6 +1115,15 @@ class QuoteAuditHook(agents.Hook):
         return None
 
     async def post_llm_call(self, ctx, result):
+        # Harness-Regel: ein geworfener Hook-Fehler beendet den Turn hart ("Hook failed ...").
+        # Niemals werfen - bei internem Fehler Continue (None) liefern.
+        try:
+            return await self._post_llm_call_impl(ctx, result)
+        except Exception as e:
+            logger.warning("post_llm_call internal error swallowed: %.200s", e)
+            return None
+
+    async def _post_llm_call_impl(self, ctx, result):
         self.llm_calls += 1
         if getattr(result, "tool_calls", None):
             self.no_tool_streak = 0
@@ -1171,7 +1180,8 @@ class QuoteAuditHook(agents.Hook):
         # Wiederholungs-Loop in der Texterstellung (z. B. Dokumentation): aehnliche Antworten ohne Tool-Calls
         import difflib
         norm_text = _norm(text)
-        if norm_text and len(norm_text) > 200:
+        # CPU-Deckel: SequenceMatcher ist O(n^2) - nur auf begrenzten Texten (Hook = Temporal-Activity)
+        if norm_text and 200 < len(norm_text) <= 8000:
             sim = max((difflib.SequenceMatcher(None, norm_text, prev).ratio() for prev in self.last_texts[-3:]), default=0.0)
             if sim >= 0.90:
                 self.rep_streak += 1
@@ -1180,7 +1190,7 @@ class QuoteAuditHook(agents.Hook):
                 return agents.retry("STOPP: Diese Antwort aehnelt der vorherigen zu stark (%.0f%%) ohne neuen Werkzeugaufruf. Wiederhole dich nicht - fuege nur NEUE, belegte Inhalte hinzu oder schliesse ab." % (sim * 100))
             else:
                 self.rep_streak = 0
-        self.last_texts = (self.last_texts + [norm_text])[-5:]
+        self.last_texts = (self.last_texts + [norm_text[:8000]])[-5:]
         try:
             data = _json.loads(text)
         except Exception:
@@ -1216,6 +1226,7 @@ class QuoteAuditHook(agents.Hook):
                 problems.append("Zitat nur normalisiert verifiziert (found=True, nicht zeichen-exakt) - laut Woertlichkeitsregel nur als Paraphrase, nicht in verbatim_zitate: " + qt[:80])
         search_tools = _SEARCH_TOOLS
         all_text = _norm(str(data.get("zusammenfassung", "")) + " " + str(data.get("offene_punkte", "")) + " " + str(data.get("belegte_aussagen", "")))
+        all_text = all_text[:20000]  # Regex-Eingaben deckeln (Hook laeuft als Temporal-Activity)
         neg_words = ["nicht gefunden", "nicht lesbar", "nicht existiert", "nicht auffindbar", "keine treffer"]
         # nur bei echtem Dokument-/Quellenbezug pruefen (UUID, URL, DOI, "Dokument"), nicht bei reinen Chat-Antworten
         has_source_ref = bool(_re.search(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|https?://|doi:|dokument", all_text.lower()))
@@ -1266,8 +1277,8 @@ class QuoteAuditHook(agents.Hook):
         if _n_aus > 0:
             _q = min(1.0, _n_dc / _n_aus)
             _angegeben = float(data.get("verifizierungsquote") or 0.0)
-            _dc_texts = [_norm(str(d.get("angabe", ""))) for d in (data.get("double_check") or []) if isinstance(d, dict)]
-            for a in data.get("belegte_aussagen") or []:
+            _dc_texts = [_norm(str(d.get("angabe", ""))) for d in (data.get("double_check") or []) if isinstance(d, dict)][:50]
+            for a in (data.get("belegte_aussagen") or [])[:50]:
                 if not isinstance(a, dict):
                     continue
                 _at = _norm(str(a.get("aussage", "")))
