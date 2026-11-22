@@ -128,7 +128,7 @@ Dein dauerhaftes Gedächtnis ist die Research-Ablage. Innerhalb einer laufenden 
 
 TURN-ABSCHLUSS (verbindlich): Sobald der Arbeitsauftrag vollständig abgearbeitet und die Abschluss-Zusammenfassung geliefert ist, beendest du den Turn sofort und vollständig: genau eine Abschlussnachricht, keine weiteren Werkzeugaufrufe, kein Nachschieben weiterer Abschluss-Bekundungen oder ähnlich klingender Wiederholungen. Der Turn endet von selbst, sobald du keine weiteren Ausgaben mehr erzeugst; versuche nicht, den Prozess von innen zu beenden, und verfalle nicht in eine Schleife aus wiederholten Abschluss-Aussagen. Bleibt eine Aufgabe offen oder blockiert, dokumentiere das nach E6 und schließe dann ebenfalls mit einer einzigen Abschlussnachricht.
 
-ABSCHLUSS-ANTWORT-FORMAT (verbindlich): Die letzte Antwort eines Turns ist AUSSCHLIEßLICH ein einzelnes nacktes JSON-Objekt (ResearchAnswer) — KEIN Markdown-Fence (```json), KEIN Text davor oder danach, KEINE zweite oder dritte JSON-Antwort. Alle Keys und String-Werte nur mit ASCII-Double-Quotes (U+0022 "), niemals typografische Anführungszeichen („ “ ‚ ‘). zusammenfassung max. 1500 Zeichen, arbeitsupdate max. 2500 Zeichen (Harte QA im Hook). UMFANG: Die sichtbare Abschlussantwort bleibt KURZ - zusammenfassung/arbeitsupdate nur Kernbefunde und kurzes Protokoll (was wurde gemacht). Das AUSFUEHRLICHE, praezise Protokoll gehoert AUSSCHLIESSLICH in die Research-Ablage (research_note_ablegen / research_note_aktualisieren; session-summary schreibt der Hook automatisch) - niemals als langer Text in die Abschlussantwort.
+ABSCHLUSS-ANTWORT-FORMAT (verbindlich): Die letzte Antwort eines Turns ist AUSSCHLIEßLICH ein einzelnes nacktes JSON-Objekt (ResearchAnswer) — KEIN Markdown-Fence (```json), KEIN Text davor oder danach, KEINE zweite oder dritte JSON-Antwort. Alle Keys und String-Werte nur mit ASCII-Double-Quotes (U+0022 "), niemals typografische Anführungszeichen („ “ ‚ ‘). zusammenfassung max. 500 Zeichen, arbeitsupdate max. 800 Zeichen (Harte QA im Hook). UMFANG: Die sichtbare Abschlussantwort bleibt KURZ - zusammenfassung/arbeitsupdate sind eine EIGENE Kernzusammenfassung in eigenen Worten fuer den Auftraggeber: KEINE Aufzaehlung von Tool-Calls, Quellen-IDs, DOIs, URLs oder Seitenangaben in diesen beiden Feldern; das ausfuehrliche Protokoll (was wurde gemacht) liegt AUSSCHLIESSLICH in der Ablage-Notiz. Das AUSFUEHRLICHE, praezise Protokoll gehoert AUSSCHLIESSLICH in die Research-Ablage (research_note_ablegen / research_note_aktualisieren; session-summary schreibt der Hook automatisch) - niemals als langer Text in die Abschlussantwort.
 
 ABLAGE-PFLICHT (verbindlich): Jeder Turn, in dem du Recherche-Werkzeuge aufgerufen hast (ablage_durchsuchen, projektquellen_suchen, web_recherche, dokument_lesen, in_dokument_suchen, zitat_pruefen, web_zitat_pruefen, projektdateien_auflisten, dokument_finden, bibliotheken_auflisten, aktuelles_datum, pdf_ocr, pdf_in_ablage_speichern, json_api_abfrage, webseite_lesen, doi_pruefen, url_status_pruefen), MUSS vor der JSON-Abschlussantwort genau eine Notiz per research_note_ablegen (bzw. research_note_aktualisieren bei Korrektur) in der Research-Ablage ablegen. INKREMENTELL ABLEGEN: Lege die Notiz SOFORT ab, sobald substantielle Befunde vorliegen - NICHT erst unmittelbar vor der JSON-Antwort. Grosse Aufgaben SPLITTEN: Bei umfangreichen Aufgaben (z. B. Volltextkollation mehrerer Positionen, Batch-Screening) pro Position/Teilschritt EIGENE Notiz (research_note_ablegen) und bei Bedarf eigener Turn - so geht bei einem Turn-Limit-Stopp (Hook-Reject ab Iteration 17/18) kein Befund verloren.
 
@@ -362,14 +362,14 @@ class SourceRecord(BaseModel):
 
 
 class ResearchAnswer(BaseModel):
-    zusammenfassung: str = Field(description="Praegnanate Zusammenfassung der Antwort (max. 1500 Zeichen).")
+    zusammenfassung: str = Field(description="Praegnanate Zusammenfassung der Antwort (max. 500 Zeichen; eigene Kernzusammenfassung in eigenen Worten, KEINE Tool-/Quellen-Aufzaehlung - Details nur in der Ablage-Notiz).")
     belegte_aussagen: list[BelegteAussage] = Field(default_factory=list, description="Alle faktischen Aussagen mit Pflichtquelle.")
     deutungen: list[str] = Field(default_factory=list, description="Eigene Einordnungen, klar als Deutung markiert.")
     offene_punkte: list[str] = Field(default_factory=list, description="Ungeklaerte Fragen / nicht belegbare Punkte.")
     verbatim_zitate: list[VerbatimZitat] = Field(default_factory=list, description="Alle wörtlichen Zitate, jeweils per zitat_pruefen verifiziert. Leer lassen, wenn keins verifiziert ist.")
     double_check: list[DoubleCheck] = Field(default_factory=list, description="PFLICHT: jede wörtliche Angabe und jede Zahl/ID, jeweils mit Tool-Ergebnis verifiziert.")
     quellen: list[SourceRecord] = Field(default_factory=list, description="Alle in diesem Turn verwendeten Quellen mit Zugangsstufe; Volltext-Quellen brauchen license_access (Lizenz-/Zugangs-Sidecar, Hook-Pflicht).")
-    arbeitsupdate: str = Field(default="", description="PFLICHT nach jeder Arbeitsrunde: Klartext-Update in vollen Saetzen, was in diesem Turn recherchiert/gelesen/abgelegt wurde (plain text, keine Stichpunkte; max. 2500 Zeichen).")
+    arbeitsupdate: str = Field(default="", description="PFLICHT nach jeder Arbeitsrunde: Klartext-Update in vollen Saetzen, was in diesem Turn recherchiert/gelesen/abgelegt wurde (plain text, keine Stichpunkte; max. 800 Zeichen; Kernpunkte in eigenen Worten, KEIN Tool-/Quellen-Protokoll - Details nur in der Ablage-Notiz).")
     verifizierungsquote: float = Field(default=0.0, description="Anteil der belegte_aussagen mit double_check-Nachweis (0.0-1.0). Hook prueft: pro-Claim-Pflicht (jede belegte_aussage braucht passenden double_check-Eintrag) + Backstop Quote >=0.8 (0.5 hiesse: im Mittel jeder 2. Claim ohne Nachweis); Abweichung angegeben vs. Ist >0.2 -> Retry.")
 
 
@@ -1339,10 +1339,10 @@ class QuoteAuditHook(agents.Hook):
         ):
             problems.append("pdf_in_ablage_speichern ohne quellen-Eintrag mit document_id + license_access (Lizenz-Sidecar)")
         # Harte Laengen-QA: sichtbare Abschlussantwort bleibt kurz; Ausfuehrliches gehoert in die Ablage
-        if len(str(data.get("zusammenfassung", ""))) > 1500:
-            problems.append("zusammenfassung zu lang (>1500 Zeichen) - nur Kernbefunde in der Antwort, Details in die Ablage-Notiz")
-        if len(str(data.get("arbeitsupdate", ""))) > 2500:
-            problems.append("arbeitsupdate zu lang (>2500 Zeichen) - kurzes Protokoll in der Antwort, AUSFUEHRLICHES nur in der Research-Ablage (research_note_ablegen)")
+        if len(str(data.get("zusammenfassung", ""))) > 500:
+            problems.append("zusammenfassung zu lang (>500 Zeichen) - eigene KURZE Kernzusammenfassung in eigenen Worten, KEINE Tool-/Quellen-Aufzaehlung; Details in die Ablage-Notiz")
+        if len(str(data.get("arbeitsupdate", ""))) > 800:
+            problems.append("arbeitsupdate zu lang (>800 Zeichen) - Kernpunkte in eigenen Worten, KEIN Tool-/Quellen-Protokoll; AUSFUEHRLICHES nur in der Research-Ablage (research_note_ablegen)")
         if not problems:
             return None
         feedback = ("VERBOTEN: " + " | ".join(problems) +
