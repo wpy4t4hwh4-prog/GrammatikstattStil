@@ -26,3 +26,15 @@ git add forschungsagent && git commit -m "Add grammatik-statt-stil-research agen
   Subagenten-Hooks ohne Ablage-Pflicht/Summary.
 - Skills: gepinnt via `PINNED_SKILLS` (id, version), Fallback `all_registry_skills()`.
 - Tests: `uv run python tests/run_tests.py` (75/75 OK).
+
+## Session-Start-Optimierung (O1/O2/O4) - 2026-11-22
+- `projektdateien_auflisten(library=..., search=...)`: optionale Filter; `search` wird serverseitig
+  an `documents.list_async(search=...)` durchgereicht (kein LLM-Call, spart Paginierung/Kontext).
+  `bibliotheken_auflisten(search=...)` ebenso.
+- `SESSION-START-REGEL` schlank: Start = `bibliotheken_auflisten` + `aktuelles_datum` +
+  `projektdateien_auflisten(library="research_ablage_agent", search="00-projektstand")` -> ID ->
+  `dokument_lesen` (EIN Volltext-Dokument, gekappt). `ablage_durchsuchen` nur noch als FALLBACK.
+  Inhaltlich liest die Session weiterhin nur `00-projektstand.md` (wird von `post_agent_turn`
+  automatisch nach jedem Turn aktualisiert); Sicherheitsregeln (nie IDs raten, nie blind anlegen,
+  GENAU EINES als Erstbefuellung) unveraendert.
+- Tests: 86/86 OK (`SessionStartOptTests`).

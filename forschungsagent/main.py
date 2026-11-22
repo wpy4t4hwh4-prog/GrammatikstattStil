@@ -164,7 +164,7 @@ Projektkontext (die zentrale Datei und der Projektstand, die du dir merken solls
 
 HINWEIS: Dieser INSTRUCTIONS-Block im Code (forschungsagent/main.py) ist die autoritative Systemanweisung (Single Source of Truth); der Registry-Prompt ist nur Fallback.
 
-SESSION-START-REGEL (bei jeder neuen Session zuerst ausfuehren): ablage_durchsuchen mit allgemeinen Stichworten wie "Projektstand", "offene Punkte", "Anweisung", "letzter Stand" aufrufen (parallel dazu bibliotheken_auflisten, aktuelles_datum, projektdateien_auflisten). Kanonisches Dokument "00-projektstand.md" in der Research-Ablage (research_ablage_agent) finden: zuerst dokument_finden mit dem Namen "00-projektstand.md" (liefert die ID), dann dokument_lesen mit dieser ID; alternativ die ID direkt aus projektdateien_auflisten unter research_ablage_agent entnehmen. NIEMALS eine ID raten. Falls 00-projektstand.md dort nicht auffindbar ist: NICHT blind ein neues Projektstand-Dokument anlegen und NICHT ein Ersatzdokument unter anderem Namen basteln - zuerst ablage_durchsuchen "Projektstand"/"letzter Stand" und projektdateien_auflisten pruefen; existiert wirklich keines, lege GENAU EINES mit research_note_ablegen (Titel "00-projektstand") an und dokumentiere das als Erstbefuellung. Den bisherigen Stand in die Antwort einbeziehen. Session-Verlauf ist fluechtig (Redeploys terminieren alte Sessions) - die Research-Ablage ist das dauerhafte Gedaechtnis.
+SESSION-START-REGEL (bei jeder neuen Session zuerst ausfuehren, schlank - nur Metadaten + EIN Volltext-Dokument): parallel aufrufen: bibliotheken_auflisten, aktuelles_datum, projektdateien_auflisten(library="research_ablage_agent", search="00-projektstand"). Kanonisches Dokument "00-projektstand.md" in der Research-Ablage (research_ablage_agent): ID direkt aus diesem gefilterten Listing entnehmen (research_ablage_agent -> Eintrag name="00-projektstand.md"), dann dokument_lesen mit dieser ID (Volltext, automatisch gekappt). NIEMALS eine ID raten. ablage_durchsuchen mit Stichworten wie "Projektstand"/"letzter Stand"/"offene Punkte"/"Anweisung" erst als FALLBACK aufrufen, wenn 00-projektstand.md nicht auffindbar/unklar ist ODER die Aufgabe explizit aeltere Notizen braucht. Falls 00-projektstand.md dort nicht auffindbar ist: NICHT blind ein neues Projektstand-Dokument anlegen und NICHT ein Ersatzdokument unter anderem Namen basteln - zuerst ablage_durchsuchen "Projektstand"/"letzter Stand" und projektdateien_auflisten(library="research_ablage_agent") ungefiltert pruefen; existiert wirklich keines, lege GENAU EINES mit research_note_ablegen (Titel "00-projektstand") an und dokumentiere das als Erstbefuellung. Den bisherigen Stand in die Antwort einbeziehen. Session-Verlauf ist fluechtig (Redeploys terminieren alte Sessions) - die Research-Ablage ist das dauerhafte Gedaechtnis; post_agent_turn aktualisiert 00-projektstand.md automatisch nach jedem Turn.
 
 Arbeitsweise bei jeder Anfrage:
  0. Verzeichnisse: Vor jedem Download/Entpacken/Extrahieren Zielverzeichnis mit `mkdir -p` anlegen (z. B. `mkdir -p /tmp/ext`); nie in ein nicht existierendes Verzeichnis wechseln oder schreiben.
@@ -215,7 +215,7 @@ Regeln (ANTI-HALLUZINATION, strikt einzuhalten):
 - DOUBLE-CHECK (PFLICHT vor jeder Antwort): Jede wörtliche Angabe, jede Zahl, jede ID MUSS mit zitat_pruefen / web_zitat_pruefen / dokument_lesen gegen die Quelle verifiziert und im Feld double_check mit Tool-Ergebnis eingetragen werden. B3-2 PRO CLAIM: Jede belegte_aussage braucht einen passenden double_check-Eintrag (angabe deckt die Aussage ab); zusaetzlich globaler Backstop Verifizierungsquote >= 0.8 (0.5 hiesse: im Mittel jeder 2. Claim ohne Nachweis). Wird hart im Hook durchgesetzt. double_check.ergebnis kurz halten (max 500 Zeichen: Befund found=true/false + Fundstelle/Seite - KEIN Tool-Protokoll; das Langprotokoll gehoert in die Ablage-Notiz, nicht in die Antwort; gesamt max 4000 Zeichen). Nicht verifizierbare Angaben duerfen nicht als Fakt ausgegeben werden - nur als offene_punkte.
 - ARITHMETIK: Zahlen immer gegen die Quelle pruefen und auf interne Konsistenz (z. B. Teilsummen) kontrollieren; bei Widerspruch -> offene_punkte, nie runden/erfinden.
 - ABLAGE: Bei Ablage-Anforderungen entweder Datei mit research_note_ablegen sichern oder ausdruecklich "nicht abgelegt" melden - keine konditionalen Angaben.
-- TOOL-LIBRARY-ZUORDNUNG (verbindlich): projektquellen_suchen = NUR Grammatik-statt-Stil-Bibliothek (01a1843c-...) + Katalogstadt (01a182d2-...); ablage_durchsuchen = NUR Research-Ablage (01a1b7a7-...); projektdateien_auflisten = ALLE vier Libraries (2 Projekt-Libraries + Research-Ablage + Apparat-Bibliothek); zitat_pruefen/text_content = exakter Volltext fuer Zitate aus JEDER Library.
+- TOOL-LIBRARY-ZUORDNUNG (verbindlich): projektquellen_suchen = NUR Grammatik-statt-Stil-Bibliothek (01a1843c-...) + Katalogstadt (01a182d2-...); ablage_durchsuchen = NUR Research-Ablage (01a1b7a7-...); projektdateien_auflisten = ALLE vier Libraries (2 Projekt-Libraries + Research-Ablage + Apparat-Bibliothek), optional gefiltert mit library=.../search=...; zitat_pruefen/text_content = exakter Volltext fuer Zitate aus JEDER Library.
 
 Regeln:
 - Antworte auf Deutsch.
@@ -455,20 +455,35 @@ async def ablage_durchsuchen(
 
 @_tool_guard
 @agents.tool
-async def projektdateien_auflisten() -> dict:
-    """Listet die Dokumente der beiden Projekt-Libraries mit Namen, ID und Verarbeitungsstatus auf."""
+async def projektdateien_auflisten(
+    library: Annotated[str, Field(description="Optional: nur EINE Library auflisten - Schluessel ('grammatik_statt_stil_bibliothek', 'katalogstadt_emerging_fields', 'research_ablage_agent', 'apparat_bibliothek') oder Library-ID (UUID, aus bibliotheken_auflisten). Leer = alle vier Libraries.")] = "",
+    search: Annotated[str, Field(description="Optional: serverseitiger Namens-/Metadaten-Filter (search-Parameter der Library-API), z. B. '00-projektstand'. Leer = ungefiltert. Spart Paginierung und Kontext bei grossen Libraries.")] = "",
+) -> dict:
+    """Listet Dokumente der Projekt-Libraries mit Namen, ID und Verarbeitungsstatus auf (Metadaten only, nie Inhalt). Optional gefiltert: library=... (eine Library) und/oder search=... (serverseitiger Name-Filter). Leer = alle vier Libraries ungefiltert."""
     client = _client()
-    result: dict[str, list[dict]] = {}
-    for label, library_id in (
+    _all = (
         ("grammatik_statt_stil_bibliothek", PROJECT_LIBRARY_ID),
         ("katalogstadt_emerging_fields", CATALOG_LIBRARY_ID),
         ("research_ablage_agent", NOTES_LIBRARY_ID),
         ("apparat_bibliothek", APPARAT_LIBRARY_ID),
-    ):
+    )
+    if library:
+        _key = library.strip().lower()
+        _match = [t for t in _all if t[0] == _key or t[1] == library.strip()]
+        if not _match:
+            return {"fehler": "unbekannte library '%s' - erlaubt: %s oder Library-ID (UUID) aus bibliotheken_auflisten" % (library, ", ".join(t[0] for t in _all))}
+        targets = _match
+    else:
+        targets = list(_all)
+    result: dict[str, list[dict]] = {}
+    for label, library_id in targets:
         docs = []
         _page = 0
         while _page < 50:
-            listing = await client.beta.libraries.documents.list_async(library_id=library_id, page_size=100, page=_page)
+            _kwargs = {"library_id": library_id, "page_size": 100, "page": _page}
+            if search:
+                _kwargs["search"] = search
+            listing = await client.beta.libraries.documents.list_async(**_kwargs)
             _data = listing.data or []
             docs.extend(_data)
             if len(_data) < 100:
@@ -728,10 +743,12 @@ async def in_dokument_suchen(
 
 @_tool_guard
 @agents.tool
-async def bibliotheken_auflisten() -> dict:
-    """Liefert ALLE Bibliotheken des Workspace mit kanonischen IDs und Namen (aus der API, nicht aus Erinnerung). VOR jeder Angabe einer Bibliotheks-ID dieses Tool aufrufen und die ID daraus kopieren (E7)."""
+async def bibliotheken_auflisten(
+    search: Annotated[str, Field(description="Optional: serverseitiger Namens-Filter (search-Parameter der Libraries-API). Leer = alle Bibliotheken des Workspace.")] = "",
+) -> dict:
+    """Liefert Bibliotheken des Workspace mit kanonischen IDs und Namen (aus der API, nicht aus Erinnerung). VOR jeder Angabe einer Bibliotheks-ID dieses Tool aufrufen und die ID daraus kopieren (E7). Optional gefiltert per search=..."""
     client = _client()
-    res = await client.beta.libraries.list_async()
+    res = await client.beta.libraries.list_async(search=search) if search else await client.beta.libraries.list_async()
     items = res.data if hasattr(res, "data") else res
     return {"bibliotheken": [{"id": l.id, "name": l.name} for l in items]}
 
