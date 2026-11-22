@@ -331,10 +331,106 @@ class SessionStartRegelTests(unittest.TestCase):
     def test_session_start_regel_robust(self):
         with open(main.__file__, encoding="utf-8") as _f:
             s = _f.read()
-        self.assertIn("dokument_finden mit dem Namen", s)
+        # O1/O2/O4: schlanker Start ueber serverseitig gefiltertes Listing (statt Volllisting + RAG-Pflichtcall)
+        self.assertIn('projektdateien_auflisten(library="research_ablage_agent", search="00-projektstand")', s)
+        self.assertIn("FALLBACK", s)  # ablage_durchsuchen nur noch als Fallback
         self.assertIn("NIEMALS eine ID raten", s)
         self.assertIn("NICHT blind ein neues Projektstand-Dokument anlegen", s)
         self.assertIn("GENAU EINES", s)
+
+
+class _FakeDoc:
+    def __init__(self, name, id):
+        self.name = name
+        self.id = id
+        self.extension = "md"
+        self.processing_status = "ok"
+
+
+class SessionStartOptTests(unittest.TestCase):
+    """O1/O2/O4: projektdateien_auflisten/bibliotheken_auflisten mit library=/search=-Filter."""
+
+    def setUp(self):
+        self._old_client = main._client
+        self.calls = []
+        docs = {
+            main.NOTES_LIBRARY_ID: [_FakeDoc("00-projektstand.md", "id-stand"), _FakeDoc("andere-notiz.md", "id-x")],
+            main.PROJECT_LIBRARY_ID: [_FakeDoc("projekt-doc.md", "id-p")],
+        }
+        calls = self.calls
+
+        class Docs:
+            async def list_async(self, **kw):
+                calls.append(("docs", kw))
+                data = docs.get(kw.get("library_id"), [])
+                if kw.get("search"):
+                    data = [d for d in data if kw["search"].lower() in (d.name or "").lower()]
+                return types.SimpleNamespace(data=data)
+
+        class Libs:
+            documents = Docs()
+
+            async def list_async(self, **kw):
+                calls.append(("libs", kw))
+                return types.SimpleNamespace(data=[types.SimpleNamespace(id=main.NOTES_LIBRARY_ID, name="Research-Ablage")])
+
+        class Beta:
+            libraries = Libs()
+
+        class C:
+            beta = Beta()
+
+        main._client = lambda: C()
+
+    def tearDown(self):
+        main._client = self._old_client
+
+    def test_signaturen_haben_filter(self):
+        import inspect
+        sig = inspect.signature(main.projektdateien_auflisten.input_model)
+        self.assertIn("library", sig.parameters)
+        self.assertIn("search", sig.parameters)
+        sig2 = inspect.signature(main.bibliotheken_auflisten.input_model)
+        self.assertIn("search", sig2.parameters)
+
+    def test_gefiltertes_listing_nur_eine_library_und_search_weitergereicht(self):
+        f = main.projektdateien_auflisten
+        res = asyncio.run(f.handler(args=f.input_model(library="research_ablage_agent", search="00-projektstand")))
+        self.assertEqual(list(res.keys()), ["research_ablage_agent"])
+        self.assertEqual([d["name"] for d in res["research_ablage_agent"]], ["00-projektstand.md"])
+        doc_calls = [kw for kind, kw in self.calls if kind == "docs"]
+        self.assertEqual(len(doc_calls), 1)
+        self.assertEqual(doc_calls[0]["library_id"], main.NOTES_LIBRARY_ID)
+        self.assertEqual(doc_calls[0].get("search"), "00-projektstand")
+
+    def test_default_listet_alle_vier_libraries_ohne_search(self):
+        f = main.projektdateien_auflisten
+        res = asyncio.run(f.handler(args=f.input_model()))
+        self.assertEqual(set(res.keys()), {
+            "grammatik_statt_stil_bibliothek", "katalogstadt_emerging_fields",
+            "research_ablage_agent", "apparat_bibliothek",
+        })
+        doc_calls = [kw for kind, kw in self.calls if kind == "docs"]
+        self.assertEqual(len(doc_calls), 4)
+        self.assertTrue(all("search" not in kw for kw in doc_calls))
+
+    def test_unbekannte_library_gibt_fehler_dict(self):
+        f = main.projektdateien_auflisten
+        res = asyncio.run(f.handler(args=f.input_model(library="quatsch")))
+        self.assertIn("fehler", res)
+        self.assertEqual([c for c in self.calls if c[0] == "docs"], [])
+
+    def test_bibliotheken_auflisten_search_weitergereicht(self):
+        b = main.bibliotheken_auflisten
+        res = asyncio.run(b.handler(args=b.input_model(search="Ablage")))
+        self.assertEqual(res["bibliotheken"][0]["id"], main.NOTES_LIBRARY_ID)
+        lib_calls = [kw for kind, kw in self.calls if kind == "libs"]
+        self.assertEqual(lib_calls[-1].get("search"), "Ablage")
+
+    def test_kein_neues_tool_dunguard_count_bleibt_19(self):
+        with open(main.__file__, encoding="utf-8") as _f:
+            s = _f.read()
+        self.assertEqual(s.count("@_tool_guard\n@agents.tool"), 19)
 
 
 
