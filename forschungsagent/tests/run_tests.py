@@ -433,6 +433,25 @@ class SessionStartOptTests(unittest.TestCase):
         self.assertEqual(s.count("@_tool_guard\n@agents.tool"), 19)
 
 
+class AblageInkrementellTests(unittest.TestCase):
+    """Optionen 1+2: inkrementelle Ablage + Splitten grosser Aufgaben (Turn-Limit-sicher)."""
+
+    def test_ablage_pflicht_inkrementell_und_split(self):
+        with open(main.__file__, encoding="utf-8") as _f:
+            s = _f.read()
+        self.assertIn("INKREMENTELL ABLEGEN", s)
+        self.assertIn("SOFORT ab, sobald substantielle Befunde vorliegen", s)
+        self.assertIn("Grosse Aufgaben SPLITTEN", s)
+        self.assertIn("Turn-Limit-Stopp (Hook-Reject ab Iteration 17/18)", s)
+        self.assertIn("INKREMENTELL vorgehen", s)  # Schritt 5 der Arbeitsweise
+
+    def test_iterationslimit_hook_bleibt_17_18(self):
+        with open(main.__file__, encoding="utf-8") as _f:
+            s = _f.read()
+        self.assertIn("self.llm_calls >= 17", s)
+        self.assertIn("Iterationslimit (17/18) erreicht", s)
+
+
 
 
 class SdkRetryTests(unittest.TestCase):
