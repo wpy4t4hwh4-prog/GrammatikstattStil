@@ -19,7 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: vibe/forschungsagent-b21b74
+          ref: main # ab PR #4 (= e6d9172) ist main der aktuelle Agent-Stand (86 Tests); vorher pinnte der Cron den Alt-Branch vibe/forschungsagent-b21b74 (6989dcb, 62 Tests)
       - uses: astral-sh/setup-uv@v5
       - name: Install deps
         working-directory: forschungsagent
