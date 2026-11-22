@@ -659,6 +659,40 @@ class Runde2B3Tests(unittest.TestCase):
         self.assertIsNotNone(r)
         self.assertIn("Existenz-Check", str(getattr(r, "message", r)))
 
+    def test_post_llm_call_swallows_internal_errors(self):
+        # Harness-Regel: Hook darf nie werfen (sonst "Hook failed ..." und Turn-Ende)
+        from unittest.mock import patch
+        with patch.object(main._re, "findall", side_effect=Exception("boom")):
+            r = asyncio.run(self.hook.post_llm_call(None, _reply("irgendein text")))
+        self.assertIsNone(r)
+
+    def test_huge_text_does_not_blow_up(self):
+        # CPU-Deckel: riesige Modellausgabe darf den Hook (Temporal-Activity) nicht aufblasen
+        import time
+        t0 = time.time()
+        r = self._post("x" * 40000)
+        self.assertLess(time.time() - t0, 5)
+        self.assertIsNotNone(r)  # Welle/Laenge -> Retry, kein Absturz
+
+    def test_doublecheck_ergebnis_zu_lang_wird_flagged(self):
+        # Protokoll-Kurzregel: nur Kurzergebnis in der Antwort, Langprotokoll -> Ablage-Notiz
+        import json
+        asyncio.run(self.hook.post_tool_call(None, self._tool_res("research_note_ablegen", "ok")))
+        payload = json.dumps({
+            "zusammenfassung": "x",
+            "belegte_aussagen": [{"aussage": "a", "quelle": "q", "evidenzgrad": "wahrscheinlich"}],
+            "double_check": [{"angabe": "a", "pruef_tool": "web_zitat_pruefen", "ergebnis": "protokoll " * 100}],
+            "verifizierungsquote": 1.0,
+        })
+        r = self._post(payload)
+        self.assertIsNotNone(r)
+        self.assertIn("zu lang", str(getattr(r, "message", r)))
+
+    def test_client_timeout_300(self):
+        with open(main.__file__, encoding="utf-8") as _f:
+            s = _f.read()
+        self.assertIn("timeout=300", s)
+
     def test_subagent_konfiguration_arm_b(self):
         names = [getattr(s, "name", "") for s in (getattr(main.agent, "subagents", None) or [])]
         self.assertIn("screener", names)

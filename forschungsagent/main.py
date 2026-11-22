@@ -212,7 +212,7 @@ Regeln (ANTI-HALLUZINATION, strikt einzuhalten):
 - ID-REGEL: Bibliotheks-IDs, Dokument-IDs, DOIs, PIIs NUR aus Tool-Ergebnissen kopieren - niemals eintippen oder aus dem Gedaechtnis. Vor Ausgabe in double_check eintragen. Bei DOI/PII zusaetzlich gegen doi.org/Verlag verifizieren (web_zitat_pruefen), Transpositionen sind typische Fehler.
 - BOUNDARIES: Schreiben NUR in die Research-Ablage (research_note_ablegen); Projekt-Libraries sind fuer den Agenten LESEN-only (dokument_lesen/zitat_pruefen/in_dokument_suchen). DOIs/PIIs vor Ausgabe mit doi_pruefen/url_status_pruefen verifizieren; Sperre (403) != 404.
 - NEGATIVBEFUND-REGEL (verbindlich): Eine Aussage wie "X existiert nicht" oder "keine Treffer" darf NUR als gesichert ausgegeben werden, wenn ALLE drei Libraries durchsucht wurden: projektdateien_auflisten (alle 3 Libraries) + projektquellen_suchen (Projekt-Libraries) + ablage_durchsuchen (Research-Ablage) + ggf. web_recherche. Sonst muss der Negativbefund als wahrscheinlich/offene_punkte deklariert werden mit Angabe, welche Libraries geprueft wurden.
-- DOUBLE-CHECK (PFLICHT vor jeder Antwort): Jede wörtliche Angabe, jede Zahl, jede ID MUSS mit zitat_pruefen / web_zitat_pruefen / dokument_lesen gegen die Quelle verifiziert und im Feld double_check mit Tool-Ergebnis eingetragen werden. B3-2 PRO CLAIM: Jede belegte_aussage braucht einen passenden double_check-Eintrag (angabe deckt die Aussage ab); zusaetzlich globaler Backstop Verifizierungsquote >= 0.8 (0.5 hiesse: im Mittel jeder 2. Claim ohne Nachweis). Wird hart im Hook durchgesetzt. Nicht verifizierbare Angaben duerfen nicht als Fakt ausgegeben werden - nur als offene_punkte.
+- DOUBLE-CHECK (PFLICHT vor jeder Antwort): Jede wörtliche Angabe, jede Zahl, jede ID MUSS mit zitat_pruefen / web_zitat_pruefen / dokument_lesen gegen die Quelle verifiziert und im Feld double_check mit Tool-Ergebnis eingetragen werden. B3-2 PRO CLAIM: Jede belegte_aussage braucht einen passenden double_check-Eintrag (angabe deckt die Aussage ab); zusaetzlich globaler Backstop Verifizierungsquote >= 0.8 (0.5 hiesse: im Mittel jeder 2. Claim ohne Nachweis). Wird hart im Hook durchgesetzt. double_check.ergebnis kurz halten (max 500 Zeichen: Befund found=true/false + Fundstelle/Seite - KEIN Tool-Protokoll; das Langprotokoll gehoert in die Ablage-Notiz, nicht in die Antwort; gesamt max 4000 Zeichen). Nicht verifizierbare Angaben duerfen nicht als Fakt ausgegeben werden - nur als offene_punkte.
 - ARITHMETIK: Zahlen immer gegen die Quelle pruefen und auf interne Konsistenz (z. B. Teilsummen) kontrollieren; bei Widerspruch -> offene_punkte, nie runden/erfinden.
 - ABLAGE: Bei Ablage-Anforderungen entweder Datei mit research_note_ablegen sichern oder ausdruecklich "nicht abgelegt" melden - keine konditionalen Angaben.
 - TOOL-LIBRARY-ZUORDNUNG (verbindlich): projektquellen_suchen = NUR Grammatik-statt-Stil-Bibliothek (01a1843c-...) + Katalogstadt (01a182d2-...); ablage_durchsuchen = NUR Research-Ablage (01a1b7a7-...); projektdateien_auflisten = ALLE vier Libraries (2 Projekt-Libraries + Research-Ablage + Apparat-Bibliothek); zitat_pruefen/text_content = exakter Volltext fuer Zitate aus JEDER Library.
@@ -325,8 +325,8 @@ def _client():
     key = os.environ.get("PROJECT_MISTRAL_API_KEY")
     try:
         if key:
-            return _ClientWrap(get_mistral_client(api_key=key, timeout=120))
-        return _ClientWrap(get_mistral_client(run_as="auto", timeout=120))
+            return _ClientWrap(get_mistral_client(api_key=key, timeout=300))
+        return _ClientWrap(get_mistral_client(run_as="auto", timeout=300))
     except TypeError:
         if key:
             return _ClientWrap(get_mistral_client(api_key=key))
@@ -1115,6 +1115,15 @@ class QuoteAuditHook(agents.Hook):
         return None
 
     async def post_llm_call(self, ctx, result):
+        # Harness-Regel: ein geworfener Hook-Fehler beendet den Turn hart ("Hook failed ...").
+        # Niemals werfen - bei internem Fehler Continue (None) liefern.
+        try:
+            return await self._post_llm_call_impl(ctx, result)
+        except Exception as e:
+            logger.warning("post_llm_call internal error swallowed: %.200s", e)
+            return None
+
+    async def _post_llm_call_impl(self, ctx, result):
         self.llm_calls += 1
         if getattr(result, "tool_calls", None):
             self.no_tool_streak = 0
@@ -1171,7 +1180,8 @@ class QuoteAuditHook(agents.Hook):
         # Wiederholungs-Loop in der Texterstellung (z. B. Dokumentation): aehnliche Antworten ohne Tool-Calls
         import difflib
         norm_text = _norm(text)
-        if norm_text and len(norm_text) > 200:
+        # CPU-Deckel: SequenceMatcher ist O(n^2) - nur auf begrenzten Texten (Hook = Temporal-Activity)
+        if norm_text and 200 < len(norm_text) <= 8000:
             sim = max((difflib.SequenceMatcher(None, norm_text, prev).ratio() for prev in self.last_texts[-3:]), default=0.0)
             if sim >= 0.90:
                 self.rep_streak += 1
@@ -1180,7 +1190,7 @@ class QuoteAuditHook(agents.Hook):
                 return agents.retry("STOPP: Diese Antwort aehnelt der vorherigen zu stark (%.0f%%) ohne neuen Werkzeugaufruf. Wiederhole dich nicht - fuege nur NEUE, belegte Inhalte hinzu oder schliesse ab." % (sim * 100))
             else:
                 self.rep_streak = 0
-        self.last_texts = (self.last_texts + [norm_text])[-5:]
+        self.last_texts = (self.last_texts + [norm_text[:8000]])[-5:]
         try:
             data = _json.loads(text)
         except Exception:
@@ -1216,6 +1226,7 @@ class QuoteAuditHook(agents.Hook):
                 problems.append("Zitat nur normalisiert verifiziert (found=True, nicht zeichen-exakt) - laut Woertlichkeitsregel nur als Paraphrase, nicht in verbatim_zitate: " + qt[:80])
         search_tools = _SEARCH_TOOLS
         all_text = _norm(str(data.get("zusammenfassung", "")) + " " + str(data.get("offene_punkte", "")) + " " + str(data.get("belegte_aussagen", "")))
+        all_text = all_text[:20000]  # Regex-Eingaben deckeln (Hook laeuft als Temporal-Activity)
         neg_words = ["nicht gefunden", "nicht lesbar", "nicht existiert", "nicht auffindbar", "keine treffer"]
         # nur bei echtem Dokument-/Quellenbezug pruefen (UUID, URL, DOI, "Dokument"), nicht bei reinen Chat-Antworten
         has_source_ref = bool(_re.search(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|https?://|doi:|dokument", all_text.lower()))
@@ -1266,8 +1277,8 @@ class QuoteAuditHook(agents.Hook):
         if _n_aus > 0:
             _q = min(1.0, _n_dc / _n_aus)
             _angegeben = float(data.get("verifizierungsquote") or 0.0)
-            _dc_texts = [_norm(str(d.get("angabe", ""))) for d in (data.get("double_check") or []) if isinstance(d, dict)]
-            for a in data.get("belegte_aussagen") or []:
+            _dc_texts = [_norm(str(d.get("angabe", ""))) for d in (data.get("double_check") or []) if isinstance(d, dict)][:50]
+            for a in (data.get("belegte_aussagen") or [])[:50]:
                 if not isinstance(a, dict):
                     continue
                 _at = _norm(str(a.get("aussage", "")))
@@ -1289,6 +1300,13 @@ class QuoteAuditHook(agents.Hook):
                 problems.append("Verifizierungsquote zu niedrig: %.0f%% (Backstop min. 80%%; 0.5 hiesse im Mittel jeder 2. Claim ohne Nachweis)" % (_q * 100))
             if abs(_angegeben - _q) > 0.2:
                 problems.append("verifizierungsquote (%.2f) weicht von tatsaechlicher Quote (%.2f) ab" % (_angegeben, _q))
+        # Protokoll-Kurzregel: double_check.ergebnis kompakt halten (Hook-QA); Langprotokoll -> Ablage-Notiz
+        for _d in data.get("double_check") or []:
+            if isinstance(_d, dict) and len(str(_d.get("ergebnis", ""))) > 500:
+                problems.append("double_check.ergebnis zu lang (>500 Zeichen) - nur Kurzergebnis mit Fundstelle, kein Protokoll: " + str(_d.get("ergebnis", ""))[:80])
+        _dc_ges = sum(len(str(_d.get("ergebnis", ""))) for _d in (data.get("double_check") or []) if isinstance(_d, dict))
+        if _dc_ges > 4000:
+            problems.append("double_check gesamt zu lang (%d Zeichen, max 4000) - Langprotokoll in die Ablage-Notiz, nicht in die Antwort" % _dc_ges)
         # B3-3: Lizenz-/Zugangs-Sidecar bei Volltext-Quellen (Rechtsrisiko, Scan-Fall)
         for q in data.get("quellen") or []:
             if not isinstance(q, dict):
