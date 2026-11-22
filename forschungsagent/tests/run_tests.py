@@ -433,6 +433,37 @@ class SessionStartOptTests(unittest.TestCase):
         self.assertEqual(s.count("@_tool_guard\n@agents.tool"), 19)
 
 
+class AblageInkrementellTests(unittest.TestCase):
+    """Optionen 1+2: inkrementelle Ablage + Splitten grosser Aufgaben (Turn-Limit-sicher)."""
+
+    def test_ablage_pflicht_inkrementell_und_split(self):
+        with open(main.__file__, encoding="utf-8") as _f:
+            s = _f.read()
+        self.assertIn("INKREMENTELL ABLEGEN", s)
+        self.assertIn("SOFORT ab, sobald substantielle Befunde vorliegen", s)
+        self.assertIn("Grosse Aufgaben SPLITTEN", s)
+        self.assertIn("Turn-Limit-Stopp (Hook-Reject ab Iteration 17/18)", s)
+        self.assertIn("INKREMENTELL vorgehen", s)  # Schritt 5 der Arbeitsweise
+
+    def test_iterationslimit_hook_bleibt_17_18(self):
+        with open(main.__file__, encoding="utf-8") as _f:
+            s = _f.read()
+        self.assertIn("self.llm_calls >= 17", s)
+        self.assertIn("Iterationslimit (17/18) erreicht", s)
+
+    def test_kurze_kernzusammenfassung_caps_500_800(self):
+        with open(main.__file__, encoding="utf-8") as _f:
+            s = _f.read()
+        # Hook-Caps hart auf 500/800 heruntergesetzt
+        self.assertIn('zusammenfassung zu lang (>500 Zeichen)', s)
+        self.assertIn('arbeitsupdate zu lang (>800 Zeichen)', s)
+        self.assertIn('len(str(data.get("zusammenfassung", ""))) > 500', s)
+        self.assertIn('len(str(data.get("arbeitsupdate", ""))) > 800', s)
+        # Regeltext: eigene Kernzusammenfassung, KEIN Tool-/Quellen-Protokoll in der Antwort
+        self.assertIn("zusammenfassung max. 500 Zeichen, arbeitsupdate max. 800 Zeichen", s)
+        self.assertIn("KEINE Aufzaehlung von Tool-Calls, Quellen-IDs, DOIs, URLs", s)
+
+
 
 
 class SdkRetryTests(unittest.TestCase):
@@ -550,20 +581,20 @@ class ToolGuardAndLaengenTests(unittest.TestCase):
 
     def test_arbeitsupdate_zu_lang_retry(self):
         import json
-        payload = json.dumps({"zusammenfassung": "ok", "arbeitsupdate": "x" * 2501, "belegte_aussagen": [], "double_check": [], "verifizierungsquote": 1.0})
+        payload = json.dumps({"zusammenfassung": "ok", "arbeitsupdate": "x" * 801, "belegte_aussagen": [], "double_check": [], "verifizierungsquote": 1.0})
         res = self._post(payload)
         self.assertIsNotNone(res)
         self.assertIn("zu lang", str(getattr(res, "message", res)))
 
     def test_zusammenfassung_zu_lang_retry(self):
         import json
-        payload = json.dumps({"zusammenfassung": "x" * 1501, "arbeitsupdate": "kurz", "belegte_aussagen": [], "double_check": [], "verifizierungsquote": 1.0})
+        payload = json.dumps({"zusammenfassung": "x" * 501, "arbeitsupdate": "kurz", "belegte_aussagen": [], "double_check": [], "verifizierungsquote": 1.0})
         res = self._post(payload)
         self.assertIsNotNone(res)
 
     def test_kurze_antwort_ok(self):
         import json
-        payload = json.dumps({"zusammenfassung": "x" * 1500, "arbeitsupdate": "y" * 2500, "belegte_aussagen": [], "double_check": [], "verifizierungsquote": 1.0})
+        payload = json.dumps({"zusammenfassung": "x" * 500, "arbeitsupdate": "y" * 800, "belegte_aussagen": [], "double_check": [], "verifizierungsquote": 1.0})
         self.assertIsNone(self._post(payload))
 
     def test_alle_tools_guarded(self):
