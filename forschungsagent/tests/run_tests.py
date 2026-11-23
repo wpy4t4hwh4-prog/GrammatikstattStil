@@ -320,6 +320,17 @@ class StaticSourceTests(unittest.TestCase):
         self.assertIn("_task_for_today()", bc)
         self.assertIn("selbst-eval-", bc)
 
+    def test_background_check_retry_mit_frischer_session(self):
+        # Cron-Fix: bei invalid_command/HarnessCommandRejectedError einmal Retry mit NEUER Session
+        with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "background_check.py"), encoding="utf-8") as _f:
+            bc = _f.read()
+        self.assertIn("def _run_once(agent)", bc)
+        self.assertGreaterEqual(bc.count("agent.start_session()"), 1)
+        self.assertIn("for attempt in (1, 2):", bc)
+        self.assertIn("invalid_command", bc)
+        self.assertIn("HarnessCommandRejectedError", bc)
+        self.assertIn("await asyncio.sleep(5)", bc)
+
     def test_aktualisieren_deletes_predecessor(self):
         self.assertIn("delete_async(library_id=NOTES_LIBRARY_ID, document_id=document_id)", self.src)
 
