@@ -4,6 +4,7 @@ Run: uv run python tests/run_tests.py  (aus forschungsagent/)
 Keine Netzwerk- oder API-Calls.
 """
 import asyncio
+import json
 import os
 import sys
 import types
@@ -462,6 +463,48 @@ class AblageInkrementellTests(unittest.TestCase):
         # Regeltext: eigene Kernzusammenfassung, KEIN Tool-/Quellen-Protokoll in der Antwort
         self.assertIn("zusammenfassung max. 500 Zeichen, arbeitsupdate max. 800 Zeichen", s)
         self.assertIn("KEINE Aufzaehlung von Tool-Calls, Quellen-IDs, DOIs, URLs", s)
+
+
+class AntwortKurzCapsTests(unittest.TestCase):
+    """Anti-Endlos: GESAMTES JSON max 6000 Zeichen + Listen-Caps (Hook-QA)."""
+
+    def setUp(self):
+        self._old = main._SDK_RETRY_BASE
+        main._SDK_RETRY_BASE = 0.0
+        self.hook = main.QuoteAuditHook()
+        asyncio.run(self.hook.pre_agent_turn(None, None))
+
+    def tearDown(self):
+        main._SDK_RETRY_BASE = self._old
+
+    def _post(self, payload):
+        return asyncio.run(self.hook.post_llm_call(None, _reply(json.dumps(payload), None)))
+
+    def test_gesamtlaenge_json_cap_6000(self):
+        payload = {"zusammenfassung": "ok", "arbeitsupdate": "ok", "belegte_aussagen": [], "double_check": [],
+                   "verifizierungsquote": 1.0, "offene_punkte": ["z" * 700] * 10}
+        res = self._post(payload)
+        self.assertIsNotNone(res)
+        self.assertIn("gesamte JSON-Antwort zu lang", str(getattr(res, "message", res)))
+
+    def test_listen_caps(self):
+        payload = {"zusammenfassung": "ok", "arbeitsupdate": "ok", "belegte_aussagen": [], "double_check": [],
+                   "verifizierungsquote": 1.0, "offene_punkte": ["p"] * 11}
+        res = self._post(payload)
+        self.assertIsNotNone(res)
+        self.assertIn("offene_punkte hat 11 Eintraege (max 10)", str(getattr(res, "message", res)))
+
+    def test_kurze_antwort_mit_begrenzten_listen_ok(self):
+        payload = {"zusammenfassung": "ok", "arbeitsupdate": "ok", "belegte_aussagen": [], "double_check": [],
+                   "verifizierungsquote": 1.0, "offene_punkte": ["p1", "p2"], "quellen": [], "deutungen": [], "verbatim_zitate": []}
+        self.assertIsNone(self._post(payload))
+
+    def test_statische_caps_im_quelltext(self):
+        with open(main.__file__, encoding="utf-8") as _f:
+            s = _f.read()
+        self.assertIn("len(text) > 6000", s)
+        self.assertIn('("belegte_aussagen", 8), ("double_check", 8), ("quellen", 8)', s)
+        self.assertIn("GESAMTES JSON max. 6000 Zeichen", s)
 
 
 
