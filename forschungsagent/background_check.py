@@ -34,20 +34,37 @@ def _task_for_today() -> str:
     return TASK
 
 
+async def _run_once(agent):
+    """Eine frische Session starten und den Tagesauftrag ausfuehren. Liefert (session_id, out)."""
+    session = await agent.start_session()
+    print("SESSION:", session.id)
+    try:
+        turn = await session.run(_task_for_today())
+        out = str(getattr(turn, "output", None) or turn)
+    except Exception as e:
+        out = "Failed(%s)" % e
+    return session.id, out
+
+
 async def main() -> int:
     if not os.getenv("MISTRAL_API_KEY"):
         print("MISTRAL_API_KEY fehlt", file=sys.stderr)
         return 2
     agent = agents.Agent.load_from(agent_name="grammatik-statt-stil-research")
-    session = await agent.start_session()
-    print("SESSION:", session.id)
-    turn = await session.run(_task_for_today())
-    out = str(getattr(turn, "output", None) or turn)
-    if "Failed" in out:
-        print("TURN FAILED:", out[:500], file=sys.stderr)
-        return 1
-    print(out[:1000])
-    return 0
+    # Retry mit FRISCHER Session: bei Harness-Fehlalahan wie "invalid_command"
+    # (z. B. nach Stream-Drop/Reconnect wird der Command vom Worker abgelehnt,
+    #  public message: "This session failed. Please start a new one.") einmal neu versuchen.
+    for attempt in (1, 2):
+        sid, out = await _run_once(agent)
+        failed = ("Failed" in out) or ("invalid_command" in out) or ("HarnessCommandRejectedError" in out)
+        if not failed:
+            print(out[:1000])
+            return 0
+        print("TURN FAILED (attempt %d, session %s):" % (attempt, sid), out[:500], file=sys.stderr)
+        if attempt == 2:
+            return 1
+        await asyncio.sleep(5)
+    return 1
 
 
 if __name__ == "__main__":
