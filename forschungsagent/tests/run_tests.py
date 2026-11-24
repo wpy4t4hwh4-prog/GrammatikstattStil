@@ -188,7 +188,7 @@ class HookLoopTests(unittest.TestCase):
         import json
         payload = json.dumps({
             "zusammenfassung": "x",
-            "belegte_aussagen": [{"aussage": "a%d" % i, "quelle": "q", "evidenzgrad": "wahrscheinlich"} for i in range(4)],
+            "belegte_aussagen": [{"aussage": "a%d" % i, "quelle": "q", "evidenzgrad": "wahrscheinlich"} for i in range(2)],
             "double_check": [{"angabe": "a0", "pruef_tool": "dokument_lesen", "ergebnis": "ok"}],
             "verifizierungsquote": 0.25,
         })
@@ -771,10 +771,9 @@ class Runde2B3Tests(unittest.TestCase):
         payload = json.dumps({
             "zusammenfassung": "x",
             "belegte_aussagen": [
-                {"aussage": "Haussmann leitete die Pariser Stadterneuerung 1853-1870", "quelle": "q", "evidenzgrad": "wahrscheinlich"},
                 {"aussage": "Die Wiener Ringstrasse wurde 1865 eroeffnet", "quelle": "q", "evidenzgrad": "wahrscheinlich"},
             ],
-            "double_check": [{"angabe": "Haussmann leitete die Pariser Stadterneuerung 1853-1870", "pruef_tool": "dokument_lesen", "ergebnis": "ok"}],
+            "double_check": [],
             "verifizierungsquote": 0.5,
         })
         res = self._post(payload)
