@@ -188,7 +188,7 @@ class HookLoopTests(unittest.TestCase):
         import json
         payload = json.dumps({
             "zusammenfassung": "x",
-            "belegte_aussagen": [{"aussage": "a%d" % i, "quelle": "q", "evidenzgrad": "wahrscheinlich"} for i in range(4)],
+            "belegte_aussagen": [{"aussage": "a%d" % i, "quelle": "q", "evidenzgrad": "wahrscheinlich"} for i in range(2)],
             "double_check": [{"angabe": "a0", "pruef_tool": "dokument_lesen", "ergebnis": "ok"}],
             "verifizierungsquote": 0.25,
         })
@@ -518,6 +518,34 @@ class AntwortKurzCapsTests(unittest.TestCase):
         self.assertIn("GESAMTES JSON max. 6000 Zeichen", s)
 
 
+class LoopFixB3Tests(unittest.TestCase):
+    """B3-Optionen (a),(b),(d),(e): Transparency-Klarstellung, Tool-Result-Caps, Retry-Feedback top3, qa-stats-Logging."""
+
+    def setUp(self):
+        with open(main.__file__, encoding="utf-8") as _f:
+            self.src = _f.read()
+
+    def test_a_transparency_klarstellung(self):
+        self.assertIn("EIGENE fruehere Assistant-Nachricht im selben Turn", self.src)
+        self.assertIn("die LETZTE Nachricht des Turns ist AUSSCHLIESSLICH das nackte JSON", self.src)
+
+    def test_b_tool_result_caps(self):
+        self.assertIn("Default 8000, max 12000", self.src)          # webseite_lesen
+        self.assertIn("min(max(max_zeichen, 500), 12000)", self.src)
+        self.assertIn("text[:8000]", self.src)                        # pdf_ocr
+        self.assertIn("pdf_in_ablage_speichern + in_dokument_suchen", self.src)
+
+    def test_d_retry_feedback_top3(self):
+        self.assertIn('" | ".join(problems[:3])', self.src)
+        self.assertIn('(+%d weitere)', self.src)
+
+    def test_e_qa_stats_logging(self):
+        self.assertIn('logger.info("qa-stats llm_calls=%d text_len=%d', self.src)
+
+    def test_iterationslimit_bleibt_18(self):
+        self.assertIn("max_iterations=18", self.src)  # Option (c): 18 halten, keine Aenderung
+
+
 
 
 class SdkRetryTests(unittest.TestCase):
@@ -754,10 +782,9 @@ class Runde2B3Tests(unittest.TestCase):
         payload = json.dumps({
             "zusammenfassung": "x",
             "belegte_aussagen": [
-                {"aussage": "Haussmann leitete die Pariser Stadterneuerung 1853-1870", "quelle": "q", "evidenzgrad": "wahrscheinlich"},
                 {"aussage": "Die Wiener Ringstrasse wurde 1865 eroeffnet", "quelle": "q", "evidenzgrad": "wahrscheinlich"},
             ],
-            "double_check": [{"angabe": "Haussmann leitete die Pariser Stadterneuerung 1853-1870", "pruef_tool": "dokument_lesen", "ergebnis": "ok"}],
+            "double_check": [],
             "verifizierungsquote": 0.5,
         })
         res = self._post(payload)

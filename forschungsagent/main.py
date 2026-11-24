@@ -128,7 +128,7 @@ Dein dauerhaftes Gedächtnis ist die Research-Ablage. Innerhalb einer laufenden 
 
 TURN-ABSCHLUSS (verbindlich): Sobald der Arbeitsauftrag vollständig abgearbeitet und die Abschluss-Zusammenfassung geliefert ist, beendest du den Turn sofort und vollständig: genau eine Abschlussnachricht, keine weiteren Werkzeugaufrufe, kein Nachschieben weiterer Abschluss-Bekundungen oder ähnlich klingender Wiederholungen. Der Turn endet von selbst, sobald du keine weiteren Ausgaben mehr erzeugst; versuche nicht, den Prozess von innen zu beenden, und verfalle nicht in eine Schleife aus wiederholten Abschluss-Aussagen. Bleibt eine Aufgabe offen oder blockiert, dokumentiere das nach E6 und schließe dann ebenfalls mit einer einzigen Abschlussnachricht.
 
-ABSCHLUSS-ANTWORT-FORMAT (verbindlich): Die letzte Antwort eines Turns ist AUSSCHLIEßLICH ein einzelnes nacktes JSON-Objekt (ResearchAnswer) — KEIN Markdown-Fence (```json), KEIN Text davor oder danach, KEINE zweite oder dritte JSON-Antwort. Alle Keys und String-Werte nur mit ASCII-Double-Quotes (U+0022 "), niemals typografische Anführungszeichen („ “ ‚ ‘). zusammenfassung max. 500 Zeichen, arbeitsupdate max. 800 Zeichen (Harte QA im Hook). UMFANG: Die sichtbare Abschlussantwort bleibt KURZ - zusammenfassung/arbeitsupdate sind eine EIGENE Kernzusammenfassung in eigenen Worten fuer den Auftraggeber: KEINE Aufzaehlung von Tool-Calls, Quellen-IDs, DOIs, URLs oder Seitenangaben in diesen beiden Feldern; das ausfuehrliche Protokoll (was wurde gemacht) liegt AUSSCHLIESSLICH in der Ablage-Notiz. Das AUSFUEHRLICHE, praezise Protokoll gehoert AUSSCHLIESSLICH in die Research-Ablage (research_note_ablegen / research_note_aktualisieren; session-summary schreibt der Hook automatisch) - niemals als langer Text in die Abschlussantwort. GESAMTES JSON max. 6000 Zeichen (harte Hook-QA); Listen begrenzt: belegte_aussagen/double_check/quellen max. 8, offene_punkte max. 10, verbatim_zitate/deutungen max. 5 Eintraege - Kern in der Antwort, komplettes Protokoll AUSSCHLIESSLICH in der Ablage-Notiz.
+ABSCHLUSS-ANTWORT-FORMAT (verbindlich): Die letzte Antwort eines Turns ist AUSSCHLIEßLICH ein einzelnes nacktes JSON-Objekt (ResearchAnswer) — KEIN Markdown-Fence (```json), KEIN Text davor oder danach, KEINE zweite oder dritte JSON-Antwort. Alle Keys und String-Werte nur mit ASCII-Double-Quotes (U+0022 "), niemals typografische Anführungszeichen („ “ ‚ ‘). zusammenfassung max. 500 Zeichen, arbeitsupdate max. 800 Zeichen (Harte QA im Hook). UMFANG: Die sichtbare Abschlussantwort bleibt KURZ - zusammenfassung/arbeitsupdate sind eine EIGENE Kernzusammenfassung in eigenen Worten fuer den Auftraggeber: KEINE Aufzaehlung von Tool-Calls, Quellen-IDs, DOIs, URLs oder Seitenangaben in diesen beiden Feldern; das ausfuehrliche Protokoll (was wurde gemacht) liegt AUSSCHLIESSLICH in der Ablage-Notiz. Das AUSFUEHRLICHE, praezise Protokoll gehoert AUSSCHLIESSLICH in die Research-Ablage (research_note_ablegen / research_note_aktualisieren; session-summary schreibt der Hook automatisch) - niemals als langer Text in die Abschlussantwort. GESAMTES JSON max. 6000 Zeichen (harte Hook-QA); Listen begrenzt: belegte_aussagen/double_check/quellen max. 8, offene_punkte max. 10, verbatim_zitate/deutungen max. 5 Eintraege - Kern in der Antwort, komplettes Protokoll AUSSCHLIESSLICH in der Ablage-Notiz. Klarstellung: Die Hook-Transparenzmeldung gibst du als EIGENE fruehere Assistant-Nachricht im selben Turn (reiner Text, kein JSON, enthaelt nicht das Wort 'zusammenfassung'); die LETZTE Nachricht des Turns ist AUSSCHLIESSLICH das nackte JSON - 'kein Text davor/danach' bezieht sich auf diese letzte Nachricht, nicht auf den ganzen Turn.
 
 ABLAGE-PFLICHT (verbindlich): Jeder Turn, in dem du Recherche-Werkzeuge aufgerufen hast (ablage_durchsuchen, projektquellen_suchen, web_recherche, dokument_lesen, in_dokument_suchen, zitat_pruefen, web_zitat_pruefen, projektdateien_auflisten, dokument_finden, bibliotheken_auflisten, aktuelles_datum, pdf_ocr, pdf_in_ablage_speichern, json_api_abfrage, webseite_lesen, doi_pruefen, url_status_pruefen), MUSS vor der JSON-Abschlussantwort genau eine Notiz per research_note_ablegen (bzw. research_note_aktualisieren bei Korrektur) in der Research-Ablage ablegen. INKREMENTELL ABLEGEN: Lege die Notiz SOFORT ab, sobald substantielle Befunde vorliegen - NICHT erst unmittelbar vor der JSON-Antwort. Grosse Aufgaben SPLITTEN: Bei umfangreichen Aufgaben (z. B. Volltextkollation mehrerer Positionen, Batch-Screening) pro Position/Teilschritt EIGENE Notiz (research_note_ablegen) und bei Bedarf eigener Turn - so geht bei einem Turn-Limit-Stopp (Hook-Reject ab Iteration 17/18) kein Befund verloren.
 
@@ -805,7 +805,7 @@ async def pdf_ocr(
         resp = await client.ocr.process_async(model="mistral-ocr-4-1", document={"type": "document_url", "document_url": url})
         pages = getattr(resp, "pages", []) or []
         text = "\n\n".join(getattr(p, "markdown", "") or "" for p in pages)
-        return {"url": url, "seiten": len(pages), "laenge": len(text), "text": text[:10000] + (" ... [gekürzt]" if len(text) > 10000 else "")}
+        return {"url": url, "seiten": len(pages), "laenge": len(text), "text": text[:8000] + (" ... [gekürzt, Details via pdf_in_ablage_speichern + in_dokument_suchen]" if len(text) > 8000 else "")}
     except Exception as e:
         return {"url": url, "fehler": str(e)[:300]}
 
@@ -841,9 +841,9 @@ async def pdf_in_ablage_speichern(
 @agents.tool
 async def webseite_lesen(
     url: Annotated[str, Field(description="Exakte URL (aus Tool-Ausgabe/Quelle, nie geraten).")] = "",
-    max_zeichen: Annotated[int, Field(description="Max. Zeichen (Default 20000, max 40000).")] = 20000,
+    max_zeichen: Annotated[int, Field(description="Max. Zeichen (Default 8000, max 12000; groessere Texte kosten History/Kontext - Details via Ablage/in_dokument_suchen).")] = 8000,
 ) -> dict:
-    """Laedt eine Webseite und liefert den kompletten lesbaren Text (HTML-Tags entfernt, gekuerzt). Fuer Volltext-Sichtung von Webquellen."""
+    """Laedt eine Webseite und liefert den lesbaren Text (HTML-Tags entfernt, gekuerzt auf Default 8000 Z.). Fuer Volltext-Sichtung von Webquellen; laengere Ausschnitte gezielt per Ablage."""
     import re as _re3, html as _html
     if not url:
         return {"fehler": "url fehlt - nur exakte URLs aus Tool-Ausgaben verwenden."}
@@ -856,7 +856,7 @@ async def webseite_lesen(
         text = _html.unescape(raw)
         text = _re3.sub(r"[ \t]+", " ", text)
         text = _re3.sub(r"\n\s*\n+", "\n\n", text).strip()
-        max_zeichen = min(max(max_zeichen, 500), 40000)
+        max_zeichen = min(max(max_zeichen, 500), 12000)
         return {"url": url, "http_status": 200, "laenge_gesamt": len(text), "text": text[:max_zeichen] + (" ... [gekuerzt]" if len(text) > max_zeichen else "")}
     except Exception as e:
         return {"url": url, "fehler": str(e)[:300]}
@@ -1209,6 +1209,7 @@ class QuoteAuditHook(agents.Hook):
                 return agents.retry("STOPP: Diese Antwort aehnelt der vorherigen zu stark (%.0f%%) ohne neuen Werkzeugaufruf. Wiederhole dich nicht - fuege nur NEUE, belegte Inhalte hinzu oder schliesse ab." % (sim * 100))
             else:
                 self.rep_streak = 0
+        logger.info("qa-stats llm_calls=%d text_len=%d fences=%d zus=%d chars_kum=%d retries=%d", self.llm_calls, len(text), self.turn_fences, self.turn_zus, self.turn_chars, self.retries)
         self.last_texts = (self.last_texts + [norm_text[:8000]])[-5:]
         try:
             data = _json.loads(text)
@@ -1352,7 +1353,7 @@ class QuoteAuditHook(agents.Hook):
                 problems.append("%s hat %d Eintraege (max %d) - Kern-Eintraege in der Antwort, Rest in die Ablage-Notiz" % (_feld, len(_lst), _cap))
         if not problems:
             return None
-        feedback = ("VERBOTEN: " + " | ".join(problems) +
+        feedback = ("VERBOTEN: " + " | ".join(problems[:3]) + ((" (+%d weitere)" % (len(problems) - 3)) if len(problems) > 3 else "") +
                     ". Regeln: wörtliche Zitate nur mit zitat_pruefen/web_zitat_pruefen found=True in DIESEM Turn; "
                     "Negativbefunde nur nach dokument_lesen/ablage_durchsuchen/projektquellen_suchen/projektdateien_auflisten-Call mit dokumentiertem Ergebnis in double_check.")
         if self.retries < 2:
