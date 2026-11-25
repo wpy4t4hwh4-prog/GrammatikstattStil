@@ -1,13 +1,13 @@
 /* Research Hub Service Worker.
    Strategie: /api/* = network-first (Live-Daten frisch, Cache als Offline-Fallback nur bei GET);
    statische Assets = cache-first mit Runtime-Caching. Version bei Aenderungen erhoehen. */
-const CACHE = 'research-hub-v2';
+const CACHE = 'research-hub-v3';
 // data/project.json ist OPTIONAL (gitignored; auf GitHub Pages 404) - einzeln precachen,
 // damit ein 404 das SW-Install nicht killt (addAll wuerde sonst komplett fehlschlagen).
 const PRECACHE = [
   './', 'index.html', 'manifest.webmanifest',
   'data/sample-data.js', 'data/templates.json',
-  'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-180.png'
+  'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-180.png', 'icons/icon-512-maskable.png'
 ];
 
 self.addEventListener('install', e => {
@@ -44,6 +44,17 @@ self.addEventListener('fetch', e => {
           { status: 200, headers: { 'Content-Type': 'application/json; charset=utf-8' } }
         ))
       )
+    );
+    return;
+  }
+
+  // App-Shell: Navigationen network-first, Offline-Fallback auf gecachte index.html
+  if (e.request.mode === 'navigate') {
+    e.respondWith(
+      fetch(e.request).then(res => {
+        if (res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put('index.html', copy)); }
+        return res;
+      }).catch(() => caches.match('index.html').then(c => c || caches.match('./')))
     );
     return;
   }

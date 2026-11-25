@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="format-detection" content="telephone=no">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png">
 <meta name="apple-mobile-web-app-title" content="Research Hub">
 <title>Grammatik statt Stil — Research Dashboard</title>
 <style>
@@ -761,6 +761,12 @@ document.querySelectorAll('nav button').forEach(b => b.addEventListener('click',
   if (b.dataset.page === 'bib') loadLibs();
   if (b.dataset.page === 'text') loadTextTab();
 }));
+
+/* ---- PWA-Deep-Links: ?tab=... oder #tab=... aktiviert den Tab (App-Shortcuts aus dem Manifest) ---- */
+(function () {
+  var m = (location.search.match(/[?&]tab=([a-z]+)/) || location.hash.match(/#tab=([a-z]+)/) || [])[1];
+  if (m) { var b = document.querySelector('nav button[data-page="' + m + '"]'); if (b) b.click(); }
+})();
 
 loadData(); liveTick(); touchUpd(); setInterval(liveTick, 30000);
 
