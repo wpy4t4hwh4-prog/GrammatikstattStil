@@ -1092,5 +1092,47 @@ class StartPromptV5Tests(unittest.TestCase):
             self.assertIn(needle, bc)
 
 
+class PwaAppTests(unittest.TestCase):
+    """Dashboard als installierbare App (PWA): Manifest vollstaendig, iOS-Meta, SW v3 App-Shell, Deep-Links."""
+
+    def _dash(self):
+        return os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + '/../dashboard'
+
+    def test_manifest_install_kriterien(self):
+        import json
+        with open(os.path.join(self._dash(), 'manifest.webmanifest'), encoding='utf-8') as _f:
+            m = json.load(_f)
+        self.assertIn('name', m) and self.assertIn('short_name', m)
+        self.assertEqual(m['display'], 'standalone')
+        self.assertIn('start_url', m) and self.assertIn('scope', m)
+        self.assertEqual(m.get('id'), './')
+        sizes = {i['sizes'] for i in m['icons']}
+        self.assertIn('192x192', sizes) and self.assertIn('512x512', sizes)
+        self.assertTrue(any(i.get('purpose') == 'maskable' for i in m['icons']))
+        self.assertTrue(m.get('shortcuts'), 'App-Shortcuts fehlen')
+        for sc in m['shortcuts']:
+            self.assertIn('url', sc) and self.assertIn('name', sc)
+            self.assertIn('tab=', sc['url'])
+
+    def test_index_ios_meta_und_deeplink(self):
+        with open(os.path.join(self._dash(), 'index.html'), encoding='utf-8') as _f:
+            s = _f.read()
+        self.assertIn('apple-mobile-web-app-capable', s)
+        self.assertIn('apple-touch-icon', s)
+        self.assertIn('name="theme-color"', s)
+        self.assertIn('rel="manifest"', s)
+        self.assertIn('[?&]tab=', s)          # Deep-Link ?tab= aus App-Shortcuts
+        self.assertIn('#tab=', s)
+        self.assertNotIn('<script', s.split('<script>')[1].split('</script>')[0].lower())  # PR-#17-Regression
+
+    def test_sw_v3_app_shell(self):
+        with open(os.path.join(self._dash(), 'sw.js'), encoding='utf-8') as _f:
+            sw = _f.read()
+        self.assertIn("const CACHE = 'research-hub-v3';", sw)
+        self.assertIn('icon-512-maskable.png', sw)                 # maskable Icon precachen
+        self.assertIn("e.request.mode === 'navigate'", sw)         # App-Shell: Navigation network-first
+        self.assertIn("caches.match('index.html')", sw)             # Offline-Fallback Shell
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
