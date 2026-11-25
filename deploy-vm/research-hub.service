@@ -1,0 +1,17 @@
+[Unit]
+Description=Research-Hub Dashboard (serve.py, Live-API mit serverseitigem Mistral-Key)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/research-hub/dashboard
+EnvironmentFile=/etc/research-hub.env
+ExecStart=/usr/bin/python3 serve.py --port 8765 --host 127.0.0.1
+Restart=always
+RestartSec=3
+# Sicherheit: kein Schreibzugriff noetig ausser data/ (qv.db, outbox) innerhalb des App-Dirs
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

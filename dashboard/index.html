@@ -343,8 +343,13 @@ async function loadData() {
   loadQv(); loadAblage();
 }
 
+// Optionaler API-Basis-Pfad (z. B. wenn die statische Shell von GitHub Pages kommt und die Live-API
+// auf einer anderen Origin laeuft): <script>window.API_BASE = "https://dashboard.deinedomain.at";</script>
+// Default '' = same-origin (serve.py auf derselben VM).
+const API_BASE = (window.API_BASE || '').replace(/\/+$/, '');
+
 async function api(path, opts) {
-  try { const r = await fetch(path, opts); return r.ok ? await r.json() : null; } catch (e) { return null; }
+  try { const r = await fetch(API_BASE + path, opts); return r.ok ? await r.json() : null; } catch (e) { return null; }
 }
 
 /* ---- Übersicht ---- */
@@ -466,7 +471,7 @@ $('#hOk').addEventListener('click', async () => {
   const payload = { id: hebPos, neu_k: $('#hK').value, beleg: $('#hBeleg').value.trim(), datum: $('#hDatum').value };
   let j = {};
   try {
-    const r = await fetch('/api/qv/hebung', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    const r = await fetch(API_BASE + '/api/qv/hebung', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
     j = await r.json();
     if (!r.ok) { alert('Hebung abgelehnt: ' + (j.fehler || ('HTTP ' + r.status))); return; }
   } catch (e) { alert('Server nicht erreichbar: ' + e); return; }
@@ -487,7 +492,7 @@ $('#btnAenderungen').addEventListener('click', () => {
   p.classList.toggle('open');
   if (p.classList.contains('open')) loadAenderungen();
 });
-$('#btnExport').addEventListener('click', () => { window.location = '/api/qv/export'; });
+$('#btnExport').addEventListener('click', () => { window.location = API_BASE + '/api/qv/export'; });
 
 /* ---- Ablage-Browser (live) ---- */
 let ablageDeb = null;

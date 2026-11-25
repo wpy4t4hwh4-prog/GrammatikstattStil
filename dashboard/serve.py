@@ -425,6 +425,11 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Disposition", 'attachment; filename="%s"' % download_name)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        # CORS: statische Shell darf von anderer Origin (z. B. GitHub Pages) die Live-API rufen;
+        # Origin einschraenkbar via Env CORS_ORIGIN (Default * - nur lesende GETs/POSTs ohne Credentials)
+        self.send_header("Access-Control-Allow-Origin", os.environ.get("CORS_ORIGIN", "*"))
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
         self.wfile.write(body)
 
@@ -442,6 +447,11 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        # CORS: statische Shell darf von anderer Origin (z. B. GitHub Pages) die Live-API rufen;
+        # Origin einschraenkbar via Env CORS_ORIGIN (Default * - nur lesende GETs/POSTs ohne Credentials)
+        self.send_header("Access-Control-Allow-Origin", os.environ.get("CORS_ORIGIN", "*"))
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
         self.wfile.write(body)
 
@@ -501,6 +511,14 @@ class Handler(BaseHTTPRequestHandler):
         if u.path == "/api/templates":
             return self._json(load_templates())
         return self._json({"fehler": "not found"}, 404)
+
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self.send_header("Access-Control-Allow-Origin", os.environ.get("CORS_ORIGIN", "*"))
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Content-Length", "0")
+        self.end_headers()
 
     def do_POST(self):
         from urllib.parse import urlparse
