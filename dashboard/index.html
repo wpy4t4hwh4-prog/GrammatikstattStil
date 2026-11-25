@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f5f5f7">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#000000">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="format-detection" content="telephone=no">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<meta name="apple-mobile-web-app-title" content="Research Hub">
+<title>Grammatik statt Stil — Research Dashboard</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #f5f5f7; --card: #ffffff; --text: #1d1d1f; --muted: #86868b;
+    --accent: #0a84ff; --border: rgba(0,0,0,.08); --shadow: 0 1px 2px rgba(0,0,0,.05), 0 8px 24px rgba(0,0,0,.05);
+    --k1: #30d158; --k2: #64d2ff; --k3: #ffd60a; --k4: #ff453a; --k5: #bf5af2; --v: #8e8e93;
+    --radius: 18px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --bg: #000000; --card: #1c1c1e; --text: #f5f5f7; --muted: #98989d;
+      --accent: #0a84ff; --border: rgba(255,255,255,.12); --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.4);
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+         background: var(--bg); color: var(--text); -webkit-font-smoothing: antialiased;
+         -webkit-text-size-adjust: 100%; -webkit-tap-highlight-color: transparent; }
+  header { position: sticky; top: 0; z-index: 10; -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px);
+           background: var(--bg); background: color-mix(in srgb, var(--bg) 75%, transparent); border-bottom: 1px solid var(--border);
+           padding-top: env(safe-area-inset-top); }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; padding-left: max(24px, env(safe-area-inset-left)); padding-right: max(24px, env(safe-area-inset-right)); }
+  @media (min-width: 1400px) { .wrap { max-width: 1240px; } }
+  header .wrap { display: flex; align-items: center; justify-content: space-between; gap: 12px; height: 60px; }
+  .hright { display: flex; gap: 10px; align-items: center; min-width: 0; }
+  @media (max-width: 640px) { h1 span { display: none; } }
+  h1 { font-size: 17px; font-weight: 650; letter-spacing: -.01em; }
+  .badge { font-size: 11px; font-weight: 600; color: var(--muted); border: 1px solid var(--border);
+           border-radius: 999px; padding: 3px 10px; display: inline-flex; align-items: center; gap: 6px; }
+  .badge .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--k1); }
+  .badge.off .dot { background: var(--muted); }
+  nav { display: flex; gap: 4px; overflow-x: auto; max-width: 100%; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  nav::-webkit-scrollbar { display: none; }
+  nav button { border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 14px; font-weight: 500;
+               padding: 7px 14px; border-radius: 999px; cursor: pointer; white-space: nowrap; flex: none; }
+  nav button.active { background: var(--card); color: var(--text); box-shadow: var(--shadow); }
+  main { padding: 28px 0 64px; }
+  section.page { display: none; }
+  section.page.active { display: block; animation: fade .18s ease; }
+  @keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+  @keyframes pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(48,209,88,.45); } 50% { box-shadow: 0 0 0 5px rgba(48,209,88,0); } }
+  .badge:not(.off) .dot { animation: pulse 2.2s ease-in-out infinite; }
+  ::selection { background: rgba(10,132,255,.25); background: color-mix(in srgb, var(--accent) 25%, transparent); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  input[type="search"]:focus, select:focus, textarea:focus, dialog input:focus, dialog select:focus {
+    outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(10,132,255,.25); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+  @media (pointer: coarse) {
+    nav button { padding: 10px 16px; }
+    .btn { padding: 10px 16px; }
+    .rowbtn { padding: 7px 14px; font-size: 13px; }
+    .doclist button { padding: 13px 14px; }
+    .composer button { min-height: 44px; }
+    dialog .actions button { padding: 11px 18px; }
+  }
+  .grid { display: grid; gap: 16px; }
+  .stats { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+          box-shadow: var(--shadow); padding: 18px; }
+  .card h3 { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 8px; }
+  .card .big { font-size: 30px; font-weight: 700; letter-spacing: -.02em; }
+  .card .sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .charts { grid-template-columns: 1fr 1fr; }
+  @media (max-width: 760px) { .charts { grid-template-columns: 1fr; } }
+  .chart-title { font-size: 15px; font-weight: 650; margin-bottom: 12px; }
+  svg { display: block; width: 100%; height: auto; }
+  .bars { display: flex; align-items: stretch; gap: 8px; height: 190px; }
+  .bars .bar { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: flex-end; }
+  .bars .fill { flex: 1; display: flex; align-items: flex-end; }
+  .bars .bar i { display: block; width: 100%; border-radius: 6px 6px 3px 3px; background: var(--accent); min-height: 3px; transition: height .45s cubic-bezier(.2,.8,.2,1); }
+  .bars .bar span { font-size: 11px; color: var(--muted); text-align: center; padding-top: 6px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 10px 16px; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted);
+       font-weight: 600; padding: 8px 10px; border-bottom: 1px solid var(--border); position: sticky; top: calc(60px + env(safe-area-inset-top)); background: var(--card); }
+  td { padding: 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:hover td { background: rgba(10,132,255,.05); background: color-mix(in srgb, var(--accent) 4%, transparent); }
+  .k { font-weight: 650; font-size: 12px; padding: 2px 8px; border-radius: 999px; color: #fff; white-space: nowrap; }
+  .k.K1 { background: var(--k1); } .k.K2 { background: var(--k2); color: #111; } .k.K3 { background: var(--k3); color: #111; }
+  .k.K4 { background: var(--k4); } .k.K5 { background: var(--k5); } .k.V { background: var(--v); }
+  .toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
+  input[type="search"], select { font: inherit; font-size: 14px; padding: 8px 12px; border-radius: 10px;
+    border: 1px solid var(--border); background: var(--card); color: var(--text); }
+  input[type="search"] { flex: 1; min-width: 200px; }
+  .count { font-size: 12px; color: var(--muted); }
+  .glossar { grid-template-columns: 1fr; }
+  .glossar .card { display: flex; gap: 14px; align-items: baseline; }
+  .glossar .begriff { font-weight: 700; font-size: 14px; min-width: 120px; color: var(--accent); }
+  .glossar .text { font-size: 14px; line-height: 1.5; }
+  .chat { display: flex; flex-direction: column; gap: 12px; }
+  .thread { display: flex; flex-direction: column; gap: 8px; max-height: 380px; overflow-y: auto; padding: 4px; }
+  .msg { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 10px 14px; font-size: 14px; max-width: 80%; }
+  .msg .ts { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+  .msg.mine { align-self: flex-end; background: var(--accent); color: #fff; border-color: transparent; }
+  .msg.mine .ts { color: rgba(255,255,255,.75); }
+  .composer { display: flex; gap: 10px; }
+  .composer textarea { flex: 1; font: inherit; font-size: 14px; padding: 10px 12px; border-radius: 12px; resize: vertical; min-height: 44px;
+    border: 1px solid var(--border); background: var(--card); color: var(--text); }
+  .composer button { font: inherit; font-size: 14px; font-weight: 600; color: #fff; background: var(--accent); border: 0;
+    border-radius: 12px; padding: 0 20px; cursor: pointer; }
+  .note { font-size: 12px; color: var(--muted); line-height: 1.5; }
+  .btn { font: inherit; font-size: 13px; font-weight: 600; color: var(--text); background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 8px 14px; cursor: pointer; box-shadow: var(--shadow); }
+  .btn:hover { background: var(--border); background: color-mix(in srgb, var(--accent) 6%, var(--card)); }
+  .split { display: grid; grid-template-columns: 320px 1fr; gap: 16px; align-items: start; }
+  @media (max-width: 760px) { .split { grid-template-columns: 1fr; } }
+  .doclist { display: flex; flex-direction: column; gap: 6px; max-height: 480px; overflow-y: auto; }
+  .doclist button { text-align: left; font: inherit; font-size: 13px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border); background: var(--bg); color: var(--text); cursor: pointer; }
+  .doclist button.active { border-color: var(--accent); background: var(--border); background: color-mix(in srgb, var(--accent) 8%, var(--bg)); }
+  .doclist button .st { color: var(--muted); font-size: 11px; display: block; margin-top: 2px; }
+  pre.preview { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 18px; font-size: 12.5px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; max-height: 480px; overflow-y: auto; }
+  .rowbtn { font: inherit; font-size: 12px; font-weight: 600; color: var(--accent); background: transparent; border: 1px solid var(--border); border-radius: 8px; padding: 3px 10px; cursor: pointer; }
+  .rowbtn:hover { background: rgba(10,132,255,.08); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+  #aenderungen { display: none; margin-top: 16px; }
+  #aenderungen.open { display: block; }
+  .logline { font-size: 12.5px; padding: 6px 0; border-bottom: 1px solid var(--border); color: var(--muted); }
+  .logline b { color: var(--text); }
+  dialog { border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); color: var(--text); box-shadow: var(--shadow); padding: 20px; width: min(420px, 92vw); }
+  dialog::backdrop { background: rgba(0,0,0,.35); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }
+  dialog h3 { font-size: 15px; font-weight: 650; margin-bottom: 6px; }
+  dialog label { display: block; font-size: 12px; color: var(--muted); margin: 10px 0 4px; font-weight: 600; }
+  dialog input, dialog select { width: 100%; font: inherit; font-size: 14px; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); color: var(--text); }
+  dialog .actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
+  dialog .actions button { font: inherit; font-size: 14px; font-weight: 600; padding: 8px 16px; border-radius: 10px; border: 1px solid var(--border); background: transparent; color: var(--text); cursor: pointer; }
+  dialog .actions button.primary { background: var(--accent); color: #fff; border-color: transparent; }
+  dialog[open] { display: block; position: fixed; top: 10%; left: 50%; transform: translateX(-50%); z-index: 30; }
+  .bib3 { display: grid; grid-template-columns: 240px 300px 1fr; gap: 16px; align-items: start; }
+  @media (max-width: 1000px) { .bib3 { grid-template-columns: 1fr; } }
+  .kbar { display: flex; height: 10px; border-radius: 5px; overflow: hidden; min-width: 130px; background: var(--border); }
+  .kbar i { display: block; height: 100%; }
+  .lbl { display: block; font-size: 12px; color: var(--muted); font-weight: 600; margin: 10px 0 4px; }
+  #page-text select, #page-text textarea { width: 100%; font: inherit; font-size: 14px; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); color: var(--text); }
+  .diffgrid { grid-template-columns: 1fr 1fr; }
+  @media (max-width: 760px) { .diffgrid { grid-template-columns: 1fr; } #textGrid { grid-template-columns: 1fr !important; } }
+  .diffview { margin-top: 12px; font-family: ui-monospace, SF Mono, Menlo, Consolas, monospace; font-size: 12px; max-height: 360px; overflow: auto; border: 1px solid var(--border); border-radius: 12px; background: var(--bg); }
+  .diffview .dl { padding: 2px 10px; white-space: pre-wrap; word-break: break-word; }
+  .diffview .dl.add { background: rgba(48,209,88,.16); }
+  .diffview .dl.del { background: rgba(255,69,58,.14); }
+  @media print {
+    header, footer, nav, .toolbar, .composer, .lbl, #aenderungen { display: none !important; }
+    section.page { display: none !important; }
+    section.page.active { display: block !important; }
+    .card { box-shadow: none !important; break-inside: avoid; }
+    body { background: #fff; color: #000; }
+  }
+  footer { border-top: 1px solid var(--border); padding: 18px 0 calc(28px + env(safe-area-inset-bottom)); font-size: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1>Grammatik statt Stil <span style="color:var(--muted);font-weight:500">— Research Dashboard</span></h1>
+    <div class="hright">
+      <span class="badge" id="liveBadge" aria-live="polite"><span class="dot"></span><span id="liveLabel">lokal</span></span>
+      <nav aria-label="Hauptnavigation">
+        <button data-page="uebersicht" class="active" title="Übersicht (⌘1)">Übersicht</button>
+        <button data-page="verzeichnis" title="Verzeichnis (⌘2)">Verzeichnis</button>
+        <button data-page="quellen" title="Quellen (⌘3)">Quellen</button>
+        <button data-page="ablage" title="Ablage (⌘4)">Ablage</button>
+        <button data-page="bib" title="Bibliothek (⌘5)">Bibliothek</button>
+        <button data-page="text" title="Text (⌘6)">Text</button>
+        <button data-page="glossar" title="Glossar (⌘7)">Glossar</button>
+        <button data-page="komm" title="Kommunikation (⌘8)">Kommunikation</button>
+      </nav>
+    </div>
+  </div>
+</header>
+<main class="wrap">
+
+  <section class="page active" id="page-uebersicht">
+    <div class="grid stats" id="statCards"></div>
+    <div class="grid charts" style="margin-top:16px">
+      <div class="card"><div class="chart-title">Zugriffsstatus (K1–K5, V)</div><div id="chartK"></div><div class="legend" id="legendK"></div></div>
+      <div class="card"><div class="chart-title">Quellendichte pro Gruppe (Positionen je Gruppe)</div><div id="chartGruppen"></div><div class="legend" id="legendG"></div></div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <div class="chart-title">Relevanzverteilung der geladenen Verzeichniszeilen</div>
+      <div id="chartRel"></div><div class="legend" id="legendR"></div>
+    </div>
+    <p class="note" style="margin-top:14px" id="metaNote"></p>
+  </section>
+
+  <section class="page" id="page-verzeichnis">
+    <div class="toolbar">
+      <input type="search" id="q" placeholder="Verzeichnis durchsuchen (Titel, Quelle, ID, Vermerk) …">
+      <select id="fK"><option value="">alle K-Stufen</option><option>K1</option><option>K2</option><option>K3</option><option>K4</option><option>K5</option><option>V</option></select>
+      <select id="fR"><option value="">alle Relevanz</option><option>A</option><option>B</option><option>C</option><option>P</option><option>–</option></select>
+      <span class="count" id="count" aria-live="polite"></span>
+      <span style="flex:1"></span>
+      <button class="btn" id="btnAenderungen" style="display:none" title="K-Hebungen (Log)">Änderungen</button>
+      <button class="btn" id="btnExport" style="display:none" title="QV als JSON exportieren (Download)">Export ⬇</button>
+    </div>
+    <div class="card" style="padding:0;overflow:auto">
+      <table>
+        <thead><tr><th>ID</th><th>Titel / Beleg</th><th>Quelle / Fundstelle</th><th>K</th><th>Rel.</th><th>Vermerk</th><th id="thAktion" style="display:none"></th></tr></thead>
+        <tbody id="vRows"></tbody>
+      </table>
+    </div>
+    <div class="card" id="aenderungen">
+      <div class="chart-title">Änderungslog — K-Hebungen (neueste zuerst)</div>
+      <div id="aenderungenList"></div>
+    </div>
+    <dialog id="hebenDlg">
+      <h3>K-Hebung <span id="hId"></span></h3>
+      <label for="hK">neue K-Stufe (nur K1/K2)</label>
+      <select id="hK"><option>K1</option><option selected>K2</option></select>
+      <label for="hBeleg">Beleg (Pflicht — DOI / URL / Digitalisat / Campus)</label>
+      <input id="hBeleg" placeholder="z. B. Campus-Lizenz Cairn (manuelle Sichtung)">
+      <label for="hDatum">Datum (JJJJ-MM-TT, aus aktuelles_datum)</label>
+      <input id="hDatum" type="date">
+      <div class="actions">
+        <button id="hAbort">Abbrechen</button>
+        <button id="hOk" class="primary">Heben</button>
+      </div>
+    </dialog>
+  </section>
+
+  <section class="page" id="page-glossar">
+    <div class="grid glossar" id="glossar"></div>
+  </section>
+
+  <section class="page" id="page-komm">
+    <div class="card chat">
+      <div class="chart-title">Kommunikationsschnittstelle (lokaler Postausgang)</div>
+      <div class="thread" id="thread"></div>
+      <div class="composer">
+        <textarea id="msgInput" placeholder="Nachricht an den Forschungsagenten … (wird lokal in data/outbox.jsonl protokolliert)"></textarea>
+        <button id="sendBtn">Senden</button>
+      </div>
+      <p class="note">Versand an den produktiven Agenten (Deployment <code>grammatik-statt-stil-research</code>) erfolgt über die MCP-/Studio-Schnittstelle
+      (<code>execute_workflow</code> bzw. Signal <code>submit_command</code>/<code>send_message</code>) — siehe README. Das Dashboard speichert nur lokal.</p>
+    </div>
+  </section>
+
+  <section class="page" id="page-ablage">
+    <div class="toolbar">
+      <input type="search" id="aq" placeholder="Research-Ablage durchsuchen … (live, nur mit Server + API-Key)">
+      <span class="count" id="acount" aria-live="polite"></span>
+    </div>
+    <p class="note" id="ablageNote" style="margin-bottom:12px"></p>
+    <div class="split">
+      <div class="card" style="padding:10px"><div class="doclist" id="ablageList"></div></div>
+      <pre class="preview" id="ablagePreview">Dokument links wählen — Vorschau (erste 4000 Zeichen) erscheint hier.</pre>
+    </div>
+  </section>
+
+  <section class="page" id="page-quellen">
+    <div class="toolbar">
+      <input type="search" id="qq" placeholder="Quellendatenbank durchsuchen (Quelle / Fundstelle) …">
+      <span class="count" id="qcount" aria-live="polite"></span>
+      <span style="flex:1"></span>
+      <button class="btn" id="btnQuellenExport">Export ⬇</button>
+    </div>
+    <div class="card" style="padding:0;overflow:auto">
+      <table>
+        <thead><tr><th>Quelle / Fundstelle</th><th>Pos.</th><th>K-Verteilung</th><th>IDs</th></tr></thead>
+        <tbody id="qRows"></tbody>
+      </table>
+    </div>
+    <p class="note" style="margin-top:10px">Aggregiert aus der QV-Datenbank (Server: SQLite; offline: lokal aus data/project.json). K-Verteilung als Balken (K1 grün … K5 lila).</p>
+  </section>
+
+  <section class="page" id="page-bib">
+    <p class="note" id="bibNote" style="margin-bottom:12px"></p>
+    <div class="bib3">
+      <div class="card" style="padding:10px"><div class="chart-title">Libraries</div><div class="doclist" id="libList"></div></div>
+      <div class="card" style="padding:10px"><div class="chart-title">Dokumente</div><input type="search" id="bq" placeholder="in Library suchen …" style="width:100%;margin-bottom:8px"><div class="doclist" id="bibDocs"></div></div>
+      <pre class="preview" id="bibPreview">Library links wählen → Dokument in der Mitte → Vorschau (4000 Zeichen) rechts.</pre>
+    </div>
+  </section>
+
+  <section class="page" id="page-text">
+    <div class="grid" id="textGrid" style="grid-template-columns:1fr 1fr;gap:16px">
+      <div class="card">
+        <div class="chart-title">1 · Vorlage + Kontext</div>
+        <label class="lbl" for="tplSel">Template (data/templates.json)</label>
+        <select id="tplSel"></select>
+        <label class="lbl" for="posSel">Position (aus dem QV)</label>
+        <select id="posSel"></select>
+        <label class="lbl" for="ctxExtra">Zusatzfelder — je Zeile „schluessel: wert“</label>
+        <textarea id="ctxExtra" rows="4" placeholder="ueberschrift: Kapitel 2 — freitext: …"></textarea>
+        <div class="toolbar" style="margin-top:12px">
+          <button class="btn" id="btnRender">Rendern</button>
+          <button class="btn" id="btnCopy">Kopieren</button>
+          <button class="btn" id="btnDl">Als .md laden</button>
+          <button class="btn" id="btnPrint">Drucken</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="chart-title">2 · Ergebnis</div>
+        <pre class="preview" id="renderOut" style="max-height:460px">—</pre>
+      </div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <div class="chart-title">3 · Review / Diff (Version A vs. B)</div>
+      <div class="grid diffgrid">
+        <div><label class="lbl" for="diffA">Version A (alt)</label><textarea id="diffA" rows="8" placeholder="alter Text …"></textarea></div>
+        <div><label class="lbl" for="diffB">Version B (neu)</label><textarea id="diffB" rows="8" placeholder="neuer Text …"></textarea></div>
+      </div>
+      <div class="toolbar" style="margin-top:12px">
+        <button class="btn" id="btnDiff">Diff berechnen</button>
+        <button class="btn" id="btnDiffA">A ← aktuelles Ergebnis übernehmen</button>
+        <span class="count" id="diffStats" aria-live="polite"></span>
+      </div>
+      <div id="diffView" class="diffview"></div>
+    </div>
+  </section>
+
+</main>
+<footer><div class="wrap">Grammatik statt Stil — lokales Research-Dashboard · Daten: <span id="dataSrc">data/project.json</span> · kein Netzwerk nötig (außer optionaler Live-Modus) · aktualisiert <span id="upd">–</span></div></footer>
+
+<script src="data/sample-data.js"></script>
+<script>
+const $ = s => document.querySelector(s);
+let DATA = window.DASHBOARD_DATA || null;
+
+async function loadData() {
+  try {
+    const r = await fetch('data/project.json', { cache: 'no-store' });
+    if (r.ok) { DATA = await r.json(); $('#dataSrc').textContent = 'data/project.json (live vom Server)'; }
+  } catch (e) { /* file:// Fallback auf sample-data.js */ }
+  if (!DATA) return;
+  renderStats(); renderCharts(); renderGlossar(); loadMessages();
+  await probeServer();
+  loadQv(); loadAblage();
+}
+
+// Optionaler API-Basis-Pfad (z. B. wenn die statische Shell von GitHub Pages kommt und die Live-API
+// auf einer anderen Origin laeuft): <script>window.API_BASE = "https://dashboard.deinedomain.at";</script>
+// Default '' = same-origin (serve.py auf derselben VM).
+const API_BASE = (window.API_BASE || '').replace(/\/+$/, '');
+
+async function api(path, opts) {
+  try { const r = await fetch(API_BASE + path, opts); return r.ok ? await r.json() : null; } catch (e) { return null; }
+}
+
+/* ---- Übersicht ---- */
+function renderStats() {
+  const k = DATA.kstand, K = k.K;
+  const vt = ((K.K1 + K.K2) / k.positionen * 100);
+  const gruppen = k.gruppen_enden;
+  const avg = (k.positionen / gruppen.length);
+  const cards = [
+    ['Positionen gesamt', k.positionen, 'Stand: ' + DATA.meta.stand],
+    ['Volltextquote (VT)', vt.toFixed(1) + ' %', '(' + (K.K1 + K.K2) + '/' + k.positionen + ' = K1+K2)'],
+    ['K1 geprüft', K.K1, ''],
+    ['K2 zugänglich', K.K2, ''],
+    ['K3 nur Metadaten', K.K3, ''],
+    ['K4 blockiert', K.K4, 'W-Vermerk nötig'],
+    ['K5 offen', K.K5, 'Klärung ausstehend'],
+    ['Ø Quellen / Gruppe', avg.toFixed(1), 'min ' + Math.min(...gruppen) + ' · max ' + Math.max(...gruppen)],
+  ];
+  $('#statCards').innerHTML = cards.map(c =>
+    `<div class="card"><h3>${c[0]}</h3><div class="big">${c[1]}</div><div class="sub">${c[2] || ''}</div></div>`).join('');
+  $('#metaNote').textContent = 'Quelle: ' + DATA.meta.quelle + ' · ' + (DATA.meta.hinweis || '');
+}
+
+function donut(el, parts, colors) {
+  const total = parts.reduce((a, p) => a + p.value, 0) || 1;
+  const R = 60, C = 2 * Math.PI * R; let off = 0, svg = `<svg viewBox="0 0 160 160">`;
+  svg += `<circle cx="80" cy="80" r="${R}" fill="none" stroke="var(--border)" stroke-width="22"/>`;
+  parts.forEach((p, i) => {
+    const len = p.value / total * C;
+    svg += `<circle cx="80" cy="80" r="${R}" fill="none" stroke="${colors[i]}" stroke-width="22" stroke-dasharray="${len} ${C - len}" stroke-dashoffset="${-off}" transform="rotate(-90 80 80)" stroke-linecap="butt"/>`;
+    off += len;
+  });
+  svg += `<text x="80" y="76" text-anchor="middle" font-size="22" font-weight="700" fill="var(--text)">${total}</text>`;
+  svg += `<text x="80" y="94" text-anchor="middle" font-size="10" fill="var(--muted)">gesamt</text></svg>`;
+  el.innerHTML = svg;
+}
+function bars(el, labels, values, color) {
+  const max = Math.max(...values) || 1;
+  el.innerHTML = '<div class="bars">' + values.map((v, i) =>
+    `<div class="bar"><div class="fill"><i style="height:${(v / max * 100).toFixed(1)}%;background:${color}" title="${labels[i]}: ${v}"></i></div><span>${labels[i]}</span></div>`
+  ).join('') + '</div>';
+}
+
+const KCOLORS = { K1: 'var(--k1)', K2: 'var(--k2)', K3: 'var(--k3)', K4: 'var(--k4)', K5: 'var(--k5)', V: 'var(--v)' };
+function renderCharts() {
+  const K = DATA.kstand.K;
+  const kparts = Object.keys(KCOLORS).map(k => ({ label: k, value: K[k] }));
+  donut($('#chartK'), kparts, kparts.map(p => KCOLORS[p.label]));
+  $('#legendK').innerHTML = kparts.map(p => `<span><i style="background:${KCOLORS[p.label]}"></i>${p.label} ${p.value}</span>`).join('');
+  const g = DATA.kstand.gruppen_enden;
+  bars($('#chartGruppen'), g.map((_, i) => 'G' + (i + 1)), g, 'var(--accent)');
+  $('#legendG').innerHTML = `<span>Gruppen-Enden: ${g.join(' / ')}</span><span>Ø ${(DATA.kstand.positionen / g.length).toFixed(1)}/Gruppe</span>`;
+  const rel = {};
+  DATA.verzeichnis.forEach(r => { rel[r.rel || '–'] = (rel[r.rel || '–'] || 0) + 1; });
+  const rparts = Object.entries(rel).map(([label, value]) => ({ label, value }));
+  const rcolors = ['#0a84ff', '#30d158', '#ffd60a', '#8e8e93'];
+  donut($('#chartRel'), rparts, rparts.map((_, i) => rcolors[i % rcolors.length]));
+  $('#legendR').innerHTML = rparts.map((p, i) => `<span><i style="background:${rcolors[i % rcolors.length]}"></i>${p.label} ${p.value}</span>`).join('');
+}
+
+/* ---- Verzeichnis (Server-QV via SQLite/FTS wenn erreichbar, sonst lokal) ---- */
+let SERVER = false, qvRows = [], qvTotal = 0, hebPos = null;
+
+async function probeServer() {
+  const r = await api('/api/qv?limit=1');
+  SERVER = !!(r && r.rows);
+  const on = SERVER ? '' : 'none';
+  $('#thAktion').style.display = on;
+  $('#btnAenderungen').style.display = on;
+  $('#btnExport').style.display = on;
+}
+
+function rowHtml(r) {
+  const heb = SERVER ? `<td><button class="rowbtn" data-heb="${escapeHtml(r.id)}">Heben</button></td>` : '';
+  return `<tr><td style="font-weight:600;white-space:nowrap">${escapeHtml(r.id)}</td><td>${escapeHtml(r.titel)}</td>` +
+    `<td style="color:var(--muted)">${escapeHtml(r.quelle)}</td><td><span class="k ${r.k}">${r.k}</span></td>` +
+    `<td>${r.rel || '–'}</td><td style="color:var(--muted);font-size:12px">${escapeHtml(r.vermerk || '')}</td>${heb}</tr>`;
+}
+
+async function loadQv() {
+  if (!SERVER) return renderVerzeichnisLocal();
+  const q = $('#q').value, fk = $('#fK').value, fr = $('#fR').value;
+  const r = await api('/api/qv?q=' + encodeURIComponent(q) + '&k=' + encodeURIComponent(fk) + '&rel=' + encodeURIComponent(fr) + '&limit=400');
+  if (!r) { SERVER = false; return renderVerzeichnisLocal(); }
+  qvRows = r.rows; qvTotal = r.total;
+  $('#vRows').innerHTML = qvRows.map(rowHtml).join('');
+  $('#count').textContent = qvRows.length + ' / ' + qvTotal + ' Zeilen (DB)';
+}
+
+function renderVerzeichnisLocal() {
+  const q = ($('#q').value || '').toLowerCase(), fk = $('#fK').value, fr = $('#fR').value;
+  const rows = DATA.verzeichnis.filter(r =>
+    (!fk || r.k === fk) && (!fr || (r.rel || '–') === fr) &&
+    (!q || (r.id + ' ' + r.titel + ' ' + r.quelle + ' ' + (r.vermerk || '')).toLowerCase().includes(q)));
+  $('#vRows').innerHTML = rows.map(rowHtml).join('');
+  $('#count').textContent = rows.length + ' / ' + DATA.verzeichnis.length + ' Zeilen';
+}
+
+let qvDeb = null;
+$('#q').addEventListener('input', () => { clearTimeout(qvDeb); qvDeb = setTimeout(loadQv, 250); });
+$('#fK').addEventListener('change', loadQv);
+$('#fR').addEventListener('change', loadQv);
+
+/* ---- K-Hebung (Dialog) ---- */
+function dlgOpen() { const d = $('#hebenDlg'); if (typeof d.showModal === 'function') d.showModal(); else d.setAttribute('open', ''); }
+function dlgClose() { const d = $('#hebenDlg'); if (typeof d.close === 'function') d.close(); else d.removeAttribute('open'); }
+$('#vRows').addEventListener('click', e => {
+  const b = e.target.closest('[data-heb]'); if (!b) return;
+  hebPos = b.dataset.heb;
+  $('#hId').textContent = '— ' + hebPos;
+  $('#hBeleg').value = '';
+  const d = new Date();
+  $('#hDatum').value = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  dlgOpen();
+});
+$('#hAbort').addEventListener('click', dlgClose);
+$('#hebenDlg').addEventListener('click', e => { if (e.target === e.currentTarget) dlgClose(); });
+$('#hOk').addEventListener('click', async () => {
+  const payload = { id: hebPos, neu_k: $('#hK').value, beleg: $('#hBeleg').value.trim(), datum: $('#hDatum').value };
+  let j = {};
+  try {
+    const r = await fetch(API_BASE + '/api/qv/hebung', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    j = await r.json();
+    if (!r.ok) { alert('Hebung abgelehnt: ' + (j.fehler || ('HTTP ' + r.status))); return; }
+  } catch (e) { alert('Server nicht erreichbar: ' + e); return; }
+  dlgClose();
+  await loadQv(); loadAenderungen(); await loadData();
+});
+
+/* ---- Änderungslog + Export ---- */
+async function loadAenderungen() {
+  if (!SERVER) return;
+  const rows = await api('/api/qv/aenderungen') || [];
+  $('#aenderungenList').innerHTML = rows.map(a =>
+    `<div class="logline"><b>${escapeHtml(a.pos_id)}</b>: ${a.alt_k} → ${a.neu_k} · ${escapeHtml(a.datum)} · Beleg: ${escapeHtml(a.beleg)} <span style="opacity:.65">(${escapeHtml(a.ts)})</span></div>`).join('')
+    || '<p class="note">Noch keine Änderungen.</p>';
+}
+$('#btnAenderungen').addEventListener('click', () => {
+  const p = $('#aenderungen');
+  p.classList.toggle('open');
+  if (p.classList.contains('open')) loadAenderungen();
+});
+$('#btnExport').addEventListener('click', () => { window.location = API_BASE + '/api/qv/export'; });
+
+/* ---- Ablage-Browser (live) ---- */
+let ablageDeb = null;
+async function loadAblage() {
+  const q = $('#aq').value;
+  const r = await api('/api/ablage?q=' + encodeURIComponent(q));
+  const list = $('#ablageList');
+  if (!r || !r.live) {
+    $('#ablageNote').textContent = 'Live-Modus nicht aktiv (' + ((r && r.grund) || 'Server nicht erreichbar') + ') — Ablage-Browser braucht serve.py + MISTRAL_API_KEY/PROJECT_MISTRAL_API_KEY in der Umgebung.';
+    list.innerHTML = '';
+    $('#acount').textContent = '';
+    return;
+  }
+  $('#ablageNote').textContent = 'Research-Ablage (Mistral Library) — live: ' + r.docs.length + ' Dokumente' + (q ? ' für „' + q + '“' : '') + '. Klick lädt die Vorschau.';
+  $('#acount').textContent = r.docs.length + ' Doks';
+  list.innerHTML = r.docs.map(d =>
+    `<button data-doc="${escapeHtml(d.id)}"><span>${escapeHtml(d.name)}</span><span class="st">${escapeHtml(String(d.id).slice(0, 8))}… · ${escapeHtml(String(d.status || ''))}</span></button>`).join('')
+    || '<p class="note">Keine Dokumente gefunden.</p>';
+}
+$('#aq').addEventListener('input', () => { clearTimeout(ablageDeb); ablageDeb = setTimeout(loadAblage, 300); });
+$('#ablageList').addEventListener('click', async e => {
+  const b = e.target.closest('[data-doc]'); if (!b) return;
+  document.querySelectorAll('#ablageList button').forEach(x => x.classList.toggle('active', x === b));
+  $('#ablagePreview').textContent = 'lädt …';
+  const r = await api('/api/ablage/doc?id=' + encodeURIComponent(b.dataset.doc));
+  $('#ablagePreview').textContent = (r && r.live) ? (r.text || '') : ('Fehler: ' + ((r && r.grund) || 'nicht erreichbar'));
+});
+
+/* ---- Quellendatenbank (aggregiert nach Quelle) ---- */
+let lastQuellen = [];
+function aggQuellen(rows) {
+  const m = {};
+  rows.forEach(r => {
+    const q = r.quelle || '–';
+    if (!m[q]) m[q] = { quelle: q, n: 0, K1: 0, K2: 0, K3: 0, K4: 0, K5: 0, ids: [] };
+    m[q].n++;
+    if (m[q][r.k] !== undefined) m[q][r.k]++;
+    m[q].ids.push(r.id);
+  });
+  return Object.values(m).sort((a, b) => b.n - a.n || a.quelle.localeCompare(b.quelle));
+}
+function kbarHtml(q) {
+  const K = ['K1', 'K2', 'K3', 'K4', 'K5'], tot = q.n || 1;
+  return '<div class="kbar" title="' + K.map(k => k + ': ' + (q[k] || 0)).join(', ') + '">' +
+    K.filter(k => q[k]).map(k => `<i style="width:${(q[k] / tot * 100).toFixed(1)}%;background:var(--k${k[1]})"></i>`).join('') + '</div>';
+}
+function renderQuellen(rows) {
+  lastQuellen = rows;
+  $('#qRows').innerHTML = rows.map(q =>
+    `<tr><td>${escapeHtml(q.quelle)}</td><td style="font-weight:600">${q.n}</td><td>${kbarHtml(q)}</td><td style="color:var(--muted);font-size:11px">${escapeHtml(q.ids.join(', '))}</td></tr>`).join('')
+    || '<tr><td colspan="4"><p class="note">Keine Quellen.</p></td></tr>';
+  $('#qcount').textContent = rows.length + ' Quellen · ' + rows.reduce((a, x) => a + x.n, 0) + ' Positionen';
+}
+async function loadQuellen() {
+  const q = $('#qq').value;
+  if (SERVER) {
+    const r = await api('/api/quellen?q=' + encodeURIComponent(q));
+    if (r && r.rows) { renderQuellen(r.rows); return; }
+  }
+  const all = aggQuellen((DATA && DATA.verzeichnis) || []);
+  const ql = q.toLowerCase();
+  renderQuellen(ql ? all.filter(x => x.quelle.toLowerCase().includes(ql)) : all);
+}
+let qDeb = null;
+$('#qq').addEventListener('input', () => { clearTimeout(qDeb); qDeb = setTimeout(loadQuellen, 250); });
+$('#btnQuellenExport').addEventListener('click', () => {
+  const blob = new Blob([JSON.stringify({ export: new Date().toISOString(), quellen: lastQuellen }, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'quellen-export.json'; a.click(); URL.revokeObjectURL(a.href);
+});
+
+/* ---- Bibliothek (alle Libraries, live) ---- */
+let curLib = null;
+async function loadLibs() {
+  const r = await api('/api/libraries');
+  const list = $('#libList');
+  if (!r || !r.live) {
+    $('#bibNote').textContent = 'Live-Modus nicht aktiv (' + ((r && r.grund) || 'Server nicht erreichbar') + ') — Bibliotheks-Tab braucht serve.py + MISTRAL_API_KEY/PROJECT_MISTRAL_API_KEY in der Umgebung.';
+    list.innerHTML = '';
+    return;
+  }
+  $('#bibNote').textContent = 'Live: ' + r.libs.length + ' Libraries im Workspace. Links wählen → Dokumente in der Mitte → Klick lädt die Vorschau rechts.';
+  list.innerHTML = r.libs.map(l =>
+    `<button data-lib="${escapeHtml(l.id)}"><span>${escapeHtml(l.name)}</span><span class="st">${escapeHtml(String(l.id).slice(0, 8))}… · ${l.docs == null ? '?' : l.docs + ' Doks'}</span></button>`).join('');
+  if (r.libs.length && !curLib) selectLib(r.libs[0].id);
+}
+function selectLib(id) {
+  curLib = id;
+  document.querySelectorAll('#libList button').forEach(x => x.classList.toggle('active', x.dataset.lib === id));
+  loadLibDocs();
+}
+$('#libList').addEventListener('click', e => { const b = e.target.closest('[data-lib]'); if (b) selectLib(b.dataset.lib); });
+let bqDeb = null;
+$('#bq').addEventListener('input', () => { clearTimeout(bqDeb); bqDeb = setTimeout(loadLibDocs, 300); });
+async function loadLibDocs() {
+  if (!curLib) return;
+  const r = await api('/api/library/docs?lib=' + encodeURIComponent(curLib) + '&q=' + encodeURIComponent($('#bq').value));
+  const list = $('#bibDocs');
+  if (!r || !r.live) { list.innerHTML = '<p class="note">' + escapeHtml((r && r.grund) || 'nicht erreichbar') + '</p>'; return; }
+  list.innerHTML = r.docs.map(d =>
+    `<button data-doc="${escapeHtml(d.id)}"><span>${escapeHtml(d.name)}</span><span class="st">${escapeHtml(String(d.id).slice(0, 8))}… · ${escapeHtml(String(d.status || ''))}</span></button>`).join('')
+    || '<p class="note">Keine Dokumente.</p>';
+}
+$('#bibDocs').addEventListener('click', async e => {
+  const b = e.target.closest('[data-doc]'); if (!b || !curLib) return;
+  document.querySelectorAll('#bibDocs button').forEach(x => x.classList.toggle('active', x === b));
+  $('#bibPreview').textContent = 'lädt …';
+  const r = await api('/api/library/doc?lib=' + encodeURIComponent(curLib) + '&id=' + encodeURIComponent(b.dataset.doc));
+  $('#bibPreview').textContent = (r && r.live) ? (r.text || '') : ('Fehler: ' + ((r && r.grund) || 'nicht erreichbar'));
+});
+
+/* ---- Textproduktion / Review / Export (Paket D) ---- */
+let TEMPLATES = [];
+async function loadTextTab() {
+  if (!TEMPLATES.length) {
+    let t = await api('/api/templates');
+    if (!t || !t.templates) {
+      try { const r = await fetch('data/templates.json', { cache: 'no-store' }); t = r.ok ? await r.json() : null; } catch (e) { t = null; }
+    }
+    TEMPLATES = (t && t.templates) || [{ id: 'beleg', name: 'Quellenbeleg (Fallback)', text: '- {{id}} — {{titel}}. {{quelle}}. {{k}}/{{rel}}. Stand {{datum}}.\n' }];
+    $('#tplSel').innerHTML = TEMPLATES.map(x => `<option value="${escapeHtml(x.id)}">${escapeHtml(x.name)}</option>`).join('');
+  }
+  const rows = SERVER ? qvRows : ((DATA && DATA.verzeichnis) || []);
+  const pos = $('#posSel');
+  if (pos.options.length !== rows.length) {
+    pos.innerHTML = rows.map(r => `<option value="${escapeHtml(r.id)}">${escapeHtml(r.id + ' — ' + String(r.titel).slice(0, 60))}</option>`).join('');
+  }
+}
+function buildContext() {
+  const rows = SERVER ? qvRows : ((DATA && DATA.verzeichnis) || []);
+  const row = rows.find(r => r.id === $('#posSel').value) || (DATA && DATA.verzeichnis[0]) || {};
+  const K = (DATA && DATA.kstand) ? DATA.kstand.K : {};
+  const n = (DATA && DATA.kstand) ? DATA.kstand.positionen : 0;
+  const ctx = {
+    id: row.id || '', titel: row.titel || '', quelle: row.quelle || '', k: row.k || '', rel: row.rel || '', vermerk: row.vermerk || '',
+    datum: new Date().toISOString().slice(0, 10),
+    anzahl: n, vt_quote: n ? ((K.K1 + K.K2) / n * 100).toFixed(1) : '',
+    vt_zaehler: (DATA && DATA.kstand) ? DATA.kstand.vt_zaehler : '', aenderungen: ''
+  };
+  $('#ctxExtra').value.split('\n').forEach(line => {
+    const i = line.indexOf(':');
+    if (i > 0) ctx[line.slice(0, i).trim()] = line.slice(i + 1).trim();
+  });
+  return ctx;
+}
+function renderClient(tpl, ctx) { return tpl.text.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (m, k) => (ctx[k] == null ? '' : String(ctx[k]))); }
+async function doRender() {
+  const tpl = TEMPLATES.find(t => t.id === $('#tplSel').value) || TEMPLATES[0];
+  const ctx = buildContext();
+  let text;
+  if (SERVER) {
+    const r = await fetch('/api/render', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ template: tpl.id, context: ctx }) });
+    const j = await r.json();
+    if (!r.ok) { alert('Render abgelehnt: ' + (j.fehler || r.status)); return; }
+    text = j.text;
+  } else text = renderClient(tpl, ctx);
+  $('#renderOut').textContent = text;
+  touchUpd();
+}
+$('#btnRender').addEventListener('click', doRender);
+$('#btnCopy').addEventListener('click', async () => {
+  const t = $('#renderOut').textContent;
+  try { await navigator.clipboard.writeText(t); }
+  catch (e) {
+    const ta = document.createElement('textarea'); ta.value = t; document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); } catch (e2) { /* ignoriert */ }
+    ta.remove();
+  }
+});
+$('#btnDl').addEventListener('click', () => {
+  const blob = new Blob([$('#renderOut').textContent], { type: 'text/markdown' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'render-' + ($('#tplSel').value || 'text') + '.md'; a.click(); URL.revokeObjectURL(a.href);
+});
+$('#btnPrint').addEventListener('click', () => window.print());
+function diffClient(a, b) {
+  const A = a.split('\n'), B = b.split('\n'), n = A.length, m = B.length;
+  const dp = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--)
+    dp[i][j] = A[i] === B[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+  const out = []; let i = 0, j = 0;
+  while (i < n && j < m) {
+    if (A[i] === B[j]) { out.push({ t: '', line: A[i] }); i++; j++; }
+    else if (dp[i + 1][j] >= dp[i][j + 1]) { out.push({ t: '-', line: A[i] }); i++; }
+    else { out.push({ t: '+', line: B[j] }); j++; }
+  }
+  while (i < n) { out.push({ t: '-', line: A[i++] }); }
+  while (j < m) { out.push({ t: '+', line: B[j++] }); }
+  return out;
+}
+async function doDiff() {
+  const a = $('#diffA').value, b = $('#diffB').value;
+  let lines;
+  if (SERVER) {
+    const r = await fetch('/api/diff', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ a, b }) });
+    const j = await r.json();
+    if (!r.ok) { alert('Diff abgelehnt: ' + (j.fehler || r.status)); return; }
+    lines = j.lines;
+    $('#diffStats').textContent = '+ ' + j.stats.ins + ' / − ' + j.stats.del + ' Zeilen';
+  } else {
+    if (a.split('\n').length * b.split('\n').length > 4000000) { alert('Diff zu groß für den Offline-Modus (max ~2000×2000 Zeilen) — bitte serve.py starten.'); return; }
+    lines = diffClient(a, b);
+    $('#diffStats').textContent = '+ ' + lines.filter(l => l.t === '+').length + ' / − ' + lines.filter(l => l.t === '-').length + ' Zeilen (offline)';
+  }
+  $('#diffView').innerHTML = lines.map(l =>
+    `<div class="dl ${l.t === '+' ? 'add' : l.t === '-' ? 'del' : ''}">${l.t === '+' ? '+ ' : l.t === '-' ? '− ' : '&nbsp;&nbsp;'}${escapeHtml(l.line)}</div>`).join('')
+    || '<p class="note">Keine Unterschiede.</p>';
+}
+$('#btnDiff').addEventListener('click', doDiff);
+$('#btnDiffA').addEventListener('click', () => { $('#diffA').value = $('#renderOut').textContent; });
+
+/* ---- Glossar ---- */
+function renderGlossar() {
+  $('#glossar').innerHTML = DATA.glossar.map(g =>
+    `<div class="card"><span class="begriff">${g.begriff}</span><span class="text">${g.text}</span></div>`).join('');
+}
+
+/* ---- Kommunikation ---- */
+async function loadMessages() {
+  const msgs = (await api('/api/messages')) || DATA.outbox || [];
+  $('#thread').innerHTML = msgs.map(m =>
+    `<div class="msg mine"><div class="ts">${m.ts}</div>${escapeHtml(m.text)}</div>`).join('') || '<p class="note">Noch keine Nachrichten.</p>';
+  $('#thread').scrollTop = $('#thread').scrollHeight;
+}
+function escapeHtml(s) { return s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+$('#sendBtn').addEventListener('click', async () => {
+  const t = $('#msgInput').value.trim(); if (!t) return;
+  $('#msgInput').value = '';
+  const saved = await api('/api/message', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: t }) });
+  if (saved) loadMessages(); else alert('Server nicht erreichbar (file://-Modus?) — lokal mit serve.py starten.');
+});
+$('#msgInput').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('#sendBtn').click(); } });
+
+/* ---- Live-Status (optional) ---- */
+async function liveTick() {
+  const live = await api('/api/live');
+  const b = $('#liveBadge');
+  if (live && live.live) {
+    b.classList.remove('off');
+    let label = 'live · ' + (live.anzahl || 0) + ' Ablage-Docs · ' + (live.zeitstempel || '');
+    if (live.qv && live.qv.k) {
+      const K = live.qv.k;
+      label = 'live · QV ' + (live.qv.positionen || '?') + ' Pos. · K1 ' + K.K1 + ' K2 ' + K.K2 + ' K3 ' + K.K3 + ' K4 ' + K.K4 + ' K5 ' + K.K5 + ' · ' + (live.zeitstempel || '');
+      const mn = $('#metaNote');
+      if (mn && live.qv.stand) mn.textContent = 'Live-Stand (Apparat): ' + live.qv.stand + (live.qv.erschliessung ? ' · Erschließungsquote ' + live.qv.erschliessung.zaehler : '');
+    }
+    $('#liveLabel').textContent = label;
+  } else { b.classList.add('off'); $('#liveLabel').textContent = 'lokal'; }
+  touchUpd();
+  if (SERVER && $('#page-verzeichnis').classList.contains('active')) loadQv();
+}
+function touchUpd() { const u = $('#upd'); if (u) u.textContent = new Date().toLocaleTimeString('de-DE'); }
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') { liveTick(); loadData(); }
+});
+
+/* ---- Tabs ---- */
+document.querySelectorAll('nav button').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('nav button').forEach(x => { x.classList.toggle('active', x === b); if (x === b) x.setAttribute('aria-current', 'page'); else x.removeAttribute('aria-current'); });
+  document.querySelectorAll('section.page').forEach(s => s.classList.toggle('active', s.id === 'page-' + b.dataset.page));
+  if (b.dataset.page === 'ablage') loadAblage();
+  if (b.dataset.page === 'verzeichnis') loadQv();
+  if (b.dataset.page === 'quellen') loadQuellen();
+  if (b.dataset.page === 'bib') loadLibs();
+  if (b.dataset.page === 'text') loadTextTab();
+}));
+
+loadData(); liveTick(); touchUpd(); setInterval(liveTick, 30000);
+
+/* ---- PWA: Service Worker registrieren (nur http/https, nicht file://) ---- */
+if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+
+/* ---- Tastatur: ⌘/Strg+1..8 = Tab, / = Suche im aktiven Tab ---- */
+document.addEventListener('keydown', e => {
+  const ae = document.activeElement;
+  const typing = ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName);
+  if ((e.metaKey || e.ctrlKey) && /^[1-8]$/.test(e.key)) {
+    const btns = document.querySelectorAll('nav button');
+    const b = btns[Number(e.key) - 1];
+    if (b) { e.preventDefault(); b.click(); }
+    return;
+  }
+  if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key === '/') {
+    const page = document.querySelector('section.page.active');
+    const inp = page && page.querySelector('input[type="search"]');
+    if (inp) { e.preventDefault(); inp.focus(); inp.select(); }
+  }
+});
+</script>
+</body>
+</html>

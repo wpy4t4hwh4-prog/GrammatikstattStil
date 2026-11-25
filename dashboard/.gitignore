@@ -1,0 +1,5 @@
+outbox.jsonl
+data/qv.db
+data/project.json   # echter QV-Snapshot: nie committen (Live-Daten kommen serverseitig per API)
+__pycache__/
+*.pyc

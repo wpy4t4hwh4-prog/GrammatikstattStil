@@ -1,0 +1,42 @@
+name: Research-Ablage Export (RDM-Backup)
+
+on:
+  schedule:
+    - cron: "0 5 * * 0" # woechentlich Sonntag 05:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ablage-export
+  cancel-in-progress: false
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: vibe/forschungsagent-b21b74
+      - uses: astral-sh/setup-uv@v5
+      - name: Install deps
+        working-directory: forschungsagent
+        run: uv sync --quiet
+      - name: Export Ablage
+        working-directory: forschungsagent
+        env:
+          MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+        run: uv run python export_ablage.py
+      - name: Commit export
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add research-ablage-export
+          if git diff --cached --quiet; then
+            echo "keine Aenderungen"
+          else
+            git commit -m "chore: Research-Ablage Export $(date -u +%Y-%m-%d)"
+            git push
+          fi

@@ -1,0 +1,17 @@
+{
+  "name": "Grammatik statt Stil — Research Hub",
+  "short_name": "Research Hub",
+  "description": "Lokales Research-Dashboard/-Hub: QV mit K-Hebung, Quellendatenbank, Ablage-/Bibliotheks-Browser, Textproduktion mit Review/Diff.",
+  "lang": "de",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f5f5f7",
+  "theme_color": "#f5f5f7",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
