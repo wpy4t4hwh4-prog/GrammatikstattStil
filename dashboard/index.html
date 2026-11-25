@@ -344,8 +344,10 @@ async function loadData() {
 }
 
 // Optionaler API-Basis-Pfad (z. B. wenn die statische Shell von GitHub Pages kommt und die Live-API
-// auf einer anderen Origin laeuft): <script>window.API_BASE = "https://dashboard.deinedomain.at";</script>
-// Default '' = same-origin (serve.py auf derselben VM).
+// auf einer anderen Origin laeuft): VOR diesem Script ein kleines Script-Tag setzen, das
+// window.API_BASE = "https://dashboard.deinedomain.at" zuweist. ACHTUNG: im Kommentar nie das
+// Literal mit spitzen Klammern verwenden (script-Tag) - der HTML-Parser wuerde das Script frueh
+// beenden und den Rest des App-JS als sichtbaren Text rendern. Default '' = same-origin (serve.py auf derselben VM).
 const API_BASE = (window.API_BASE || '').replace(/\/+$/, '');
 
 async function api(path, opts) {
