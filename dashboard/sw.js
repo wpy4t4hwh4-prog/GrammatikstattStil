@@ -1,15 +1,21 @@
 /* Research Hub Service Worker.
    Strategie: /api/* = network-first (Live-Daten frisch, Cache als Offline-Fallback nur bei GET);
    statische Assets = cache-first mit Runtime-Caching. Version bei Aenderungen erhoehen. */
-const CACHE = 'research-hub-v1';
+const CACHE = 'research-hub-v2';
+// data/project.json ist OPTIONAL (gitignored; auf GitHub Pages 404) - einzeln precachen,
+// damit ein 404 das SW-Install nicht killt (addAll wuerde sonst komplett fehlschlagen).
 const PRECACHE = [
   './', 'index.html', 'manifest.webmanifest',
-  'data/project.json', 'data/sample-data.js', 'data/templates.json',
+  'data/sample-data.js', 'data/templates.json',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-180.png'
 ];
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(PRECACHE)).then(() => self.skipWaiting()));
+  e.waitUntil(
+    caches.open(CACHE)
+      .then(c => Promise.all(PRECACHE.map(p => c.add(p).catch(() => null))))
+      .then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener('activate', e => {
