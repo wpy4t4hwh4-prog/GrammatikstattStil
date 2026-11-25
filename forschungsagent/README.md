@@ -12,7 +12,7 @@ Projekt-Libraries), `ablage_durchsuchen` (eigene Research-Notizen), `projektdate
 git add forschungsagent && git commit -m "Add grammatik-statt-stil-research agent" && git push -u origin vibe/forschungsagent-b21b74
 
 ## Runde 2 + Subagenten (Arm B) - 2026-11-20
-- Subagenten: Root auf `mistral-large-4-0`, `screener` auf `mistral-small-2603` (read-only Masse:
+- Subagenten: Root auf `mistral-large-4-0`, `screener` auf `mistral-small-2603` (read-only Umfangsarbeit/Bulk:
   Existenz/Metadaten/Lizenz pro Kandidatenquelle, kein Ablage-Write), `verifier` auf `mistral-large-4-0`
   (Claim-Verifikation). Cap: `SubagentPolicy(concurrent_child_turn_limit=10, max_depth=2)`.
 - Sandbox: Default `MistralSandbox` (Deployment + Subagenten brauchen sie; `cloud_user`-Rolle noetig,
@@ -26,6 +26,15 @@ git add forschungsagent && git commit -m "Add grammatik-statt-stil-research agen
   Subagenten-Hooks ohne Ablage-Pflicht/Summary.
 - Skills: gepinnt via `PINNED_SKILLS` (id, version), Fallback `all_registry_skills()`.
 - Tests: `uv run python tests/run_tests.py` (75/75 OK).
+
+## RCA Textwurst/F1-F5 - 2026-11-24 (ab main nach PR #10/#11)
+- F1: DOUBLE-CHECK-Regel entschaerft den Konflikt - vollstaendiger Nachweis liegt in der Ablage-Notiz; JSON nur Kern-Checks (max. 3 double_check, ergebnis max. 200 Z.).
+- F2: Schema-Descriptions sagen "max. 5 / Kern-Eintraege" statt "Alle .../PFLICHT" (Schema ist zweiter Instruktionskanal, arXiv:2608.08254).
+- F3: Caps schaerfer: JSON gesamt <= 3000 Z., offene_punkte <= 5, double_check.ergebnis <= 200 / gesamt <= 1500; zusammenfassung 500 / arbeitsupdate 800 bleiben.
+- F4: ResearchAnswer verschlankt auf zusammenfassung + arbeitsupdate + offene_punkte + notiz_id; belegte_aussagen/double_check/quellen/verbatim_zitate/deutungen/verifizierungsquote entfernt. Hook: notiz_id-Herkunft (muss aus research_note_ablegen Tool-Output stammen), URL-Check auf Textfeldern bleibt, Ablage-Pflicht bleibt; Feld-basierte QA (Zitate/Lizenz) liegt in der Ablage-Notiz.
+- F5: Plattformseitig Instanzgroesse erhoehen (OOM exit 137 -> invalid_command) - Console/Koyeb, nicht per API.
+- Begriff: "Masse(-Arbeit)" ersetzt durch "Umfangsarbeit (Bulk)" in main.py/README.
+- RCA-Dok: `rca-textwurst-abschlussantwort-2026-11-24.md` (Ablage).
 
 ## Session-Start-Optimierung (O1/O2/O4) - 2026-11-22
 - `projektdateien_auflisten(library=..., search=...)`: optionale Filter; `search` wird serverseitig

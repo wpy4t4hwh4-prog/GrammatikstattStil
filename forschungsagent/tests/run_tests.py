@@ -306,9 +306,15 @@ class StaticSourceTests(unittest.TestCase):
         self.assertIn("DATENSCHUTZ/ROBOTS", self.src)
         self.assertIn("Getty AAT", self.src)
 
-    def test_verifizierungsquote_feld_und_hook_check(self):
-        self.assertIn("verifizierungsquote: float", self.src)
-        self.assertIn("Verifizierungsquote zu niedrig", self.src)
+    def test_schema_schlank_notiz_id(self):
+        # F4: Protokoll-Listen raus aus output_type, dafuer notiz_id
+        self.assertIn("notiz_id: str", self.src)
+        self.assertNotIn("verifizierungsquote: float", self.src)
+        self.assertNotIn("belegte_aussagen: list[BelegteAussage]", self.src)
+        self.assertNotIn("quellen: list[SourceRecord]", self.src)
+        self.assertNotIn("double_check: list[DoubleCheck]", self.src)
+        self.assertNotIn("verbatim_zitate: list[VerbatimZitat]", self.src)
+        self.assertIn("notiz_id nicht aus research_note_ablegen Tool-Ausgabe", self.src)
 
     def test_provenance_header(self):
         self.assertIn("Erstellt mit: Forschungsagent grammatik-statt-stil-research", self.src)
@@ -522,11 +528,11 @@ class AntwortKurzCapsTests(unittest.TestCase):
         self.assertIn("gesamte JSON-Antwort zu lang", str(getattr(res, "message", res)))
 
     def test_listen_caps(self):
-        payload = {"zusammenfassung": "ok", "arbeitsupdate": "ok", "belegte_aussagen": [], "double_check": [],
-                   "verifizierungsquote": 1.0, "offene_punkte": ["p"] * 11}
+        payload = {"zusammenfassung": "ok", "arbeitsupdate": "ok",
+                   "offene_punkte": ["p"] * 6, "notiz_id": ""}
         res = self._post(payload)
         self.assertIsNotNone(res)
-        self.assertIn("offene_punkte hat 11 Eintraege (max 10)", str(getattr(res, "message", res)))
+        self.assertIn("offene_punkte hat 6 Eintraege (max 5)", str(getattr(res, "message", res)))
 
     def test_kurze_antwort_mit_begrenzten_listen_ok(self):
         payload = {"zusammenfassung": "ok", "arbeitsupdate": "ok", "belegte_aussagen": [], "double_check": [],
@@ -536,9 +542,11 @@ class AntwortKurzCapsTests(unittest.TestCase):
     def test_statische_caps_im_quelltext(self):
         with open(main.__file__, encoding="utf-8") as _f:
             s = _f.read()
-        self.assertIn("len(text) > 6000", s)
-        self.assertIn('("belegte_aussagen", 8), ("double_check", 8), ("quellen", 8)', s)
-        self.assertIn("GESAMTES JSON max. 6000 Zeichen", s)
+        self.assertIn("len(text) > 3000", s)
+        self.assertIn('(("offene_punkte", 5),)', s)
+        self.assertIn("GESAMTES JSON max. 3000 Zeichen", s)
+        self.assertIn("ergebnis\", \"\"))) > 200", s)
+        self.assertIn("_dc_ges > 1500", s)
 
 
 class LoopFixB3Tests(unittest.TestCase):
@@ -966,9 +974,12 @@ class Runde2B3Tests(unittest.TestCase):
             s = _f.read()
         self.assertIn("SUBAGENTEN-DELEGATION", s)
         self.assertIn("PROJEKT-/FACHKONTEXT", s)
-        self.assertIn("PRO CLAIM", s)
-        self.assertIn("license_access", s)
+        self.assertIn("VOLLSTAENDIGE Nachweis", s)  # F1: Nachweis in der Ablage-Notiz
+        self.assertIn("Lizenz-/Zugangsweg-Feld", s)
         self.assertIn("Hook-Durchsetzung", s)
+        self.assertIn("Umfangsarbeit (Bulk-Screening", s)  # Begriff statt "Masse"
+        self.assertNotIn("Masse-Arbeit", s)
+        self.assertNotIn("Masse ", s)
 
 
 if __name__ == "__main__":
