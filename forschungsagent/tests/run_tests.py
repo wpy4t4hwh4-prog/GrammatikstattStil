@@ -1064,5 +1064,33 @@ class RcaAblageLoopTests(unittest.TestCase):
         self.assertIn("Pro Turn GENAU EINE Notiz", bc)
 
 
+class StartPromptV5Tests(unittest.TestCase):
+    """Start-Prompt v5 (RCA 48b8aba1, R1-R8): background_check.TASK ist byte-gleich Variante A des v5-Dokuments."""
+
+    def _bc(self):
+        import os
+        with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "background_check.py"), encoding="utf-8") as _f:
+            return _f.read()
+
+    def test_task_ist_v5_variante_a(self):
+        bc = self._bc()
+        for needle in ["Start-Prompt v5", "Pro Turn GENAU EINE Notiz",
+                       "research_note_aktualisieren IM SELBEN DOKUMENT", "Turn-/Session-Grenze",
+                       "max. ca. 4000 Zeichen", "max. 10 Zeilen", "KÜRZEN/FIXEN"]:
+            self.assertIn(needle, bc)
+        self.assertNotIn("pro Position/Teilschritt eigene Notiz", bc)  # alte v4-Formulierung entfernt
+        self.assertNotIn("Start-Prompt v4", bc)
+
+    def test_task_keep_teststrings(self):
+        # bestehende Assertions von test_background_check_uses_startprompt_v4 bleiben gueltig
+        bc = self._bc()
+        for needle in ['Session-Start für den Forschungsagenten "Grammatik statt Stil"',
+                       "SESSION-START-REGEL (schlank)",
+                       'projektdateien_auflisten(library="research_ablage_agent", search="00-projektstand")',
+                       "Umfangsarbeit (Bulk-Screening)", "GESAMTES JSON max. 3000 Zeichen",
+                       "notiz_id", "2x taeglich, 06:00 und 17:00 Europe/Vienna"]:
+            self.assertIn(needle, bc)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
