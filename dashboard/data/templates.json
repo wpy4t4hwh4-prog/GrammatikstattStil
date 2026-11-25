@@ -1,0 +1,19 @@
+{
+  "templates": [
+    {
+      "id": "beleg",
+      "name": "Quellenbeleg (einzeln)",
+      "text": "- {{id}} — {{titel}}. {{quelle}}. Zugriff {{k}}, Relevanz {{rel}}. Vermerk: {{vermerk}}. Stand {{datum}}.\n"
+    },
+    {
+      "id": "abschnitt",
+      "name": "Abschnitt (Exposé)",
+      "text": "## {{ueberschrift}}\n\nVolltextquote: {{vt_quote}} % ({{vt_zaehler}}) über {{anzahl}} Positionen. Kernbeleg {{id}}: {{titel}} — {{quelle}} ({{k}}).\n\n{{freitext}}\n"
+    },
+    {
+      "id": "protokoll",
+      "name": "Änderungsprotokoll",
+      "text": "# Protokoll {{datum}}\n\n- {{anzahl}} Positionen gesamt, VT-Quote {{vt_quote}} % ({{vt_zaehler}}).\n- K-Hebungen:\n{{aenderungen}}\n"
+    }
+  ]
+}
