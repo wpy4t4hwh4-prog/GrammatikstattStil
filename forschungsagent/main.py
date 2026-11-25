@@ -109,7 +109,7 @@ Vergleich: Vergleiche Positionen systematisch, etwa in einer Tabelle mit Positio
 
 Synthese und Zusammenfassung: Führe die Befunde zu einer kohärenten Gesamtsicht zusammen und fasse am Ende kompakt zusammen, einschließlich offener Fragen und Grenzen der Aussagekraft.
 
-Ablage: Lege bei jeder substanziellen Recherche genau eine Notiz als Markdown-Dokument in der dir zugewiesenen Ablage ab, mit eindeutigem Titel (Thema und Datum) und folgendem Aufbau: Titel, Thema, Datum, Forschungsfrage, Quellen mit Kurzbeschreibung und Zugangsstufe, Analyse, Vergleich, Synthese, Bezug zum Projekt „Grammatik statt Stil“. Korrekturen an einer bereits abgelegten Notiz führst du als dokumentierte Korrektur in demselben Dokument aus (mit Kennzeichnung dessen, was geändert wurde), niemals als stille Zweitablage unter neuem Dokument. Werkzeug fuer Korrekturen im selben Dokument: research_note_aktualisieren. Bei abgelegten Fremdtexten ergaenzt die Notiz ein Lizenz-/Zugangsweg-Feld (CC-Lizenz, Verlag, Archiv) - PFLICHT (B3-3) fuer jeden Volltext in der Ablage-Notiz (license_access: lizenz/zugang/abgerufen_am).
+Ablage: siehe Block "ABLAGE & PROTOKOLL" in Abschnitt 5 (verbindlich) - genau eine Notiz pro Turn, inkrementell und kompakt.
 
 ## 4. Bibliotheken und Zugriffsordnung
 
@@ -130,7 +130,7 @@ TURN-ABSCHLUSS (verbindlich): Sobald der Arbeitsauftrag vollständig abgearbeite
 
 ABSCHLUSS-ANTWORT-FORMAT (verbindlich): Die letzte Antwort eines Turns ist AUSSCHLIEßLICH ein einzelnes nacktes JSON-Objekt (ResearchAnswer) — KEIN Markdown-Fence (```json), KEIN Text davor oder danach, KEINE zweite oder dritte JSON-Antwort. Alle Keys und String-Werte nur mit ASCII-Double-Quotes (U+0022 "), niemals typografische Anführungszeichen („ “ ‚ ‘). zusammenfassung max. 500 Zeichen, arbeitsupdate max. 800 Zeichen (Harte QA im Hook). UMFANG: Die sichtbare Abschlussantwort bleibt KURZ - zusammenfassung/arbeitsupdate sind eine EIGENE Kernzusammenfassung in eigenen Worten fuer den Auftraggeber: KEINE Aufzaehlung von Tool-Calls, Quellen-IDs, DOIs, URLs oder Seitenangaben in diesen beiden Feldern; das ausfuehrliche Protokoll (was wurde gemacht) liegt AUSSCHLIESSLICH in der Ablage-Notiz. Das AUSFUEHRLICHE, praezise Protokoll gehoert AUSSCHLIESSLICH in die Research-Ablage (research_note_ablegen / research_note_aktualisieren; session-summary schreibt der Hook automatisch) - niemals als langer Text in die Abschlussantwort. GESAMTES JSON max. 3000 Zeichen (harte Hook-QA); offene_punkte max. 5 Eintraege; notiz_id = Dokument-ID der Ablage-Notiz. belegte_aussagen/double_check/quellen/verbatim_zitate/deutungen existieren NICHT mehr im Schema - komplettes Protokoll AUSSCHLIESSLICH in der Ablage-Notiz. Klarstellung: Die Hook-Transparenzmeldung gibst du als EIGENE fruehere Assistant-Nachricht im selben Turn (reiner Text, kein JSON, enthaelt nicht das Wort 'zusammenfassung'); die LETZTE Nachricht des Turns ist AUSSCHLIESSLICH das nackte JSON - 'kein Text davor/danach' bezieht sich auf diese letzte Nachricht, nicht auf den ganzen Turn.
 
-ABLAGE-PFLICHT (verbindlich): Jeder Turn, in dem du Recherche-Werkzeuge aufgerufen hast (ablage_durchsuchen, projektquellen_suchen, web_recherche, dokument_lesen, in_dokument_suchen, zitat_pruefen, web_zitat_pruefen, projektdateien_auflisten, dokument_finden, bibliotheken_auflisten, aktuelles_datum, pdf_ocr, pdf_in_ablage_speichern, json_api_abfrage, webseite_lesen, doi_pruefen, url_status_pruefen), MUSS vor der JSON-Abschlussantwort genau eine Notiz per research_note_ablegen (bzw. research_note_aktualisieren bei Korrektur) in der Research-Ablage ablegen. INKREMENTELL ABLEGEN: Lege die Notiz SOFORT ab, sobald substantielle Befunde vorliegen - NICHT erst unmittelbar vor der JSON-Antwort. Grosse Aufgaben SPLITTEN: Bei umfangreichen Aufgaben (z. B. Volltextkollation mehrerer Positionen, Batch-Screening) pro Position/Teilschritt EIGENE Notiz (research_note_ablegen) und bei Bedarf eigener Turn - so geht bei einem Turn-Limit-Stopp (Hook-Reject ab Iteration 17/18) kein Befund verloren.
+ABLAGE & PROTOKOLL (verbindlich) - ABLAGE-PFLICHT: Jeder Turn, in dem du Recherche-Werkzeuge aufgerufen hast (ablage_durchsuchen, projektquellen_suchen, web_recherche, dokument_lesen, in_dokument_suchen, zitat_pruefen, web_zitat_pruefen, projektdateien_auflisten, dokument_finden, bibliotheken_auflisten, aktuelles_datum, pdf_ocr, pdf_in_ablage_speichern, json_api_abfrage, webseite_lesen, doi_pruefen, url_status_pruefen), MUSS vor der JSON-Abschlussantwort GENAU EINE Notiz per research_note_ablegen in der Research-Ablage ablegen. INKREMENTELL ABLEGEN: Lege die Notiz SOFORT ab, sobald substantielle Befunde vorliegen - NICHT erst unmittelbar vor der JSON-Antwort. Weitere Befunde im selben Turn sicherst du per research_note_aktualisieren IM SELBEN Dokument (nie stille Zweitablage unter neuem Namen). Grosse Aufgaben SPLITTEN auf die Turn-/Session-Grenze: ein Teilschritt pro Turn - so geht bei einem Turn-Limit-Stopp (Hook-Reject ab Iteration 17/18) kein Befund verloren. NOTIZ-AUFBAU (kompakt, Notiz gesamt max. ca. 4000 Zeichen): Titel mit Datum, Thema/Forschungsfrage, Quellen mit Kurzbeschreibung + Zugangsstufe (+ license_access: lizenz/zugang/abgerufen_am - PFLICHT fuer jeden Volltext in der Notiz), Befunde mit Fundstellen, kurze Analyse, Synthese, Bezug zum Projekt, offene Punkte. RECHERCHE-PROTOKOLL kompakt: max. 10 Zeilen (Suchbegriffe, URLs/IDs, HTTP-Status/Zugriffsdatum via aktuelles_datum, verworfene Quellen mit Grund) - reproduzierbar, aber KURZ; bestehende Notizen nie ueberschreiben (Korrekturen markiert per research_note_aktualisieren). Das AUSFUEHRLICHE Protokoll liegt AUSSCHLIESSLICH in dieser Notiz - niemals in der JSON-Antwort.
 
 ## 6. Hook-Transparenz
 
@@ -177,11 +177,7 @@ Arbeitsweise bei jeder Anfrage:
    (z. B. PCG/Grammatik vs. parametrisch vs. generativ-optimierend vs. KI), Gemeinsamkeiten
    und Widersprüche herausarbeiten.
 4. Zusammenfassen: am Ende jeder substanziellen Antwort eine klare, prägnante Zusammenfassung.
-5. Systematisch ablegen: substantielle Rechercheergebnisse (neue Quellenbefunde, Analysen,
-   Vergleiche, Synthesen) mit research_note_ablegen als Markdown-Notiz in der Ablage-Library
-   sichern, damit sie später über ablage_durchsuchen wieder auffindbar sind. Dabei INKREMENTELL vorgehen:
-   Teilbefunde sofort pro Teilschritt ablegen (eine Notiz pro Position/Abschnitt), statt alles am Turn-Ende
-   zu sammeln - ein Turn-Limit-Stopp (17/18) darf keine Befunde kosten.
+5. Systematisch ablegen: substantielle Befunde sichern - siehe ABLAGE & PROTOKOLL (Abschnitt 5): genau eine Notiz pro Turn, INKREMENTELL SOFORT ab, weitere Befunde per research_note_aktualisieren im selben Dokument.
 
 ## SUBAGENTEN-DELEGATION (Arm B, verbindlich)
 - Du koordinierst als Root auf mistral-large-4-0. Delegiere klar parallele, read-only Umfangsarbeit (Bulk-Screening: viele Quellen parallel) an den Subagenten `screener` (mistral-small-2603): eine Kandidatenquelle (URL/DOI) pro Subagent, in der Regel 3-8 parallel, hart gecappt auf 10 gleichzeitige Subagent-Turns (SubagentPolicy). Verifikation/Quellenkritik mit Gesamtkontext an `verifier` (mistral-large-4-0) oder selbst.
@@ -209,7 +205,7 @@ Regeln (ANTI-HALLUZINATION, strikt einzuhalten):
 - "Wörtlich" heisst ZEICHEN-EXAKT inklusive Leerzeichen und Zeilenumbrueche (found_exact_inkl_leerzeichen=True). Ist nur found=True (normalisiert) aber nicht exakt, darfst du das Zitat NICHT wörtlich wiedergeben - dann paraphrasieren und als Paraphrase kennzeichnen.
 - QUELLENHIERARCHIE: Primaerquellen (Original-PDF, Verlag, DOI) bevorzugen; ResearchGate/Sekundaerquellen nur mit Kennzeichnung primaerquelle=false.
 - TRIANGULATION: Wichtige Fakten brauchen mind. 2 unabhaengige Quellen -> evidenzgrad=gesichert; sonst wahrscheinlich/umstritten. Bei widerspruechlichen Quellen aktiv nach Gegenpositionen suchen und vermerken.
-- RECHERCHE-PROTOKOLL: In jeder substantiellen research_note_ablegen-Notiz ALLE Suchbegriffe, URLs, Zugriffsdaten und verworfene Quellen festhalten (reproduzierbar wie ein Laborbuch). Notiz-Titel immer mit Datum; bestehende Notizen nie ueberschreiben.
+- RECHERCHE-PROTOKOLL: kompakt in der Notiz (max. 10 Zeilen), siehe ABLAGE & PROTOKOLL.
 - LESBARKEITS-REGEL: Bevor du "nicht lesbar"/"nicht gefunden" meldest, MUSST du dokument_lesen (bzw. zitat_pruefen) aufgerufen haben und das Tool-Ergebnis (inkl. Fehlermeldung) in double_check zitieren. Pauschale Negativmeldungen ohne dokumentierten Tool-Call sind unzulaessig.
 - ID-REGEL: Bibliotheks-IDs, Dokument-IDs, DOIs, PIIs NUR aus Tool-Ergebnissen kopieren - niemals eintippen oder aus dem Gedaechtnis. Vor Ausgabe in double_check eintragen. Bei DOI/PII zusaetzlich gegen doi.org/Verlag verifizieren (web_zitat_pruefen), Transpositionen sind typische Fehler.
 - BOUNDARIES: Schreiben NUR in die Research-Ablage (research_note_ablegen); Projekt-Libraries sind fuer den Agenten LESEN-only (dokument_lesen/zitat_pruefen/in_dokument_suchen). DOIs/PIIs vor Ausgabe mit doi_pruefen/url_status_pruefen verifizieren; Sperre (403) != 404.
@@ -226,8 +222,7 @@ Regeln:
 - Unterscheide klar zwischen Beleg (aus einer Quelle), Deutung (deine Einordnung) und
   eigener Synthese.
 - Session-Gedächtnis: Der Verlauf ist flüchtig (Redeploys und neue Sessions terminieren ihn) - das dauerhafte Gedächtnis ist die Research-Ablage (siehe SESSION-START-REGEL). Bei Folgefragen bezieh dich auf abgelegte Notizen, nachdem du den aktuellen Bestand tatsächlich gelesen hast.
-- Notizen in der Ablage immer als Markdown mit den Abschnitten: Fragestellung, Quellen,
-  Befunde, Analyse/Kontext, Vergleich, Synthese, Offene Punkte.
+- Notizen in der Ablage: Markdown, kompakter Aufbau siehe ABLAGE & PROTOKOLL.
 """
 
 
@@ -363,7 +358,7 @@ class SourceRecord(BaseModel):
 
 class ResearchAnswer(BaseModel):
     zusammenfassung: str = Field(description="Praegnanate Zusammenfassung der Antwort (max. 500 Zeichen; eigene Kernzusammenfassung in eigenen Worten, KEINE Tool-/Quellen-Aufzaehlung - Details nur in der Ablage-Notiz).")
-    arbeitsupdate: str = Field(default="", description="PFLICHT nach jeder Arbeitsrunde: Klartext-Update in vollen Saetzen, was in diesem Turn recherchiert/gelesen/abgelegt wurde (plain text, keine Stichpunkte; max. 800 Zeichen; Kernpunkte in eigenen Worten, KEIN Tool-/Quellen-Protokoll - Details nur in der Ablage-Notiz).")
+    arbeitsupdate: str = Field(default="", description="PFLICHT nach jeder Arbeitsrunde: Kernpunkte in eigenen Worten als kurze Klartext-Saetze (max. 800 Zeichen; KEIN Tool-/Quellen-Protokoll, keine Aufzaehlung von Rechercheschritten - das ausfuehrliche Protokoll liegt AUSSCHLIESSLICH in der Ablage-Notiz).")
     offene_punkte: list[str] = Field(default_factory=list, description="Ungeklaerte Fragen / nicht belegbare Punkte (max. 5 Eintraege; der Rest steht in der Ablage-Notiz).")
     notiz_id: str = Field(default="", description="Dokument-ID (UUID) der in diesem Turn per research_note_ablegen abgelegten Ablage-Notiz - aus der Tool-Ausgabe kopieren, nie raten. Leer nur wenn der Turn keine Notiz abgelegt hat.")
 
@@ -1052,7 +1047,7 @@ class QuoteAuditHook(agents.Hook):
                 self.dedup_warned = True
                 logger.warning("dedup: identischer Tool-Call 3x in Folge: %s", getattr(request, "tool_name", ""))
                 return agents.retry("STOPP: Dieser Tool-Call wurde bereits mehrfach mit identischen Argumenten ausgefuehrt und liefert dasselbe Ergebnis. NICHT erneut ausfuehren - arbeite mit dem vorliegenden Ergebnis oder schliesse ab.")
-            self.turn_rejected = True; logger.warning("hook reject"); return agents.reject("Turn beendet: identischer Tool-Call wiederholt sich ohne Fortschritt. Bitte naechsten Auftrag stellen.")
+            return self._reject("tool-dedup", "Turn beendet: identischer Tool-Call wiederholt sich ohne Fortschritt. Bitte naechsten Auftrag stellen.")
         return None
 
     async def post_tool_call(self, ctx, result):
@@ -1128,6 +1123,13 @@ class QuoteAuditHook(agents.Hook):
             logger.warning("url-check parse fehlgeschlagen: %s", _e)
         return None
 
+    def _reject(self, reason: str, msg: str):
+        # RCA R8: Reject-Grund immer mitloggen (A3-Messreihe)
+        self.turn_rejected = True
+        logger.warning("hook reject")
+        logger.info("reject_reason=%s msg=%.150s", reason, msg)
+        return agents.reject(msg)
+
     async def post_llm_call(self, ctx, result):
         # Harness-Regel: ein geworfener Hook-Fehler beendet den Turn hart ("Hook failed ...").
         # Niemals werfen - bei internem Fehler Continue (None) liefern.
@@ -1144,7 +1146,7 @@ class QuoteAuditHook(agents.Hook):
             self.deg_total = 0
             self.rep_streak = 0
             if self.llm_calls >= 17:
-                self.turn_rejected = True; logger.warning("hook reject"); return agents.reject("Turn beendet: Iterationslimit (17/18) erreicht - keine weiteren Tool-Calls mehr moeglich.")
+                return self._reject("iterationslimit", "Turn beendet: Iterationslimit (17/18) erreicht - keine weiteren Tool-Calls mehr moeglich.")
             if self.llm_calls >= 15 and not self.wrap_warned:
                 self.wrap_warned = True
                 logger.warning("iteration soft-warning at llm_calls=%d", self.llm_calls)
@@ -1157,26 +1159,44 @@ class QuoteAuditHook(agents.Hook):
                 self.noprog_warned = True
                 logger.warning("no-progress: 4x identisches Tool-Ergebnis")
                 return agents.retry("STOPP: Mehrere aufeinanderfolgende Tool-Calls liefern dasselbe Ergebnis - kein Fortschritt. Beende die Recherche jetzt und gib die Abschluss-Antwort aus (ggf. mit research_note_ablegen ablegen).")
-            self.turn_rejected = True; logger.warning("hook reject"); return agents.reject("Turn beendet: kein Fortschritt durch wiederholte Tool-Ergebnisse. Bitte naechsten Auftrag stellen.")
+            return self._reject("no-progress", "Turn beendet: kein Fortschritt durch wiederholte Tool-Ergebnisse. Bitte naechsten Auftrag stellen.")
         if self.consec_errors >= 3:
             return agents.retry("STOPP: 3+ aufeinanderfolgende fehlgeschlagene Tool-Calls. Pruefe die Argumente sorgfaeltig: IDs nur aus projektdateien_auflisten/bibliotheken_auflisten/dokument_finden kopieren, nie raten. Dann erst weiter.")
         # degenerativer Text-Loop ("Fertig... Ende... Done...") ohne Tool-Calls -> Turn hart beenden.
         # Kumulativ ueber aufeinanderfolgende text-only Antworten, damit auch verteilte Floskeln greifen.
-        deg = len(_re.findall(r"\b(fertig|done|stop|ende|tschüss|aufhören|höre auf|abgeschlossen|schluss|schlussstrich|terminiert|beendet|closed|over|final|last|ultimate|letzter|bye|abschied)\b|\[stop\]|\[end|ende der (runde|antwort)|turn-ende", text, _re.IGNORECASE))
+        # RCA R4: Deg-Woerter nur bei KURZEN Antworten (<300 Z.) werten - False-Positive in normalen Forschungtexten vermeiden
+        deg = (len(_re.findall(r"\b(fertig|done|stop|ende|tschüss|aufhören|höre auf|abgeschlossen|schluss|schlussstrich|terminiert|beendet|closed|over|final|last|ultimate|letzter|bye|abschied)\b|\[stop\]|\[end|ende der (runde|antwort)|turn-ende", text, _re.IGNORECASE)) if len(text) < 300 else 0)
         self.no_tool_streak += 1
         self.deg_total += deg
         if deg >= 4 or (self.no_tool_streak >= 3 and self.deg_total >= 3):
-            self.turn_rejected = True; logger.warning("hook reject"); return agents.reject("Turn beendet: degenerativer Endlos-Text erkannt. Bitte naechsten Auftrag stellen.")
+            return self._reject("degenerativer-text", "Turn beendet: degenerativer Endlos-Text erkannt. Bitte naechsten Auftrag stellen.")
         # Kumulative Wellen-Erkennung ueber ALLE text-only Antworten des Turns (nicht nur eine einzelne)
-        self.turn_fences += text.count("```json")
-        self.turn_zus += len(_re.findall(r'["\u201e\u201c]zusammenfassung["\u201c\u201d]\s*:', text))
+        # RCA R5: nur TATSaeCHLICH als JSON parsebare Answer-Bloecke zaehlen (Prosa/Entwuerfe mit blosser Feld-Erwaehnung nicht)
+        _blocks = _re.findall(r"```[a-zA-Z]*\s*\n(.*?)```", text, _re.S)
+        _n_ans = 0
+        for _b in _blocks:
+            try:
+                _d = _json.loads(_b.strip())
+                if isinstance(_d, dict) and "zusammenfassung" in _d:
+                    _n_ans += 1
+            except Exception:
+                _n_ans += 1  # Fence ohne parsebares JSON ist trotzdem ein Answer-Versuch
+        if not _blocks:
+            try:
+                _d = _json.loads(text.strip())
+                if isinstance(_d, dict) and "zusammenfassung" in _d:
+                    _n_ans += 1
+            except Exception:
+                pass
+        self.turn_fences += _n_ans
+        self.turn_zus = self.turn_fences
         self.turn_chars += len(text)
         # Root-Cause json_invalid: typografische Anfuehrungszeichen in einer JSON-artigen Abschlussantwort
         _looks_json = ("zusammenfassung" in text) or text.lstrip().startswith("{") or "```json" in text
         if _looks_json and any(c in text for c in "\u201e\u201c\u201d\u201a\u2018\u2019"):
             self.typo_streak += 1
             if self.typo_streak >= 2:
-                self.turn_rejected = True; logger.warning("hook reject typo-quotes"); return agents.reject("Turn beendet: JSON-Antwort mit typografischen Anfuehrungszeichen (nur ASCII-Double-Quote erlaubt). Bitte naechsten Auftrag stellen.")
+                return self._reject("typo-quotes", "Turn beendet: JSON-Antwort mit typografischen Anfuehrungszeichen (nur ASCII-Double-Quote erlaubt). Bitte naechsten Auftrag stellen.")
             return agents.retry("STOPP: JSON nur mit ASCII-Double-Quotes (U+0022) - niemals typografische Anfuehrungszeichen. Ausserdem: nacktes JSON ohne Markdown-Fence, ohne Text davor/danach, genau EIN Objekt.")
         # ABLAGE-PFLICHT: Recherche im Turn ohne abgelegte Notiz -> erst Retry, dann Reject
         if self.enforce_ablage_pflicht and (set(self.tools_called) & _SEARCH_TOOLS) and not (set(self.tools_called) & _NOTE_TOOLS):
@@ -1184,12 +1204,12 @@ class QuoteAuditHook(agents.Hook):
                 self.abl_warned = True
                 logger.warning("ablage-pflicht: recherche ohne notiz")
                 return agents.retry("PFLICHT: Es wurde recherchiert, aber noch keine Notiz abgelegt. Lege JETZT mit research_note_ablegen (bzw. research_note_aktualisieren bei Korrektur) eine Notiz in der Research-Ablage ab - DANACH die einzelne JSON-Abschlussantwort, dann Turnende.")
-            self.turn_rejected = True; logger.warning("hook reject ablage-pflicht"); return agents.reject("Turn abgelehnt: Protokoll-Pflicht nicht erfuellt (Recherche ohne research_note_ablegen). Bitte naechsten Auftrag stellen.")
+            return self._reject("ablage-pflicht", "Turn abgelehnt: Protokoll-Pflicht nicht erfuellt (Recherche ohne research_note_ablegen). Bitte naechsten Auftrag stellen.")
         # Wellen-Loop kumulativ ueber den Turn: mehrere Fences/zusammenfassung-Felder oder >30000 Zeichen insgesamt
-        if self.turn_fences + self.turn_zus >= 2 or self.turn_chars > 30000:
+        if self.turn_fences >= 2 or self.turn_chars > 30000:
             self.wave_streak += 1
             if self.wave_streak >= 2:
-                self.turn_rejected = True; logger.warning("hook reject wellen kumulativ"); return agents.reject("Turn beendet: mehrere Answer-Bloecke oder ueberlange Antworten ueber den Turn verteilt. Bitte naechsten Auftrag stellen.")
+                return self._reject("wellen-loop", "Turn beendet: mehrere Answer-Bloecke oder ueberlange Antworten ueber den Turn verteilt. Bitte naechsten Auftrag stellen.")
             return agents.retry("STOPP: genau EINE JSON-Abschlussantwort abgeben - keine weiteren Wellen, keine zweiten JSON-Bloecke, keine wiederholte Zusammenfassung. Turn sofort beenden.")
         # Wiederholungs-Loop in der Texterstellung (z. B. Dokumentation): aehnliche Antworten ohne Tool-Calls
         import difflib
@@ -1200,7 +1220,7 @@ class QuoteAuditHook(agents.Hook):
             if sim >= 0.90:
                 self.rep_streak += 1
                 if self.rep_streak >= 2:
-                    self.turn_rejected = True; logger.warning("hook reject"); return agents.reject("Turn beendet: Antwort wiederholt sich weitgehend ohne neuen Tool-Call. Bitte naechsten Auftrag stellen.")
+                    return self._reject("wiederholung", "Turn beendet: Antwort wiederholt sich weitgehend ohne neuen Tool-Call. Bitte naechsten Auftrag stellen.")
                 return agents.retry("STOPP: Diese Antwort aehnelt der vorherigen zu stark (%.0f%%) ohne neuen Werkzeugaufruf. Wiederhole dich nicht - fuege nur NEUE, belegte Inhalte hinzu oder schliesse ab." % (sim * 100))
             else:
                 self.rep_streak = 0
@@ -1351,13 +1371,13 @@ class QuoteAuditHook(agents.Hook):
                 problems.append("%s hat %d Eintraege (max %d) - Kern-Eintraege in der Antwort, Rest in die Ablage-Notiz" % (_feld, len(_lst), _cap))
         if not problems:
             return None
-        feedback = ("VERBOTEN: " + " | ".join(problems[:3]) + ((" (+%d weitere)" % (len(problems) - 3)) if len(problems) > 3 else "") +
-                    ". Regeln: wörtliche Zitate nur mit zitat_pruefen/web_zitat_pruefen found=True in DIESEM Turn; "
-                    "Negativbefunde nur nach dokument_lesen/ablage_durchsuchen/projektquellen_suchen/projektdateien_auflisten-Call mit dokumentiertem Ergebnis in double_check.")
+        feedback = ("K\u00dcRZEN/FIXEN: " + " | ".join(problems[:3]) + ((" (+%d weitere)" % (len(problems) - 3)) if len(problems) > 3 else "") +
+                    ". Limits: zusammenfassung <=500 Z., arbeitsupdate <=800 Z., JSON gesamt <=3000 Z., offene_punkte <=5. "
+                    "Ausfuehrliches Protokoll nur in die Ablage-Notiz. Danach KEINE weiteren Tool-Calls - nur das korrigierte JSON als letzte Nachricht.")
         if self.retries < 2:
             self.retries = self.retries + 1
             return agents.retry(feedback)
-        self.turn_rejected = True; logger.warning("hook reject"); return agents.reject("Turn abgelehnt: " + feedback)
+        return self._reject("json-qa", "Turn abgelehnt: " + feedback)
 
     async def post_agent_turn(self, ctx, answer):
         # Auto-Gedaechtnis: bei substanziellem Turn (Tool-Calls) kompaktes Summary in die Research-Ablage schreiben,

@@ -129,10 +129,13 @@ class HookLoopTests(unittest.TestCase):
         self.assertTrue(self.hook.turn_rejected)
 
     def test_wellen_kumulativ_ueber_turn(self):
-        # zwei EINZELNE text-only Antworten mit je einem json-Block -> kumulativ Welle
+        # RCA R5: nur parsebare Answer-Bloecke zaehlen; einzelner Block ok, kumulativ 2 -> Retry, 3 -> Reject
         b1 = '```json\n{"zusammenfassung": "A"}\n```'
         b2 = '```json\n{"zusammenfassung": "B"}\n```'
-        r1 = self._post(b1)
+        r0 = self._post(b1)
+        self.assertIsNone(r0)  # einzelner Answer-Block ist ok
+        self.assertEqual(self.hook.turn_fences, 1)
+        r1 = self._post(b2)
         self.assertIsNotNone(r1)  # kumulativ 2 -> Retry
         self.assertEqual(self.hook.wave_streak, 1)
         r2 = self._post(b2)
@@ -364,7 +367,7 @@ class StaticSourceTests(unittest.TestCase):
         self.assertIn("delete_async(library_id=NOTES_LIBRARY_ID, document_id=document_id)", self.src)
 
     def test_lizenzfeld_present(self):
-        self.assertIn("Lizenz-/Zugangsweg-Feld", self.src)
+        self.assertIn("license_access: lizenz/zugang/abgerufen_am", self.src)  # R6: konsolidierter Ablage-Block
         self.assertNotIn("KI-Nutzung: mit KI-Assistenz", self.src)
 
 
@@ -482,9 +485,15 @@ class AblageInkrementellTests(unittest.TestCase):
             s = _f.read()
         self.assertIn("INKREMENTELL ABLEGEN", s)
         self.assertIn("SOFORT ab, sobald substantielle Befunde vorliegen", s)
-        self.assertIn("Grosse Aufgaben SPLITTEN", s)
+        self.assertIn("GENAU EINE Notiz", s)                                  # R3: eine Notiz pro Turn
+        self.assertIn("research_note_aktualisieren IM SELBEN Dokument", s)     # R3: Updates im selben Dokument
+        self.assertIn("Grosse Aufgaben SPLITTEN auf die Turn-/Session-Grenze", s)  # R3: Splitten auf Turn-Grenze
         self.assertIn("Turn-Limit-Stopp (Hook-Reject ab Iteration 17/18)", s)
-        self.assertIn("INKREMENTELL vorgehen", s)  # Schritt 5 der Arbeitsweise
+        self.assertIn("max. 10 Zeilen", s)                                     # R2: kompaktes Protokoll
+        self.assertIn("max. ca. 4000 Zeichen", s)                              # R2: Notiz-Laenge gedeckelt
+        self.assertIn("ABLAGE & PROTOKOLL (verbindlich)", s)                   # R6: konsolidierter Block
+        self.assertNotIn("Laborbuch", s)                                       # R6: Laborbuch-Formulierung entfernt
+        self.assertNotIn("eine Notiz pro Position/Abschnitt", s)               # R6: alte Schritt-5-Doppelung entfernt
 
     def test_iterationslimit_hook_bleibt_17_18(self):
         with open(main.__file__, encoding="utf-8") as _f:
@@ -975,11 +984,84 @@ class Runde2B3Tests(unittest.TestCase):
         self.assertIn("SUBAGENTEN-DELEGATION", s)
         self.assertIn("PROJEKT-/FACHKONTEXT", s)
         self.assertIn("VOLLSTAENDIGE Nachweis", s)  # F1: Nachweis in der Ablage-Notiz
-        self.assertIn("Lizenz-/Zugangsweg-Feld", s)
+        self.assertIn("license_access: lizenz/zugang/abgerufen_am", s)
         self.assertIn("Hook-Durchsetzung", s)
         self.assertIn("Umfangsarbeit (Bulk-Screening", s)  # Begriff statt "Masse"
         self.assertNotIn("Masse-Arbeit", s)
         self.assertNotIn("Masse ", s)
+
+class RcaAblageLoopTests(unittest.TestCase):
+    """RCA 2026-11-25 (Dokument 48b8aba1): Endlos-Loop der Abschlussantwort - R1-R8."""
+
+    def setUp(self):
+        self.hook = main.QuoteAuditHook()
+        asyncio.run(self.hook.pre_agent_turn(None, None))
+
+    def _post(self, text="", tool_calls=None):
+        return asyncio.run(self.hook.post_llm_call(None, _reply(text, tool_calls)))
+
+    def test_deg_woerter_in_langem_forschungstext_kein_reject(self):
+        # R4: 'abgeschlossen/beendet/...' in normaler langer Antwort ist KEIN degenerativer Loop
+        lang = ("Die Kollation der Zahllesart ist abgeschlossen; die Pruefung wurde beendet. " * 8) + "x" * 100
+        self.assertGreater(len(lang), 300)
+        res = self._post(lang)
+        self.assertIsNone(res)
+        self.assertFalse(self.hook.turn_rejected)
+
+    def test_deg_kurztext_weiterhin_reject(self):
+        res = self._post("Fertig. Ende. Done. Stop.")
+        self.assertIsNotNone(res)
+        self.assertTrue(self.hook.turn_rejected)
+
+    def test_prosa_erwaehnung_zusammenfassung_zaehlt_nicht(self):
+        # R5: blosse Prosa-Erwaehnung des Feldnamens (kein parsebares JSON) ist kein Answer-Block
+        res = self._post('Im JSON heisst das Feld "zusammenfassung" und bleibt kurz.')
+        self.assertIsNone(res)
+        self.assertEqual(self.hook.turn_fences, 0)
+
+    def test_ein_parsebarer_answer_block_pro_turn_ok(self):
+        import json
+        b1 = '```json\n' + json.dumps({"zusammenfassung": "A"}) + '\n```'
+        self.assertIsNone(self._post(b1))
+        self.assertEqual(self.hook.turn_fences, 1)
+
+    def test_zwei_answer_bloecke_welle_retry(self):
+        import json
+        b = '```json\n' + json.dumps({"zusammenfassung": "A"}) + '\n```'
+        self.assertIsNone(self._post(b))
+        r = self._post(b)
+        self.assertIsNotNone(r)  # kumulativ 2 -> Retry
+        self.assertEqual(self.hook.wave_streak, 1)
+
+    def test_schema_arbeitsupdate_schlank(self):
+        # R1: Feldbeschreibung verlangt kein Protokoll mehr in der Antwort
+        with open(main.__file__, encoding="utf-8") as _f:
+            s = _f.read()
+        self.assertNotIn("was in diesem Turn recherchiert/gelesen/abgelegt wurde", s)
+        self.assertIn("KEIN Tool-/Quellen-Protokoll", s)
+
+    def test_reject_reason_wird_geloggt(self):
+        # R8: _reject loggt den Grund; alter Test-String bleibt erhalten
+        with open(main.__file__, encoding="utf-8") as _f:
+            s = _f.read()
+        self.assertIn('logger.warning("hook reject")', s)
+        self.assertIn("def _reject(self, reason: str, msg: str):", s)
+        self.assertIn("reject_reason=", s)
+
+    def test_retry_feedback_mit_limits(self):
+        # R7: praezises, kurzes Retry-Feedback mit harten Limits
+        with open(main.__file__, encoding="utf-8") as _f:
+            s = _f.read()
+        self.assertIn("FIXEN:", s)
+        self.assertIn("zusammenfassung <=500 Z.", s)
+        self.assertIn("arbeitsupdate <=800 Z.", s)
+        self.assertIn("JSON gesamt <=3000 Z.", s)
+
+    def test_background_check_eine_notiz_pro_turn(self):
+        import os
+        with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "background_check.py"), encoding="utf-8") as _f:
+            bc = _f.read()
+        self.assertIn("Pro Turn GENAU EINE Notiz", bc)
 
 
 if __name__ == "__main__":
