@@ -320,6 +320,29 @@ class StaticSourceTests(unittest.TestCase):
         self.assertIn("_task_for_today()", bc)
         self.assertIn("selbst-eval-", bc)
 
+    def test_background_check_uses_startprompt_v4(self):
+        # Automatisierung schickt den Start-Prompt v4 (Variante A) als User-Message
+        with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "background_check.py"), encoding="utf-8") as _f:
+            bc = _f.read()
+        self.assertIn('Session-Start für den Forschungsagenten "Grammatik statt Stil"', bc)
+        self.assertIn("SESSION-START-REGEL (schlank)", bc)
+        self.assertIn('projektdateien_auflisten(library="research_ablage_agent", search="00-projektstand")', bc)
+        self.assertIn("Umfangsarbeit (Bulk-Screening)", bc)
+        self.assertIn("GESAMTES JSON max. 3000 Zeichen", bc)
+        self.assertIn("notiz_id", bc)
+        self.assertIn("2x taeglich, 06:00 und 17:00 Europe/Vienna", bc)
+
+    def test_workflow_vienna_gate_2x_taeglich(self):
+        wf = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".github", "workflows", "agent-daily-check.yml")
+        with open(wf, encoding="utf-8") as _f:
+            y = _f.read()
+        self.assertIn('cron: "0 * * * *"', y)
+        self.assertIn("TZ=Europe/Vienna", y)
+        self.assertIn('"$H" = "06"', y)
+        self.assertIn('"$H" = "17"', y)
+        self.assertIn("steps.gate.outputs.run == 'yes'", y)
+        self.assertNotIn("0 6,11,16,21", y)  # alte 4x-taeglich-Automatisierung ersetzt
+
     def test_background_check_retry_mit_frischer_session(self):
         # Cron-Fix: bei invalid_command/HarnessCommandRejectedError einmal Retry mit NEUER Session
         with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "background_check.py"), encoding="utf-8") as _f:
