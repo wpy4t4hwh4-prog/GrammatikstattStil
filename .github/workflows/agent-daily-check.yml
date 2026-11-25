@@ -1,9 +1,9 @@
-name: Täglicher Apparat-Check (Forschungsagent)
+name: Apparat-Check Forschungsagent (2x taeglich 06:00/17:00 Europe/Vienna)
 
 on:
   schedule:
-    - cron: "0 6,11,16,21 * * *" # 4x taeglich # täglich 06:00 UTC
-  workflow_dispatch: # manueller Start möglich
+    - cron: "0 * * * *" # stuendlich; Gate-Step fuehrt nur um 06:00 und 17:00 Europe/Vienna aus (DST-sicher via TZ)
+  workflow_dispatch: # manueller Start moeglich
 
 permissions:
   contents: read
@@ -17,20 +17,32 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 360
     steps:
+      - name: Vienna time gate (nur 06:00 und 17:00 Europe/Vienna)
+        id: gate
+        run: |
+          H=$(TZ=Europe/Vienna date +%H)
+          echo "vienna_hour=$H" >> "$GITHUB_OUTPUT"
+          if [ "$H" = "06" ] || [ "$H" = "17" ]; then echo "run=yes" >> "$GITHUB_OUTPUT"; else echo "run=no" >> "$GITHUB_OUTPUT"; fi
       - uses: actions/checkout@v4
+        if: steps.gate.outputs.run == 'yes'
         with:
-          ref: main # ab PR #4 (= e6d9172) ist main der aktuelle Agent-Stand (86 Tests); vorher pinnte der Cron den Alt-Branch vibe/forschungsagent-b21b74 (6989dcb, 62 Tests)
+          ref: main # main ist der aktuelle Agent-Stand
       - uses: astral-sh/setup-uv@v5
+        if: steps.gate.outputs.run == 'yes'
       - name: Install deps
+        if: steps.gate.outputs.run == 'yes'
         working-directory: forschungsagent
         run: uv sync --quiet
       - name: Compile check
+        if: steps.gate.outputs.run == 'yes'
         working-directory: forschungsagent
         run: uv run python -m py_compile main.py background_check.py
       - name: Offline tests
+        if: steps.gate.outputs.run == 'yes'
         working-directory: forschungsagent
         run: uv run python tests/run_tests.py
-      - name: Run background check
+      - name: Run background check (Start-Prompt v4, Variante A)
+        if: steps.gate.outputs.run == 'yes'
         working-directory: forschungsagent
         env:
           MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}

@@ -1,7 +1,8 @@
-"""Automatischer Arbeitsauftrag des Forschungsagenten (4x taeglich via GitHub Actions).
+"""Automatischer Session-Start des Forschungsagenten (2x taeglich, 06:00 und 17:00 Europe/Vienna).
 
-Startet eine frische Session und fuehrt den priorisierten Arbeitsauftrag aus.
-Trigger: .github/workflows/agent-daily-check.yml (Cron 4x/Tag) oder manuell.
+Startet eine frische Session und schickt den Start-Prompt v4 (Variante A) als User-Message.
+Trigger: .github/workflows/agent-daily-check.yml (stuendlicher Cron + Vienna-Gate) oder manuell.
+Sonntags UTC wird zusaetzlich der Self-Eval-Auftrag angehaengt.
 """
 import asyncio
 import os
@@ -9,13 +10,13 @@ import sys
 
 from mistralai import agents
 
-TASK = """Arbeitsauftrag (alle übrigen Regeln gelten aus der Systemanweisung: E1-E8, Ablage-Template, Double-Check, Hook-Regeln):
-
-1. Priorität: Prüfe zuerst per ablage_durchsuchen, ob eine unbeantwortete Anweisung in der Research-Ablage liegt (Vorrang). Sonst: Standzeile + Beschaffungsliste (Volltext-Inventar) + offene Prüfaufgaben (Quellenverzeichnis) lesen und DIE EINE Aufgabe mit dem höchsten strategischen Ertrag für den Apparat wählen (K4/K5-Hebung, Beschaffungsliste, Nachbeschaffung). Wahl + Begründung + Abnahmekriterien in 3-4 Sätzen. Genau diese eine Aufgabe bearbeiten.
-2. Reihenfolge: Apparat-Bibliothek -> Projekt-Libraries -> Research-Ablage -> Web. Je Quelle: bibliografische Identität, Fassung, Zugangsstufe, Zugriffsdatum, G/Nr.
-3. Volltextbeschaffung nur auf legitimen Wegen; keine Kosten ohne Philipps Freigabe; keine Sperrumgehung; bei Scheitern dokumentierte Grenzangabe (E6).
-4. Ablage: genau eine Notiz je Recherche (research-note-template v3); Korrekturen via research_note_aktualisieren im selben Dokument.
-5. Abgabe: Hook-Transparenzmeldung; dann kompakte Zusammenfassung: gewählte Priorität + Begründung, geprüfte Quellen, begründete K-Vorschläge (keine eigene Nummernvergabe), offene Punkte/Grenzen, Empfehlung für die nächste Runde."""
+TASK = """Session-Start für den Forschungsagenten "Grammatik statt Stil". Bitte:
+1. SESSION-START-REGEL (schlank): parallel aufrufen bibliotheken_auflisten, aktuelles_datum, projektdateien_auflisten(library="research_ablage_agent", search="00-projektstand"). ID von "00-projektstand.md" aus dem gefilterten Listing entnehmen, per dokument_lesen lesen. NIEMALS IDs raten. ablage_durchsuchen ("Projektstand"/"letzter Stand"/"offene Punkte") nur als FALLBACK, wenn 00-projektstand.md fehlt/unklar ist oder die Aufgabe ältere Notizen braucht.
+2. Aktuellen Stand knapp zusammenfassen (letzter Stand, offene Punkte, laufende Aufgaben) - ausschließlich aus Tool-Ausgaben, nicht aus Gesprächsgedächtnis.
+3. Schlage DIE EINE nächste Aufgabe mit dem höchsten strategischen Ertrag für den Apparat vor (z. B. K4/K5-Hebung, Beschaffungsliste/Volltext-Inventar, Nachverfolgung offener Prüfaufgaben) - Wahl, Begründung, Abnahmekriterien in 3-4 Sätzen. Bearbeite danach genau diese eine Aufgabe.
+4. Arbeitsweise nach Systemanweisung (Sättigungsregel v2, Ablage-Pflicht, Anti-Halluzination, Prompt-Injection-Regel). INKREMENTELL ABLEGEN: Notiz SOFORT, sobald substantielle Befunde vorliegen; grosse Aufgaben SPLITTEN (pro Position/Teilschritt eigene Notiz/eigener Turn), damit ein Turn-Limit-Stopp (17/18) keinen Befund verliert. Subagenten: parallele read-only Umfangsarbeit (Bulk-Screening) an `screener` (eine Kandidatenquelle pro Subagent, 3-8 parallel, hart Cap 10), Verifikation an `verifier`; auf ALLE Ergebnisse warten; Ablage-Writes nur durch dich (research_note_ablegen / research_note_aktualisieren); Subagenten schreiben nie in die Ablage.
+5. Jede in der Antwort genannte URL/DOI muss im selben Turn per url_status_pruefen/doi_pruefen geprüft sein (Hook: 404 -> Reject; 403/429 = gesperrt, 403 != 404).
+6. Ende des Turns: (a) Hook-Transparenzmeldung als EIGENE frühere Assistant-Nachricht (max. 5 Sätze, nur tatsächlich aktive Prüfungen, reiner Text - kein JSON, enthält nicht das Wort "zusammenfassung"); (b) danach als LETZTE Nachricht GENAU EIN nacktes ResearchAnswer-JSON (ASCII-Double-Quotes, kein Markdown-Fence, kein Text davor/danach, keine zweite JSON-Antwort). Felder: nur zusammenfassung (max. 500 Z., eigene Kernzusammenfassung in eigenen Worten - KEINE Tool-/Quellen-Aufzählung), arbeitsupdate (max. 800 Z., Kernpunkte), offene_punkte (max. 5), notiz_id (UUID der Ablage-Notiz aus research_note_ablegen). GESAMTES JSON max. 3000 Zeichen. Das komplette Recherche-Protokoll (alle Claims, Zitate, Quellen mit license_access, Verifizierungsquote) liegt AUSSCHLIESSLICH in der Ablage-Notiz. Danach keine weiteren Tool-Calls."""
 
 
 SELF_EVAL_TASK = """Zusaetzlicher woechentlicher Auftrag (Self-Eval, DRACO-artig):
