@@ -1196,7 +1196,6 @@ class PwaAppTests(unittest.TestCase):
         self.assertEqual(s.count('id="thread"'), 1)
         # Segmented Control Zielwahl + Session-Toggle
         self.assertIn('id="segLocal"', s) and self.assertIn('id="segAgent"', s)
-        self.assertIn('id="btnSessToggle"', s)
         # Thread als log + aria
         self.assertIn('id="thread" role="log" aria-live="polite"', s)
         # Nachrichten-Gruppierung + Bubble-Tail + Typing
@@ -1209,7 +1208,6 @@ class PwaAppTests(unittest.TestCase):
         self.assertIn('#page-komm .thread { padding: 12px; gap: 8px; }', s)
         # Mobil: Session-Sheet statt Spalten-Stack
         self.assertRegex(s, r'@media \(max-width: 940px\) \{[\s\S]*?\.kommgrid\.show-sess \.session \{ display: flex; \}')
-        self.assertIn('.sess-toggle { display: none; }', s)
         # Apple-exact Accent light (#007aff), dark behaelt #0a84ff
         self.assertIn('--accent: #007aff;', s)
         # Toast/Fokus safe-area + focus-visible
@@ -1219,17 +1217,29 @@ class PwaAppTests(unittest.TestCase):
         self.assertIn('let destMode', s)
         self.assertIn("destMode === 'agent' ? sendAgent() : sendLocal()", s)
         self.assertIn('showStream(streamText, !!pendingCmd)', s)
-        self.assertIn("classList.toggle('show-sess')", s)
-        # v2 (iPhone): Bedienelemente IM Composer-Container, Chat-Head nur Titel+Count
-        self.assertGreater(s.find('id="segLocal"'), s.find('class="chathead-right"'))  # seg NICHT im Header, sondern im Composer
+        self.assertIn("classList.add('show-sess')", s)
+        self.assertIn("classList.remove('show-sess')", s)
+        # Composer-Struktur: eine row (Textarea + Send), kein composer-bar mehr
         self.assertIn('class="composer-row"', s)
-        self.assertIn('class="composer-bar"', s)
         cpos = s.find('<div class="composer">')
-        self.assertGreater(s.find('id="segLocal"'), cpos)          # Segmented Control im Composer
-        self.assertGreater(s.find('id="sendStatus"'), cpos)         # Status-Hinweis im Composer
-        hp = s.find('class="chathead"')
-        self.assertGreater(s.find('id="btnSessToggle"'), hp)           # Session-Toggle als trailing Nav-Button im Chat-Head
-        self.assertLess(s.find('id="btnSessToggle"'), cpos)             # ... NICHT mehr im Composer
+        # v3 (HIG Bottom-Sheet): Composer = nur Textfeld + Send; seg/Optionen im Sheet; Session schließbar
+        self.assertNotIn('btnSessToggle', s)
+        self.assertNotIn('composer-bar', s)
+        self.assertIn('id="btnKommMenu"', s)                           # EIN Menü-Button (···) im Chat-Head
+        self.assertGreater(s.find('id="segLocal"'), cpos)              # seg im Optionen-Sheet, nicht im Composer
+        self.assertLess(s.find('id="sendStatus"'), cpos)               # Status-Zeile außerhalb des Composer
+        for x in ('id="kommSheet"', 'id="backdrop"', 'id="btnSessClose"', 'id="btnOpenSession"', 'id="btnCloseSheet"'):
+            self.assertIn(x, s)
+        # Sheet-CSS (Liquid Glass / HIG)
+        for css in ('.backdrop {', '.sheet {', '.grabber {', '.sheet-action { width: 100%; min-height: 44px; }',
+                    '.iconbtn { min-width: 44px; min-height: 44px;', 'border-radius: 22px'):
+            self.assertIn(css, s)
+        self.assertIn('text-overflow: ellipsis', s)                    # Titel bricht nicht rechts aus
+        self.assertIn('#page-komm .chathead .count { display: none; }', s)
+        # JS: Sheets schließen via Backdrop, Escape, ✕
+        self.assertIn('function closeSheets()', s)
+        self.assertIn("e.key === 'Escape'", s)
+        self.assertIn('backdrop.addEventListener', s)
         # Glossar: zentrierte Spalte + mobil gestapelt
         self.assertIn('.glossar { grid-template-columns: 1fr; max-width: 760px; margin: 0 auto; }', s)
         self.assertIn('.glossar .card { flex-direction: column; align-items: flex-start; gap: 4px; }', s)
@@ -1237,7 +1247,7 @@ class PwaAppTests(unittest.TestCase):
         # Tastatur/Eventualitäten: visualViewport-Handler + Landscape-Regel + kompaktes seg
         self.assertIn('visualViewport', s)
         self.assertIn('@media (max-height: 500px) { .chat { min-height: 0; } }', s)
-        self.assertIn('#page-komm .seg button { padding: 4px 10px; font-size: 11px; min-height: 28px; }', s)
+        self.assertIn('#page-komm .seg button { padding: 6px 14px; font-size: 13px; min-height: 36px; }', s)  # seg im Sheet: volle Touch-Groesse
         self.assertGreater(s.find('id="sendBtn"'), s.find('composer-row'))
         # Header-Höhe live gemessen (iPhone-Header wrappt auf 2 Zeilen)
         self.assertIn('--header-h-live', s)
