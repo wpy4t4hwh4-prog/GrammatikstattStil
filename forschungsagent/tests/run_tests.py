@@ -1257,6 +1257,15 @@ class PwaAppTests(unittest.TestCase):
         self.assertIn('#page-komm .card { padding: var(--sp-4); }', s)
         self.assertIn('#page-komm .thread { padding: 12px; gap: 8px; }', s)
         self.assertIn('main.wrap { padding-top: var(--sp-4);', s)
+        # v4: Zoom-Fix (iOS), Chat zentriert, Pruef-Addbar
+        self.assertIn('.composer-row textarea, .addbar textarea, #pNew { font-size: 16px; }', s)  # 16px auch mit hoeherer Spezifitaet
+        self.assertIn('max-width: 1040px; margin: 0 auto; } /* Chat-Block zentriert */', s)
+        self.assertEqual(s.count('enterkeyhint="send"'), 2)                                     # msgInput + pNew
+        self.assertIn('class="addbar"', s)
+        self.assertIn('id="pAdd" class="sendbtn"', s)
+        self.assertIn('.addbar:focus-within', s)
+        self.assertNotIn('.composer .sendbtn', s)                                               # sendbtn-Scope verallgemeinert
+        self.assertIn("$('#pNew').addEventListener('focus'", s)
         # weiterhin self-contained: genau ein Skript-Tag
         self.assertEqual(s.count('<script'), 1)
         self.assertEqual(s.count('</script'), 1)
