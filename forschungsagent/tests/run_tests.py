@@ -1205,8 +1205,8 @@ class PwaAppTests(unittest.TestCase):
         self.assertIn('border-bottom-right-radius: 6px', s)
         self.assertIn('.typing span', s)
         # Chat fuellt Viewport (dvh mit vh-Fallback), Thread flex
-        self.assertIn('calc(100dvh - var(--header-h)', s)
-        self.assertRegex(s, r'\.thread \{[\s\S]*?flex: 1 1 auto')
+        self.assertIn('calc(100dvh - var(--header-h-live', s)
+        self.assertIn('#page-komm .thread { padding: 12px; gap: 8px; }', s)
         # Mobil: Session-Sheet statt Spalten-Stack
         self.assertRegex(s, r'@media \(max-width: 940px\) \{[\s\S]*?\.kommgrid\.show-sess \.session \{ display: flex; \}')
         self.assertIn('.sess-toggle { display: none; }', s)
@@ -1220,6 +1220,23 @@ class PwaAppTests(unittest.TestCase):
         self.assertIn("destMode === 'agent' ? sendAgent() : sendLocal()", s)
         self.assertIn('showStream(streamText, !!pendingCmd)', s)
         self.assertIn("classList.toggle('show-sess')", s)
+        # v2 (iPhone): Bedienelemente IM Composer-Container, Chat-Head nur Titel+Count
+        self.assertNotIn('chathead-right', s)
+        self.assertIn('class="composer-row"', s)
+        self.assertIn('class="composer-bar"', s)
+        cpos = s.find('<div class="composer">')
+        self.assertGreater(s.find('id="segLocal"'), cpos)          # Segmented Control im Composer
+        self.assertGreater(s.find('id="sendStatus"'), cpos)         # Status-Hinweis im Composer
+        self.assertGreater(s.find('id="btnSessToggle"'), cpos)      # Session-Toggle im Composer
+        self.assertGreater(s.find('id="sendBtn"'), s.find('composer-row'))
+        # Header-Höhe live gemessen (iPhone-Header wrappt auf 2 Zeilen)
+        self.assertIn('--header-h-live', s)
+        self.assertIn('function syncHeaderH()', s)
+        self.assertIn('var(--header-h-live, var(--header-h))', s)
+        # 4px-Raster mobil (Schrittgrößen)
+        self.assertIn('#page-komm .card { padding: var(--sp-4); }', s)
+        self.assertIn('#page-komm .thread { padding: 12px; gap: 8px; }', s)
+        self.assertIn('main.wrap { padding-top: var(--sp-4);', s)
         # weiterhin self-contained: genau ein Skript-Tag
         self.assertEqual(s.count('<script'), 1)
         self.assertEqual(s.count('</script'), 1)
