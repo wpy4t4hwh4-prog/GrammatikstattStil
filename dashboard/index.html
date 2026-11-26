@@ -454,14 +454,43 @@
     .card { box-shadow: none !important; break-inside: avoid; }
     body { background: #fff; color: #000; }
   }
+  /* Login-Overlay (Session-Auth) + Projekt-Picker + Agent-Tab */
+  #loginOverlay { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; padding: var(--sp-5); background: rgba(0,0,0,.45); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+  #loginOverlay[hidden] { display: none; }
+  .login-card { width: 100%; max-width: 360px; padding: var(--sp-6); background: var(--glass-strong); border: 1px solid var(--glass-border); border-radius: var(--radius-lg); box-shadow: var(--shadow); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
+  .login-card h2 { font-size: 20px; margin-bottom: 4px; }
+  #loginPw { width: 100%; font: inherit; font-size: 16px; min-height: 44px; padding: var(--sp-2) var(--sp-3); margin: var(--sp-3) 0; border-radius: 12px; border: 1px solid var(--border); background: var(--bg); color: var(--text); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:disabled { opacity: .6; }
+  #loginBtn { width: 100%; min-height: 44px; }
+  #loginErr { color: var(--k4); font-size: 13px; min-height: 1.2em; margin-top: var(--sp-2); }
+  .projwrap { display: inline-flex; align-items: center; gap: 6px; margin-right: 10px; }
+  .projwrap > span { font-size: 11px; color: var(--muted); font-weight: 600; }
+  #projSel { font: inherit; font-size: 13px; max-width: 210px; min-height: 32px; padding: 4px 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--card); color: var(--text); }
+  #projNew { min-height: 32px; padding: 4px 10px; }
+  @media (max-width: 760px) { #agentGrid { grid-template-columns: 1fr !important; } .projwrap > span { display: none; } #projSel { max-width: 130px; } }
   footer { border-top: 1px solid var(--border); padding: 18px 0 calc(28px + env(safe-area-inset-bottom)); font-size: 12px; color: var(--muted); }
 </style>
 </head>
 <body>
+<div id="loginOverlay" role="dialog" aria-modal="true" aria-labelledby="loginTitle" hidden>
+  <form class="login-card" id="loginForm">
+    <h2 id="loginTitle">Anmeldung — Research Hub</h2>
+    <p class="note">Geschützter Bereich. Passwort wird serverseitig geprüft; danach Session-Cookie (HttpOnly).</p>
+    <input type="password" id="loginPw" autocomplete="current-password" placeholder="Passwort …" required aria-label="Passwort">
+    <button class="btn primary" type="submit" id="loginBtn">Anmelden</button>
+    <p class="note" id="loginErr" role="alert"></p>
+  </form>
+</div>
 <header>
   <div class="wrap">
     <h1>Grammatik statt Stil <span style="color:var(--muted);font-weight:500">— Research Dashboard</span></h1>
     <div class="hright">
+      <label class="projwrap" id="projWrap" style="display:none" title="Projekt = Mistral-Library (serverseitig pro Session)">
+        <span>Projekt</span>
+        <select id="projSel" aria-label="Projekt wählen"></select>
+        <button class="btn" id="projNew" title="Neues Projekt anlegen (neue Library + Seed-Dokumente)">＋ Neu</button>
+      </label>
       <span class="badge" id="liveBadge" aria-live="polite"><span class="dot"></span><span id="liveLabel">lokal</span></span>
       <nav aria-label="Hauptnavigation">
         <button data-page="uebersicht" class="active" title="Übersicht (⌘1)">Übersicht</button>
@@ -473,6 +502,7 @@
         <button data-page="text" title="Text (⌘7)">Text</button>
         <button data-page="glossar" title="Glossar (⌘8)">Glossar</button>
         <button data-page="komm" title="Kommunikation (⌘9)">Kommunikation</button>
+        <button data-page="agent" title="Agent (Workflows, Live-QV, Notizen)">Agent</button>
       </nav>
     </div>
   </div>
@@ -592,6 +622,45 @@
           </div>
         </div>
       </div>
+    </div>
+  </section>
+
+  <section class="page" id="page-agent">
+    <div class="toolbar">
+      <span class="badge" id="wfBadge"><span class="dot"></span><span id="wfLabel">Agent …</span></span>
+      <select id="wfDep" aria-label="Agent-Deployment wählen"></select>
+      <span style="flex:1"></span>
+      <button class="btn" id="wfRefresh" title="Status + Läufe aktualisieren">Aktualisieren</button>
+    </div>
+    <div class="grid" id="agentGrid" style="grid-template-columns:1fr 1fr;gap:16px">
+      <div class="card">
+        <div class="chart-title">Agent starten <span class="neu">kostet Modelllauf</span></div>
+        <textarea id="wfInput" rows="3" placeholder="Start-Prompt / Aufgabe für den Agenten …" enterkeyhint="send" aria-label="Aufgabe für den Agenten" style="width:100%;font:inherit;font-size:16px;padding:8px 12px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text)"></textarea>
+        <button class="btn primary" id="wfRun" style="min-height:44px;margin-top:8px">Agent starten ▸</button>
+        <p class="note" id="wfRunNote" style="margin-top:8px"></p>
+      </div>
+      <div class="card">
+        <div class="chart-title">Notiz in Projekt-Ablage schreiben (Write-Through in die Library)</div>
+        <input type="text" id="noteTitel" placeholder="Titel der Notiz …" aria-label="Titel der Notiz" style="width:100%;font:inherit;font-size:16px;min-height:44px;padding:8px 12px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text)">
+        <textarea id="noteText" rows="4" placeholder="Notiztext (Markdown) …" aria-label="Notiztext" style="width:100%;font:inherit;font-size:16px;margin-top:8px;padding:8px 12px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text)"></textarea>
+        <button class="btn" id="noteSend" style="min-height:44px;margin-top:8px">In Ablage schreiben ⬆</button>
+        <p class="note" id="noteNote" style="margin-top:8px"></p>
+      </div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <div class="chart-title">Läufe (neueste zuerst) — Klick lädt Logs</div>
+      <div class="doclist" id="wfRuns"></div>
+    </div>
+    <div class="grid" style="grid-template-columns:1fr 1fr;gap:16px;margin-top:16px">
+      <div class="card"><div class="chart-title">Cron-Pläne (Schedules)</div><div class="doclist" id="wfSched"></div></div>
+      <div class="card"><div class="chart-title">Logs <span id="wfLogTitle"></span></div><pre class="diffview" id="wfLogs" style="max-height:300px">— Klick auf einen Lauf —</pre></div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <div class="chart-title">Quellenverzeichnis LIVE aus der Apparat-Library (A1)</div>
+      <button class="btn" id="btnQvLive" style="min-height:44px">QV live laden</button>
+      <p class="note" id="qvLiveNote" style="margin-top:8px"></p>
+      <pre class="diffview" id="qvLiveText" style="max-height:420px;display:none"></pre>
+      <button class="btn" id="qvLiveMore" style="display:none;min-height:44px;margin-top:8px">Mehr laden</button>
     </div>
   </section>
 
@@ -743,9 +812,183 @@ async function loadData() {
   loadQv(); loadAblage();
 }
 
+/* Session-Auth + CSRF: schreibende Calls tragen den CSRF-Token der Session; 401 -> Login-Overlay */
+let CSRF = null;
+let PROJ = null;
 async function api(path, opts) {
-  try { const r = await fetch(withTok(path), opts); return r.ok ? await r.json() : null; } catch (e) { return null; }
+  opts = opts || {};
+  opts.credentials = 'same-origin';
+  const m = (opts.method || 'GET').toUpperCase();
+  if (m !== 'GET' && CSRF) opts.headers = Object.assign({ 'X-Hub-CSRF': CSRF }, opts.headers || {});
+  try {
+    const r = await fetch(withTok(path), opts);
+    if (r.status === 401) { showLogin(); return null; }
+    return r.ok ? await r.json() : null;
+  } catch (e) { return null; }
 }
+async function apiRaw(path, opts) {
+  opts = opts || {};
+  opts.credentials = 'same-origin';
+  try {
+    const r = await fetch(withTok(path), opts);
+    let body = null;
+    try { body = await r.json(); } catch (e) { /* leer */ }
+    return { status: r.status, body: body };
+  } catch (e) { return { status: 0, body: null }; }
+}
+function showLogin() { const o = $('#loginOverlay'); if (o) { o.hidden = false; const p = $('#loginPw'); if (p) { p.value = ''; p.focus(); } } }
+function hideLogin() { const o = $('#loginOverlay'); if (o) o.hidden = true; }
+$('#loginForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const pw = $('#loginPw').value;
+  const btn = $('#loginBtn'); btn.disabled = true;
+  const r = await apiRaw('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: pw }) });
+  btn.disabled = false;
+  if (r.status === 200) {
+    $('#loginErr').textContent = '';
+    hideLogin();
+    const me = await apiRaw('/api/auth/me');
+    if (me.body && me.body.csrf) CSRF = me.body.csrf;
+    if (me.body && me.body.project) PROJ = me.body.project;
+    await loadProjects();
+    loadData(); liveTick(); checkMeta(false);
+  } else if (r.status === 429) {
+    $('#loginErr').textContent = 'Zu viele Fehlversuche — kurz gesperrt.';
+  } else {
+    $('#loginErr').textContent = 'Falsches Passwort.';
+    const p = $('#loginPw'); if (p) p.select();
+  }
+});
+
+/* ---- Projekt-Auswahl (Library = Projekt; serverseitig pro Session gehalten) ---- */
+async function loadProjects() {
+  const r = await api('/api/projects');
+  const sel = $('#projSel');
+  if (!r || !sel) return;
+  const libs = r.libs || [];
+  const active = r.active || PROJ;
+  sel.innerHTML = libs.map(l => '<option value="' + escapeHtml(l.id) + '">' + escapeHtml(l.name) + (l.docs != null ? ' (' + l.docs + ')' : '') + '</option>').join('');
+  if (active) { sel.value = active; PROJ = active; }
+  $('#projWrap').style.display = libs.length ? '' : 'none';
+}
+$('#projSel').addEventListener('change', async e => {
+  const lib = e.target.value;
+  const r = await api('/api/projects/select', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ library_id: lib }) });
+  if (r && r.ok) {
+    PROJ = lib; toast('Projekt gewechselt');
+    loadData(); liveTick(); checkMeta(false);
+    if ($('#page-ablage').classList.contains('active')) loadAblage();
+    if ($('#page-bib').classList.contains('active')) loadLibs();
+    if ($('#page-agent').classList.contains('active')) loadAgent();
+  } else toast('Projektwechsel fehlgeschlagen: ' + ((r && (r.fehler || r.grund)) || 'Server nicht erreichbar'));
+});
+$('#projNew').addEventListener('click', async () => {
+  const name = prompt('Name des neuen Projekts (wird als Mistral-Library angelegt + Seed-Dokumente):');
+  if (!name || !name.trim()) return;
+  const r = await api('/api/projects/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name.trim() }) });
+  if (r && r.live) {
+    toast('Projekt angelegt: ' + r.name);
+    await loadProjects();
+    $('#projSel').value = r.id;
+    $('#projSel').dispatchEvent(new Event('change'));
+  } else toast('Anlegen fehlgeschlagen: ' + ((r && (r.grund || r.fehler)) || 'unbekannt'));
+});
+
+/* ---- Agent-Tab: Workflow-Status, Läufe, Logs, Schedules, Write-Through-Notiz, QV live (A1) ---- */
+let wfDepSel = '';
+async function loadAgent() {
+  const cfg = await api('/api/project');
+  const agents = (cfg && cfg.config && cfg.config.agenten) || [];
+  const depSel = $('#wfDep');
+  if (depSel) {
+    depSel.innerHTML = (agents.length ? agents : [{ name: 'grammatik-statt-stil-research', deployment: 'grammatik-statt-stil-research' }])
+      .map(a => '<option value="' + escapeHtml(a.deployment || '') + '">' + escapeHtml(a.name || a.deployment || '') + '</option>').join('');
+    if (wfDepSel) depSel.value = wfDepSel;
+  }
+  await wfRefresh();
+  await loadWfSchedules();
+}
+async function wfRefresh() {
+  const dep = ($('#wfDep') && $('#wfDep').value) || 'grammatik-statt-stil-research';
+  wfDepSel = dep;
+  const s = await api('/api/wf/status?deployment=' + encodeURIComponent(dep));
+  const b = $('#wfBadge'), l = $('#wfLabel');
+  if (s && s.live) {
+    if (b) b.classList.toggle('off', !s.ready);
+    if (l) l.textContent = dep + ' · ' + (s.ready ? 'ready' : 'nicht ready') +
+      (s.active_worker_count != null ? ' · ' + s.active_worker_count + ' Worker' : '') +
+      (s.deployed_revision ? ' · rev ' + String(s.deployed_revision).slice(0, 8) : '');
+  } else {
+    if (b) b.classList.add('off');
+    if (l) l.textContent = (s && s.grund) ? 'offline: ' + s.grund : 'keine Live-Daten';
+  }
+  const runs = await api('/api/wf/runs?deployment=' + encodeURIComponent(dep) + '&limit=20');
+  const rl = $('#wfRuns');
+  if (rl) {
+    if (runs && runs.live && runs.runs) {
+      rl.innerHTML = runs.runs.length ? runs.runs.map(r =>
+        '<button data-run="' + escapeHtml(String(r.id || '')) + '"><b>' + escapeHtml(String(r.id || '?').slice(0, 8)) + '</b> · ' +
+        escapeHtml(r.status || '?') + ' · ' + escapeHtml((r.start || '').slice(0, 19).replace('T', ' ')) + '</button>').join('')
+        : '<p class="note">keine Läufe</p>';
+      rl.querySelectorAll('[data-run]').forEach(b => b.addEventListener('click', () => loadWfLogs(b.dataset.run)));
+    } else rl.innerHTML = '<p class="note">' + escapeHtml((runs && runs.grund) || 'keine Live-Daten (API-Key fehlt?)') + '</p>';
+  }
+}
+async function loadWfLogs(runId) {
+  $('#wfLogTitle').textContent = '· ' + String(runId).slice(0, 8);
+  const r = await api('/api/wf/runs/' + encodeURIComponent(runId) + '/logs?limit=200');
+  const el = $('#wfLogs');
+  if (r && r.live) el.textContent = (r.entries || []).map(e => (e.ts ? '[' + e.ts + '] ' : '') + (e.level ? e.level + ': ' : '') + e.message).join('\n') || '(leer)';
+  else el.textContent = (r && r.grund) || 'keine Logs';
+}
+async function loadWfSchedules() {
+  const r = await api('/api/wf/schedules');
+  const el = $('#wfSched');
+  if (!el) return;
+  if (r && r.live && r.schedules) {
+    el.innerHTML = r.schedules.length ? r.schedules.map(s =>
+      '<button type="button" style="cursor:default;text-align:left"><b>' + escapeHtml(s.name || s.id || '?') + '</b> · ' +
+      escapeHtml(s.cron || '') + ' · ' + escapeHtml(s.status || '') + (s.next_run ? ' · next ' + escapeHtml(s.next_run.slice(0, 19).replace('T', ' ')) : '') + '</button>').join('')
+      : '<p class="note">keine Cron-Pläne</p>';
+  } else el.innerHTML = '<p class="note">' + escapeHtml((r && r.grund) || 'keine Live-Daten') + '</p>';
+}
+$('#wfRefresh').addEventListener('click', wfRefresh);
+$('#wfDep').addEventListener('change', wfRefresh);
+$('#wfRun').addEventListener('click', async () => {
+  const dep = ($('#wfDep') && $('#wfDep').value) || '';
+  const text = ($('#wfInput').value || '').trim();
+  if (!text) { toast('Aufgabe für den Agenten eingeben'); return; }
+  const btn = $('#wfRun'); btn.disabled = true;
+  $('#wfRunNote').textContent = 'starte … (kostet Modelllauf)';
+  const r = await api('/api/wf/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ deployment: dep, input: text }) });
+  btn.disabled = false;
+  $('#wfRunNote').textContent = r && r.live ? 'gestartet: ' + (r.execution_id || '') : 'Fehler: ' + ((r && (r.grund || r.fehler)) || 'unbekannt');
+  wfRefresh();
+});
+$('#noteSend').addEventListener('click', async () => {
+  const titel = ($('#noteTitel').value || '').trim();
+  const text = ($('#noteText').value || '').trim();
+  if (!titel || !text) { toast('Titel und Text eingeben'); return; }
+  const r = await api('/api/notes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ titel: titel, text: text }) });
+  $('#noteNote').textContent = r && r.ok ? 'in Ablage geschrieben: ' + r.name + ' (id ' + String(r.id).slice(0, 8) + '…)' : 'Fehler: ' + ((r && (r.grund || r.fehler)) || 'unbekannt');
+  if (r && r.ok) { $('#noteText').value = ''; if ($('#page-ablage').classList.contains('active')) loadAblage(); }
+});
+let qvLiveOff = 0;
+async function loadQvLive(append) {
+  const r = await api('/api/apparat/qv?limit=8000&offset=' + qvLiveOff);
+  const note = $('#qvLiveNote'), pre = $('#qvLiveText'), more = $('#qvLiveMore');
+  if (r && r.live) {
+    const st = r.stand || {};
+    note.textContent = 'LIVE: ' + r.doc.name + ' · ' + r.total + ' Zeichen · Stand: ' + (st.stand || '?') +
+      (st.k ? ' · K1 ' + st.k.K1 + ' K2 ' + st.k.K2 + ' K3 ' + st.k.K3 + ' K4 ' + st.k.K4 + ' K5 ' + st.k.K5 : '');
+    pre.style.display = 'block';
+    pre.textContent = append ? pre.textContent + r.text : r.text;
+    qvLiveOff = r.offset + r.text.length;
+    more.style.display = r.has_more ? '' : 'none';
+  } else note.textContent = 'nicht live: ' + ((r && r.grund) || 'Server ohne API-Key');
+}
+$('#btnQvLive').addEventListener('click', () => { qvLiveOff = 0; loadQvLive(false); });
+$('#qvLiveMore').addEventListener('click', () => loadQvLive(true));
 
 /* ---- Übersicht ---- */
 function countUp(el) {
@@ -2095,6 +2338,7 @@ document.querySelectorAll('nav button').forEach(b => b.addEventListener('click',
   if (b.dataset.page === 'bib') loadLibs();
   if (b.dataset.page === 'text') loadTextTab();
   if (b.dataset.page === 'komm') startKommPolling(); else stopKommPolling();
+  if (b.dataset.page === 'agent') loadAgent();
 }));
 
 /* PWA-Deep-Links: ?tab=... oder #tab=... aktiviert den Tab (App-Shortcuts aus dem Manifest) */
@@ -2136,8 +2380,18 @@ async function autoImport() {
 }
 
 loadFilter();
-loadData(); liveTick(); touchUpd(); setInterval(liveTick, 30000); checkMeta(false); autoImport();
-(function () { const a = document.querySelector('section.page.active'); if (a && a.id === 'page-komm') startKommPolling(); })();
+/* Boot: erst /api/auth/me — im Passwort-Modus ohne Session Login-Overlay zeigen, sonst App starten */
+async function boot() {
+  const me = await apiRaw('/api/auth/me');
+  if (me.status === 200 && me.body && me.body.password_mode && !me.body.authenticated) { showLogin(); return; }
+  if (me.body && me.body.csrf) CSRF = me.body.csrf;
+  if (me.body && me.body.project) PROJ = me.body.project;
+  hideLogin();
+  await loadProjects();
+  loadData(); liveTick(); touchUpd(); setInterval(liveTick, 30000); checkMeta(false); autoImport();
+  const a = document.querySelector('section.page.active'); if (a && a.id === 'page-komm') startKommPolling();
+}
+boot();
 
 /* ---- PWA: Service Worker registrieren (nur http/https, nicht file://) ---- */
 if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {

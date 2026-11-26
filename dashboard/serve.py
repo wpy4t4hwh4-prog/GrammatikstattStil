@@ -24,30 +24,54 @@ APIs:
   GET  /api/templates        Text-Vorlagen (data/templates.json)
   POST /api/render           {"template","context"} -> gerenderter Text ({{key}}-Ersetzung)
   POST /api/diff             {"a","b"} -> zeilenweiser Diff als JSON
+  POST /api/auth/login       {"password"} -> Session-Cookie (HttpOnly, SameSite=Strict, CSRF-Token); nur wenn --password/DASHBOARD_PASSWORD gesetzt
+  GET  /api/auth/me          {authenticated, csrf, project, password_mode, token_mode}
+  POST /api/auth/logout      Session loeschen (Cookie ablaufen lassen)
+  GET  /api/projects         Libraries des Workspace = Projekte; {libs, active, live}
+  POST /api/projects/select  {"library_id"} -> aktives Projekt der Session (serverseitig gehalten)
+  POST /api/projects/create  {"name"} -> neue Library anlegen + Seed (00-projektstand.md, projekt.json)
+  GET  /api/project          projekt.json der aktiven Library (agenten: [{name,deployment,workflow}], cron, apparat_library?)
+  GET  /api/apparat/qv       A1: komplettes QV LIVE aus der Apparat-Library (Standzeile + paged Text; ?lib= Override, ?offset=&limit=)
+  GET  /api/wf/status?deployment=   Deployment-Status (ready, Worker, Revision)
+  GET  /api/wf/runs?deployment=&limit=   neueste Workflow-Runs
+  GET  /api/wf/runs/{id}/logs?limit=&cursor=   Execution-Logs (gepaget)
+  POST /api/wf/run           {"deployment","workflow","input"} -> Workflow starten (kostet Modelllauf)
+  GET  /api/wf/schedules     Cron-Plaene
+  POST /api/notes            {"titel","text"} -> Write-Through: Notiz (Markdown) in die aktive Projekt-Library
 
 Kein Schreibzugriff nach außen; Default bindet der Server nur an 127.0.0.1. Statisch serviert: /, index.html, sw.js, manifest.webmanifest, icons/, data/ (PWA: Manifest + Service Worker + Icons).
 """
 import argparse
 import datetime
+import hashlib
 import hmac
 import json
 import os
 import re as _re
+import secrets
 import sqlite3
 import subprocess
 import sys
+import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 BASE = Path(__file__).resolve().parent
 HUB_TOKEN = None   # via --token; schuetzt /api/* und /data/* (Query ?token= oder Header X-Hub-Token)
+HUB_PASSWORD_HASH = None  # sha256("hub-v1:"+password) via --password/DASHBOARD_PASSWORD; Klartext wird nie gehalten/geloggt
+ALLOWED_HOSTS = set()     # zusaetzliche erlaubte Host-Header (DNS-Rebinding-Guard) via --allowed-hosts/DASHBOARD_ALLOWED_HOSTS
 LOG_ACCESS = False  # via --log: Access-Log nach data/hub.log
+_SESSIONS = {}            # sid -> {"created","last","csrf","project"} (In-Memory; Neustart = Logout)
+_SESSION_TTL = 12 * 3600  # 12 h
+_SESSION_LOCK = threading.Lock()
+_LOGIN_FAILS = {}         # ip -> [timestamps]; >=5 Fehlversuche in 300 s -> 900 s Lockout (429)
 
 
 def _access_log(line):
     # Secrets im Query-String (?token=...) duerfen nie ins Log landen
     line = _re.sub(r"([?&])token=[^&\s\"']+", r"\1token=[REDACTED]", line, flags=_re.IGNORECASE)
+    line = _re.sub(r"([?&])password=[^&\s\"']+", r"\1password=[REDACTED]", line, flags=_re.IGNORECASE)
     if LOG_ACCESS:
         try:
             with open(DATA / "hub.log", "a", encoding="utf-8") as f:
@@ -1103,7 +1127,7 @@ def _client():
     return get_mistral_client(api_key=key), None
 
 
-def live_info():
+def live_info(notes_lib=NOTES_LIBRARY_ID, apparat_lib=APPARAT_LIBRARY_ID):
     """Optional live: neueste Ablage-Doks + QV-Standzeile aus dem Apparat (Key nur aus Env)."""
     try:
         client, err = _client()
@@ -1111,14 +1135,14 @@ def live_info():
             return {"live": False, "grund": err}
 
         async def _go():
-            listing = await client.beta.libraries.documents.list_async(library_id=NOTES_LIBRARY_ID, page_size=8)
+            listing = await client.beta.libraries.documents.list_async(library_id=notes_lib, page_size=8)
             ablage = [{"name": d.name, "status": getattr(d, "processing_status", None)} for d in (listing.data or [])]
             qv = None
             try:
-                ql = await client.beta.libraries.documents.list_async(library_id=APPARAT_LIBRARY_ID, search="Quellenverzeichnis", page_size=5)
+                ql = await client.beta.libraries.documents.list_async(library_id=apparat_lib, search="Quellenverzeichnis", page_size=5)
                 qvdoc = next((d for d in (ql.data or []) if "Quellenverzeichnis" in (d.name or "")), None)
                 if qvdoc is not None:
-                    content = await client.beta.libraries.documents.text_content_async(library_id=APPARAT_LIBRARY_ID, document_id=qvdoc.id)
+                    content = await client.beta.libraries.documents.text_content_async(library_id=apparat_lib, document_id=qvdoc.id)
                     text = getattr(content, "text", None) or str(content)
                     qv = parse_qv_standzeile(text[:6000])
             except Exception:
@@ -1157,6 +1181,13 @@ def libraries_live():
         return {"live": True, "libs": asyncio.run(_go())}
     except Exception as e:
         return {"live": False, "grund": f"{type(e).__name__}: {e}"[:200], "libs": []}
+
+
+def projects_list_live():
+    r = libraries_live()
+    r = dict(r)
+    r["password_mode"] = bool(HUB_PASSWORD_HASH)
+    return r
 
 
 def library_docs(lib_id, q):
@@ -1200,12 +1231,296 @@ def library_doc_text(lib_id, doc_id, offset=0, limit=4000):
         return {"live": False, "grund": f"{type(e).__name__}: {e}"[:200]}
 
 
-def ablage_search(q):
-    return library_docs(NOTES_LIBRARY_ID, q)
+def ablage_search(q, lib_id=NOTES_LIBRARY_ID):
+    return library_docs(lib_id, q)
 
 
-def ablage_doc(doc_id, offset=0):
-    return library_doc_text(NOTES_LIBRARY_ID, doc_id, offset)
+def ablage_doc(doc_id, offset=0, lib_id=NOTES_LIBRARY_ID):
+    return library_doc_text(lib_id, doc_id, offset)
+
+
+# ---------- Session-Auth (Passwort-Modus), Projekte, Agent-Workflows, Write-Through ----------
+
+def _pass_hash(pw):
+    return hashlib.sha256(("hub-v1:" + pw).encode("utf-8")).hexdigest()
+
+
+def _is_loopback_host(h):
+    return h in ("localhost", "127.0.0.1", "::1", "0:0:0:0:0:0:0:1")
+
+
+def _login_locked(ip):
+    now = time.time()
+    with _SESSION_LOCK:
+        fails = [t for t in _LOGIN_FAILS.get(ip, []) if now - t < 300]
+        _LOGIN_FAILS[ip] = fails
+        return len(fails) >= 5
+
+
+def _note_login_fail(ip):
+    with _SESSION_LOCK:
+        _LOGIN_FAILS.setdefault(ip, []).append(time.time())
+
+
+def _sweep_sessions():
+    now = time.time()
+    for sid in [s for s, v in _SESSIONS.items() if now - v["last"] > _SESSION_TTL]:
+        _SESSIONS.pop(sid, None)
+
+
+def _new_session(project=None):
+    sid = secrets.token_urlsafe(32)
+    with _SESSION_LOCK:
+        _sweep_sessions()
+        _SESSIONS[sid] = {"created": time.time(), "last": time.time(),
+                          "csrf": secrets.token_urlsafe(24), "project": project}
+    return sid
+
+
+def _default_config(lib_id):
+    return {"projekt": lib_id,
+            "agenten": [{"name": "grammatik-statt-stil-research",
+                         "deployment": "grammatik-statt-stil-research",
+                         "workflow": "grammatik-statt-stil-research"}]}
+
+
+def project_config(lib_id):
+    """projekt.json aus der Library lesen (Cache liegt beim Aufrufer)."""
+    try:
+        client, err = _client()
+        if client is None:
+            return {"live": False, "grund": err, "config": _default_config(lib_id)}
+        import asyncio
+
+        async def _go():
+            l = await client.beta.libraries.documents.list_async(library_id=lib_id, search="projekt.json", page_size=10)
+            doc = next((d for d in (l.data or []) if (d.name or "").endswith("projekt.json")), None)
+            if doc is None:
+                return {"live": True, "config": _default_config(lib_id), "doc": None}
+            c = await client.beta.libraries.documents.text_content_async(library_id=lib_id, document_id=doc.id)
+            t = getattr(c, "text", None) or str(c)
+            try:
+                cfg = json.loads(t)
+            except Exception:
+                cfg = _default_config(lib_id)
+            if not isinstance(cfg, dict):
+                cfg = _default_config(lib_id)
+            cfg.setdefault("projekt", lib_id)
+            return {"live": True, "config": cfg, "doc": {"id": doc.id, "name": doc.name}}
+
+        return asyncio.run(_go())
+    except Exception as e:
+        return {"live": False, "grund": f"{type(e).__name__}: {e}"[:200], "config": _default_config(lib_id)}
+
+
+def project_create(name):
+    """Neues Projekt = neue Mistral-Library + Seed-Dokumente (00-projektstand.md, projekt.json)."""
+    client, err = _client()
+    if client is None:
+        return {"live": False, "grund": err}, 503
+    if not name or len(name) > 120 or not _re.match(r"^[\w \-.,()äöüÄÖÜß&/]+$", name):
+        return {"fehler": "ungueltiger Projektname (max 120 Zeichen)"}, 400
+    import asyncio
+
+    async def _go():
+        from mistralai.client.models.file import File
+        lib = await client.beta.libraries.create_async(
+            name=name, description="Research-Hub Projekt — angelegt via Dashboard am " + time.strftime("%Y-%m-%d"))
+        cfg = {"projekt": name, "angelegt": time.strftime("%Y-%m-%d"),
+               "agenten": [{"name": "grammatik-statt-stil-research",
+                            "deployment": "grammatik-statt-stil-research",
+                            "workflow": "grammatik-statt-stil-research"}],
+               "cron": "06:00,17:00 Europe/Vienna"}
+        seed = [
+            ("00-projektstand.md", "# Projektstand — " + name + "\n\nAngelegt am " + time.strftime("%Y-%m-%d") +
+             " via Research Hub.\n\n- Agenten-Deployments, Cron etc.: siehe `projekt.json` in dieser Library.\n- Apparat-/Ablage-Dokumente werden hier abgelegt.\n"),
+            ("projekt.json", json.dumps(cfg, ensure_ascii=False, indent=2)),
+        ]
+        docs = []
+        for fn, content in seed:
+            d = await client.beta.libraries.documents.upload_async(
+                library_id=lib.id,
+                file=File(file_name=fn, content=content.encode("utf-8"),
+                          content_type="text/markdown" if fn.endswith(".md") else "application/json"))
+            docs.append({"id": d.id, "name": d.name})
+        return {"live": True, "id": lib.id, "name": lib.name, "seed": docs}
+
+    try:
+        return asyncio.run(_go()), 200
+    except Exception as e:
+        return {"live": False, "grund": f"{type(e).__name__}: {e}"[:200]}, 502
+
+
+def apparat_qv(lib_id, offset=0, limit=8000):
+    """A1: komplettes QV LIVE aus der Apparat-Library — Standzeile geparst + Text seitenweise."""
+    try:
+        client, err = _client()
+        if client is None:
+            return {"live": False, "grund": err}
+        import asyncio
+
+        async def _go():
+            ql = await client.beta.libraries.documents.list_async(library_id=lib_id, search="Quellenverzeichnis", page_size=10)
+            doc = next((d for d in (ql.data or []) if "Quellenverzeichnis" in (d.name or "")), None)
+            if doc is None:
+                return {"live": False, "grund": "kein 'Quellenverzeichnis'-Dokument in Library " + lib_id[:8]}
+            c = await client.beta.libraries.documents.text_content_async(library_id=lib_id, document_id=doc.id)
+            t = getattr(c, "text", None) or str(c)
+            off = max(0, int(offset))
+            return {"live": True, "lib": lib_id, "doc": {"id": doc.id, "name": doc.name},
+                    "stand": parse_qv_standzeile(t[:6000]),
+                    "text": t[off:off + limit], "total": len(t), "offset": off,
+                    "has_more": off + limit < len(t)}
+
+        return asyncio.run(_go())
+    except Exception as e:
+        return {"live": False, "grund": f"{type(e).__name__}: {e}"[:200]}
+
+
+def wf_status(deployment):
+    try:
+        client, err = _client()
+        if client is None:
+            return {"live": False, "grund": err}
+        import asyncio
+
+        async def _go():
+            d = await client.workflows.deployments.get_deployment_async(name=deployment)
+            return {"live": True, "deployment": deployment,
+                    "ready": getattr(d, "ready", None), "status": getattr(d, "status", None),
+                    "deployed_revision": getattr(d, "deployed_revision", None),
+                    "active_worker_count": getattr(d, "active_worker_count", None)}
+
+        return asyncio.run(_go())
+    except Exception as e:
+        return {"live": False, "grund": f"{type(e).__name__}: {e}"[:200]}
+
+
+def wf_runs(deployment, limit=20):
+    try:
+        client, err = _client()
+        if client is None:
+            return {"live": False, "grund": err}
+        import asyncio
+
+        async def _go():
+            res = await client.workflows.runs.list_runs_async(deployment_name=deployment, page_size=limit,
+                                                              sort_by="start_time", order="desc")
+            runs = []
+            for r in (getattr(res, "data", None) or []):
+                runs.append({"id": getattr(r, "id", None) or getattr(r, "run_id", None),
+                             "status": getattr(r, "status", None),
+                             "start": str(getattr(r, "start_time", "") or ""),
+                             "end": str(getattr(r, "end_time", "") or ""),
+                             "workflow": getattr(r, "workflow_identifier", None)})
+            return {"live": True, "deployment": deployment, "runs": runs}
+
+        return asyncio.run(_go())
+    except Exception as e:
+        return {"live": False, "grund": f"{type(e).__name__}: {e}"[:200]}
+
+
+def wf_run_logs(execution_id, limit=100, cursor=None):
+    try:
+        client, err = _client()
+        if client is None:
+            return {"live": False, "grund": err}
+        import asyncio
+
+        async def _go():
+            kw = {"execution_id": execution_id, "limit": limit}
+            if cursor:
+                kw["cursor"] = cursor
+            res = await client.workflows.executions.get_workflow_execution_logs_async(**kw)
+            entries = []
+            for e in (getattr(res, "data", None) or []):
+                msg = getattr(e, "message", None)
+                if msg is None:
+                    msg = getattr(e, "content", None)
+                entries.append({"ts": str(getattr(e, "timestamp", "") or ""),
+                                "level": str(getattr(e, "level", "") or ""),
+                                "message": str(msg or "")[:2000]})
+            return {"live": True, "execution_id": execution_id, "entries": entries,
+                    "next_cursor": getattr(res, "next_cursor", None) or getattr(res, "cursor", None)}
+
+        return asyncio.run(_go())
+    except Exception as e:
+        return {"live": False, "grund": f"{type(e).__name__}: {e}"[:200]}
+
+
+def wf_run(deployment, workflow, inp):
+    try:
+        client, err = _client()
+        if client is None:
+            return {"live": False, "grund": err}, 503
+        import asyncio
+
+        async def _go():
+            r = await client.workflows.execute_workflow_async(
+                workflow_identifier=workflow or deployment,
+                deployment_name=deployment,
+                input=inp if isinstance(inp, (dict, list)) else {"task": str(inp or "")})
+            return {"live": True, "execution_id": getattr(r, "execution_id", None) or getattr(r, "id", None),
+                    "status": getattr(r, "status", None), "deployment": deployment}
+
+        return asyncio.run(_go()), 200
+    except Exception as e:
+        return {"live": False, "grund": f"{type(e).__name__}: {e}"[:200]}, 502
+
+
+def wf_schedules():
+    try:
+        client, err = _client()
+        if client is None:
+            return {"live": False, "grund": err}
+        import asyncio
+
+        async def _go():
+            res = await client.workflows.schedules.get_schedules_async()
+            out = []
+            for s in (getattr(res, "data", None) or []):
+                out.append({"id": getattr(s, "id", None),
+                            "name": getattr(s, "name", None) or getattr(s, "workflow_name", None),
+                            "cron": getattr(s, "cron", None) or getattr(s, "cron_expression", None),
+                            "status": getattr(s, "status", None),
+                            "next_run": str(getattr(s, "next_run", "") or "")})
+            return {"live": True, "schedules": out}
+
+        return asyncio.run(_go())
+    except Exception as e:
+        return {"live": False, "grund": f"{type(e).__name__}: {e}"[:200]}
+
+
+def note_write(lib_id, titel, text):
+    """Write-Through: Markdown-Notiz in die aktive Projekt-Library (research_note_ablegen-Aequivalent)."""
+    # Validierung VOR dem Client-Check: 400er muessen auch ohne API-Key sauber kommen
+    titel = (titel or "").strip()
+    if not titel or len(titel) > 200:
+        return {"fehler": "titel fehlt/zu lang (max 200)"}, 400
+    if not text or len(text) > 200000:
+        return {"fehler": "text fehlt/zu lang (max 200 KB)"}, 400
+    if not _re.match(r"^[0-9a-f\-]{36}$", lib_id or ""):
+        return {"fehler": "ungueltige library_id"}, 400
+    client, err = _client()
+    if client is None:
+        return {"live": False, "grund": err}, 503
+    import asyncio
+
+    async def _go():
+        from mistralai.client.models.file import File
+        fn = time.strftime("%Y-%m-%d") + "-" + _re.sub(r"[^\w\-]+", "-", titel.lower())[:60] + ".md"
+        d = await client.beta.libraries.documents.upload_async(
+            library_id=lib_id, file=File(file_name=fn, content=text.encode("utf-8"), content_type="text/markdown"))
+        return {"ok": True, "live": True, "lib": lib_id, "id": d.id, "name": d.name}
+
+    try:
+        r = asyncio.run(_go())
+    except Exception as e:
+        return {"live": False, "grund": f"{type(e).__name__}: {e}"[:200]}, 502
+    # Live-Caches der betroffenen Library invalidieren
+    for k in [k for k in _CACHE if k.startswith(("ablage", "libdocs:" + lib_id, "libdoc:" + lib_id))]:
+        _CACHE.pop(k, None)
+    return r, 200
 
 
 
@@ -1224,10 +1539,13 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         _access_log((fmt % args) if args else fmt)
 
-    def _json(self, obj, status=200, download_name=None):
+    def _json(self, obj, status=200, download_name=None, extra_headers=None):
         body = json.dumps(obj, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
         self._sec()
+        if extra_headers:
+            for _k, _v in extra_headers:
+                self.send_header(_k, _v)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("X-Content-Type-Options", "nosniff")
         if download_name:
@@ -1281,14 +1599,76 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Security-Policy", "frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
 
     def _check_token(self, u, qs):
-        if not HUB_TOKEN:
-            return True
+        # DNS-Rebinding-Guard: bei exponiertem Server (Token oder Passwort gesetzt) Host-Header pruefen
+        if HUB_TOKEN or HUB_PASSWORD_HASH:
+            host = (self.headers.get("Host") or "").split(":")[0].lower()
+            if host and not _is_loopback_host(host) and host not in ALLOWED_HOSTS:
+                self._json({"fehler": "bad host"}, 400)
+                return False
+        if u.path.startswith("/api/auth/"):
+            return True  # login/logout/me ohne Session erreichbar (login hat eigenes Rate-Limit)
         if u.path.startswith(("/api/", "/data/")):
             tok = qs.get("token", [""])[0] or self.headers.get("X-Hub-Token", "")
-            if not hmac.compare_digest(tok.encode("utf-8"), HUB_TOKEN.encode("utf-8")):
+            if HUB_TOKEN and hmac.compare_digest(tok.encode("utf-8"), HUB_TOKEN.encode("utf-8")):
+                return True  # Token-Pfad (Back-Compat) bleibt immer zulaessig
+            if HUB_PASSWORD_HASH:
+                if self._session():
+                    return True
+                self._json({"fehler": "nicht angemeldet", "auth": True}, 401)
+                return False
+            if HUB_TOKEN:
                 self._json({"fehler": "token fehlt/ungueltig"}, 403)
                 return False
         return True
+
+    def _session(self):
+        ck = self.headers.get("Cookie", "")
+        m = _re.search(r"(?:^|;\s*)hub_sid=([A-Za-z0-9_\-]{16,})", ck)
+        if not m:
+            return None
+        sid = m.group(1)
+        with _SESSION_LOCK:
+            _sweep_sessions()
+            s = _SESSIONS.get(sid)
+            if s:
+                s["last"] = time.time()
+        return (sid, s) if s else None
+
+    def _cookie(self, sid, max_age):
+        # Secure nur hinter TLS-Terminierung (nginx setzt X-Forwarded-Proto); localhost bleibt http
+        secure = "; Secure" if self.headers.get("X-Forwarded-Proto", "") == "https" else ""
+        return "hub_sid=%s; Path=/; HttpOnly; SameSite=Strict; Max-Age=%d%s" % (sid, max_age, secure)
+
+    def _client_ip(self):
+        xff = self.headers.get("X-Forwarded-For", "")
+        return xff.split(",")[0].strip() if xff else (self.client_address[0] if self.client_address else "")
+
+    def _active_lib(self):
+        sess = self._session()
+        if sess and sess[1].get("project"):
+            return sess[1]["project"]
+        return os.environ.get("PROJECT_LIBRARY_ID") or NOTES_LIBRARY_ID
+
+    def _active_apparat_lib(self, qs):
+        lib = qs.get("lib", [""])[0].strip()
+        if lib:
+            return lib
+        try:
+            cfg = cached("projcfg:" + self._active_lib(), 30, lambda: project_config(self._active_lib()))
+            al = (cfg.get("config") or {}).get("apparat_library")
+        except Exception:
+            al = None
+        return al or os.environ.get("APPARAT_LIBRARY_ID") or APPARAT_LIBRARY_ID
+
+    def _default_deployment(self):
+        try:
+            cfg = cached("projcfg:" + self._active_lib(), 30, lambda: project_config(self._active_lib()))
+            agents = (cfg.get("config") or {}).get("agenten") or []
+            if agents and isinstance(agents, list):
+                return agents[0].get("deployment") or "grammatik-statt-stil-research"
+        except Exception:
+            pass
+        return "grammatik-statt-stil-research"
 
     def do_GET(self):
         from urllib.parse import urlparse, parse_qs
@@ -1346,15 +1726,51 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"historie": load_project().get("historie", [])})
         if u.path == "/api/messages":
             return self._json(load_outbox())
+        if u.path == "/api/auth/me":
+            sess = self._session()
+            return self._json({"authenticated": bool(sess),
+                               "password_mode": bool(HUB_PASSWORD_HASH),
+                               "token_mode": bool(HUB_TOKEN),
+                               "csrf": sess[1]["csrf"] if sess else None,
+                               "project": self._active_lib()})
         if u.path == "/api/live":
-            return self._json(cached("live", 20, live_info))
+            lib = self._active_lib()
+            alib = self._active_apparat_lib(qs)
+            return self._json(cached("live:%s:%s" % (lib, alib), 20, lambda: live_info(lib, alib)))
         if u.path == "/api/ablage":
             q = qs.get("q", [""])[0]
-            return self._json(cached("ablage:" + q, 20, lambda: ablage_search(q)))
+            lib = self._active_lib()
+            return self._json(cached("ablage:%s:%s" % (lib, q), 20, lambda: ablage_search(q, lib)))
         if u.path == "/api/ablage/doc":
             did = qs.get("id", [""])[0]
             off = _qint(qs, "offset", 0, 0, 10**7)
-            return self._json(cached("ablage_doc:%s:%d" % (did, off), 60, lambda: ablage_doc(did, off)))
+            lib = self._active_lib()
+            return self._json(cached("ablage_doc:%s:%s:%d" % (lib, did, off), 60, lambda: ablage_doc(did, off, lib)))
+        if u.path == "/api/projects":
+            r = dict(cached("projects", 30, projects_list_live))
+            r["active"] = self._active_lib()
+            return self._json(r)
+        if u.path == "/api/project":
+            lib = self._active_lib()
+            return self._json(cached("projcfg:" + lib, 30, lambda: project_config(lib)))
+        if u.path == "/api/apparat/qv":
+            alib = self._active_apparat_lib(qs)
+            off = _qint(qs, "offset", 0, 0, 10**7)
+            lim = _qint(qs, "limit", 8000, 1, 50000)
+            return self._json(cached("apparatqv:%s:%d" % (alib, off), 60, lambda: apparat_qv(alib, off, lim)))
+        if u.path == "/api/wf/status":
+            dep = qs.get("deployment", [""])[0] or self._default_deployment()
+            return self._json(cached("wfstatus:" + dep, 10, lambda: wf_status(dep)))
+        if u.path == "/api/wf/runs":
+            dep = qs.get("deployment", [""])[0] or self._default_deployment()
+            return self._json(cached("wfruns:%s" % dep, 10, lambda: wf_runs(dep, _qint(qs, "limit", 20, 1, 100))))
+        if u.path.startswith("/api/wf/runs/") and u.path.endswith("/logs"):
+            eid = u.path[len("/api/wf/runs/"):-len("/logs")]
+            cur = qs.get("cursor", [None])[0] or None
+            return self._json(cached("wflogs:%s:%s" % (eid, cur or ""), 5,
+                                     lambda: wf_run_logs(eid, _qint(qs, "limit", 100, 1, 500), cur)))
+        if u.path == "/api/wf/schedules":
+            return self._json(cached("wfsched", 60, wf_schedules))
         if u.path == "/api/qv":
             return self._json(qv_search(qs.get("q", [""])[0], qs.get("k", [""])[0], qs.get("rel", [""])[0],
                                          _qint(qs, "limit", 200), _qint(qs, "offset", 0, 0, 10**7)))
@@ -1409,14 +1825,74 @@ class Handler(BaseHTTPRequestHandler):
         qs = parse_qs(u.query)
         if not self._check_token(u, qs):
             return
+        # CSRF: im Passwort-Modus brauchen alle schreibenden /api/*-Calls den Session-CSRF-Token
+        if HUB_PASSWORD_HASH and u.path.startswith("/api/") and u.path != "/api/auth/login":
+            sess = self._session()
+            csrf = self.headers.get("X-Hub-CSRF", "")
+            if not sess or not hmac.compare_digest(csrf.encode("utf-8"), sess[1]["csrf"].encode("utf-8")):
+                return self._json({"fehler": "CSRF-Token fehlt/ungueltig"}, 403)
         if u.path in ("/api/message", "/api/qv/hebung", "/api/render", "/api/diff", "/api/agent/send",
                       "/api/pruef", "/api/qv/edit", "/api/import", "/api/outbox/clear", "/api/agent/reset",
-                      "/api/agent/stop", "/api/agent/archive"):
+                      "/api/agent/stop", "/api/agent/archive",
+                      "/api/auth/login", "/api/auth/logout", "/api/projects/select", "/api/projects/create",
+                      "/api/wf/run", "/api/notes"):
             try:
                 length = int(self.headers.get("Content-Length") or 0)
                 if length > 1000000:
                     return self._json({"fehler": "Body zu gross (max 1 MB)"}, 413)
                 payload = json.loads(self.rfile.read(length) or b"{}")
+                if u.path == "/api/auth/login":
+                    ip = self._client_ip()
+                    if _login_locked(ip):
+                        return self._json({"fehler": "zu viele Fehlversuche - kurz gesperrt"}, 429)
+                    if not HUB_PASSWORD_HASH:
+                        return self._json({"fehler": "Passwort-Login nicht konfiguriert (nur Token-Modus aktiv)"}, 400)
+                    pw = str(payload.get("password", ""))
+                    # Passwort-Klartext wird nur zum Hashing genutzt und nie geloggt/gespeichert
+                    if not hmac.compare_digest(_pass_hash(pw).encode("utf-8"), HUB_PASSWORD_HASH.encode("utf-8")):
+                        _note_login_fail(ip)
+                        return self._json({"fehler": "falsches Passwort"}, 401)
+                    sid = _new_session(project=os.environ.get("PROJECT_LIBRARY_ID") or None)
+                    return self._json({"ok": True, "authenticated": True},
+                                      200, extra_headers=[("Set-Cookie", self._cookie(sid, _SESSION_TTL))])
+                if u.path == "/api/auth/logout":
+                    sess = self._session()
+                    if sess:
+                        with _SESSION_LOCK:
+                            _SESSIONS.pop(sess[0], None)
+                    return self._json({"ok": True, "authenticated": False},
+                                      200, extra_headers=[("Set-Cookie", self._cookie("", 0))])
+                if u.path == "/api/projects/select":
+                    lib_id = str(payload.get("library_id", "")).strip()
+                    if not _re.match(r"^[0-9a-f\-]{36}$", lib_id):
+                        return self._json({"fehler": "ungueltige library_id"}, 400)
+                    sess = self._session()
+                    if not sess:
+                        return self._json({"fehler": "nicht angemeldet"}, 401)
+                    live = libraries_live()
+                    if live.get("live") and live.get("libs") and not any(l.get("id") == lib_id for l in live["libs"]):
+                        return self._json({"fehler": "Library nicht gefunden/kein Zugriff"}, 404)
+                    with _SESSION_LOCK:
+                        sess[1]["project"] = lib_id
+                    for k in [k for k in _CACHE if k.startswith(("ablage", "apparatqv", "projcfg", "live:"))]:
+                        _CACHE.pop(k, None)
+                    return self._json({"ok": True, "project": lib_id})
+                if u.path == "/api/projects/create":
+                    obj, st = project_create(str(payload.get("name", "")).strip())
+                    if st == 200:
+                        _CACHE.pop("projects", None)
+                    return self._json(obj, st)
+                if u.path == "/api/wf/run":
+                    dep = str(payload.get("deployment", "")).strip() or self._default_deployment()
+                    wf = str(payload.get("workflow", "")).strip() or dep
+                    obj, st = wf_run(dep, wf, payload.get("input"))
+                    if st == 200:
+                        _CACHE.pop("wfruns:" + dep, None)
+                    return self._json(obj, st)
+                if u.path == "/api/notes":
+                    lib = self._active_lib()
+                    obj, st = note_write(lib, str(payload.get("titel", "")), str(payload.get("text", "")))
+                    return self._json(obj, st)
                 if u.path == "/api/message":
                     text = str(payload.get("text", "")).strip()
                     if not text:
@@ -1483,28 +1959,35 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
-    global HUB_TOKEN, LOG_ACCESS
+    global HUB_TOKEN, HUB_PASSWORD_HASH, ALLOWED_HOSTS, LOG_ACCESS
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", type=int, default=8765)
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--token", default=os.environ.get("DASHBOARD_TOKEN", ""),
                     help="optional: Token schuetzt /api/* und /data/* (?token=... oder Header X-Hub-Token)")
     ap.add_argument("--log", action="store_true", help="Access-Log nach data/hub.log schreiben")
+    ap.add_argument("--password", default=os.environ.get("DASHBOARD_PASSWORD", ""),
+                    help="optional: Login-Passwort schuetzt /api/* via Session-Cookie (HttpOnly, SameSite=Strict) + CSRF; "
+                         "Klartext bleibt im Prozess (nur sha256-Hash im Speicher), wird nie geloggt")
+    ap.add_argument("--allowed-hosts", default=os.environ.get("DASHBOARD_ALLOWED_HOSTS", ""),
+                    help="komma-getrennte zusaetzliche Host-Header (DNS-Rebinding-Guard), z. B. dashboard.deinedomain.at")
     args = ap.parse_args()
     HUB_TOKEN = args.token or None
+    HUB_PASSWORD_HASH = _pass_hash(args.password) if args.password else None
+    ALLOWED_HOSTS.update(h.strip().lower() for h in args.allowed_hosts.split(",") if h.strip())
     LOG_ACCESS = args.log
     _loopback = args.host in ("127.0.0.1", "localhost", "::1", "0:0:0:0:0:0:0:1")
-    if not _loopback and not HUB_TOKEN:
-        print("FEHLER (fail-closed): --host %s ohne --token/DASHBOARD_TOKEN nicht erlaubt - "
+    if not _loopback and not HUB_TOKEN and not HUB_PASSWORD_HASH:
+        print("FEHLER (fail-closed): --host %s ohne --token/DASHBOARD_TOKEN und ohne --password/DASHBOARD_PASSWORD nicht erlaubt - "
               "/api/* und /data/* waeren sonst ohne Auth im Netz sichtbar. "
-              "Abhilfe: --token setzen (oder DASHBOARD_TOKEN in der Umgebung) oder Default 127.0.0.1 nutzen."
+              "Abhilfe: --token oder --password setzen (oder Env DASHBOARD_TOKEN/DASHBOARD_PASSWORD) oder Default 127.0.0.1 nutzen."
               % args.host, file=sys.stderr)
         sys.exit(2)
     DATA.mkdir(exist_ok=True)
     fts = init_db()
     srv = ThreadingHTTPServer((args.host, args.port), Handler)
     fts_label = "ja" if fts else "nein (LIKE-Fallback)"
-    tok = "; Token via ?token=<token>" if HUB_TOKEN else ""
+    tok = ("; Token via ?token=<token>" if HUB_TOKEN else "") + ("; Session-Login (Cookie+CSRF)" if HUB_PASSWORD_HASH else "")
     print(f"Research Hub: http://{args.host}:{args.port}/  (Default nur Loopback; FTS5={fts_label}{tok}; Ctrl+C beendet)")
     try:
         srv.serve_forever()

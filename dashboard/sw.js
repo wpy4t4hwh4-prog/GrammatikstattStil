@@ -1,7 +1,8 @@
 /* Research Hub Service Worker.
-   Strategie: /api/* = network-first (Live-Daten frisch, Cache als Offline-Fallback nur bei GET);
+   Strategie: /api/* = network-only und NIEMALS cachen (Session-/Passwort-Modus: API-Antworten
+   duerfen nicht im SW-Cache landen); /data/* = nur cachen ohne Token;
    statische Assets = cache-first mit Runtime-Caching. Version bei Aenderungen erhoehen. */
-const CACHE = 'research-hub-v30';
+const CACHE = 'research-hub-v31';
 // Token aktiv (URL ?token= oder sessionStorage) -> echte Daten (/data/*) nie cachen
 const HAS_TOKEN = new URLSearchParams(location.search).has('token') || !!sessionStorage.getItem('hubToken');
 const PRECACHE = [
@@ -31,9 +32,21 @@ self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
   if (url.origin !== location.origin) return;
 
-  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/data/')) {
+  if (url.pathname.startsWith('/api/')) {
     if (url.searchParams.has('token')) return; // Token-URLs nie cachen (Cache-Key waere token-abhaengig)
-    if (HAS_TOKEN && url.pathname.startsWith('/data/')) return; // mit Token: /data/* (echte Daten) nie cachen
+    // v31: API-Antworten NIEMALS cachen (Session-Cookie-Modus) — network-only, offline = 503
+    e.respondWith(
+      fetch(e.request).catch(() => new Response(
+        JSON.stringify({ live: false, fehler: 'offline (Service Worker)', grund: 'offline (Service Worker)' }),
+        { status: 503, headers: { 'Content-Type': 'application/json; charset=utf-8' } }
+      ))
+    );
+    return;
+  }
+
+  if (url.pathname.startsWith('/data/')) {
+    if (url.searchParams.has('token')) return; // Token-URLs nie cachen
+    if (HAS_TOKEN) return; // mit Token: /data/* (echte Daten) nie cachen
     e.respondWith(
       fetch(e.request).then(res => {
         if (e.request.method === 'GET' && res.ok) {
@@ -41,17 +54,10 @@ self.addEventListener('fetch', e => {
           caches.open(CACHE).then(c => c.put(e.request, copy));
         }
         return res;
-      }).catch(() => {
-        // Schreibzugriffe (POST) duerfen offline nicht als Erfolg aussehen
-        if (e.request.method !== 'GET') {
-          return new Response(JSON.stringify({ fehler: 'offline (Service Worker)' }),
-            { status: 503, headers: { 'Content-Type': 'application/json; charset=utf-8' } });
-        }
-        return caches.match(e.request).then(cached => cached || new Response(
-          JSON.stringify({ live: false, grund: 'offline (Service Worker)' }),
-          { status: 200, headers: { 'Content-Type': 'application/json; charset=utf-8' } }
-        ));
-      })
+      }).catch(() => caches.match(e.request).then(cached => cached || new Response(
+        JSON.stringify({ live: false, grund: 'offline (Service Worker)' }),
+        { status: 200, headers: { 'Content-Type': 'application/json; charset=utf-8' } }
+      )))
     );
     return;
   }

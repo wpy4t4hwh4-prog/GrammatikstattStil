@@ -25,11 +25,14 @@ else
   git -C "$APP_DIR" pull --ff-only
 fi
 
-echo "==> API-Key-Datei (manuell befuellen!)"
+echo "==> Env-Datei (manuell befuellen! — nie in git, chmod 600)"
 if [ ! -f /etc/research-hub.env ]; then
-  printf 'PROJECT_MISTRAL_API_KEY=\nCORS_ORIGIN=*\n' > /etc/research-hub.env
+  printf 'PROJECT_MISTRAL_API_KEY=\nDASHBOARD_PASSWORD=\nDASHBOARD_ALLOWED_HOSTS=%s\n#PROJECT_LIBRARY_ID=\n#APPARAT_LIBRARY_ID=\n' "$DOMAIN" > /etc/research-hub.env
   chmod 600 /etc/research-hub.env
-  echo "    /etc/research-hub.env angelegt - jetzt PROJECT_MISTRAL_API_KEY eintragen: sudo nano /etc/research-hub.env"
+  echo "    /etc/research-hub.env angelegt - jetzt eintragen: sudo nano /etc/research-hub.env"
+  echo "      PROJECT_MISTRAL_API_KEY = Mistral-API-Key (La Plateforme)"
+  echo "      DASHBOARD_PASSWORD     = Login-Passwort der Web-App (Session-Cookie + CSRF schuetzt /api/*)"
+  echo "      DASHBOARD_ALLOWED_HOSTS= $DOMAIN (bereits gesetzt; DNS-Rebinding-Guard)"
 fi
 
 echo "==> systemd-Unit"
@@ -37,11 +40,13 @@ install -m 644 "$(dirname "$0")/research-hub.service" /etc/systemd/system/resear
 systemctl daemon-reload
 systemctl enable --now research-hub
 
-echo "==> nginx Reverse Proxy"
+echo "==> nginx Reverse Proxy (X-Forwarded-Proto=https -> serve.py setzt Secure-Cookie)"
 cat > /etc/nginx/sites-available/research-hub <<EOF
 server {
     listen 80;
     server_name $DOMAIN;
+    # optional zusaetzlich: auth_basic \"Research Hub\"; auth_basic_user_file /etc/nginx/.htpasswd;
+    # (htpasswd -c /etc/nginx/.htpasswd philipp) — primaerer Schutz ist aber Cloudflare Access, s. RUNBOOK.md
     location / {
         proxy_pass http://127.0.0.1:8765;
         proxy_set_header Host \$host;
@@ -60,7 +65,12 @@ echo "==> HTTPS via Let's Encrypt"
 certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos -m "admin@$DOMAIN" || echo "    certbot fehlgeschlagen (DNS/Port?) - spaeter: certbot --nginx -d $DOMAIN"
 
 echo "==> Firewall: nur 80/443 nach aussen, serve.py bleibt auf 127.0.0.1"
+echo "    WICHTIG: vorher SSH erlauben, sonst sperrt man sich aus: ufw allow 22/tcp (oder Cloudflare Tunnel nutzen, dann 22 nur von Admin-IP)"
 ufw allow 80/tcp; ufw allow 443/tcp; ufw --force enable
+
+echo "==> Keepalive (OCI Always-Free stoppt idle VMs) — alle 10 min die eigene Seite rufen"
+printf '*/10 * * * * root curl -sk -o /dev/null --max-time 10 https://%s/ || true\n' "$DOMAIN" > /etc/cron.d/research-hub-keepalive
+chmod 644 /etc/cron.d/research-hub-keepalive
 
 echo "==> Fertig. Test: curl -s http://127.0.0.1:8765/api/live | head  -> danach https://$DOMAIN/"
 echo "    Optionaler zusaetzlicher Schutz: Cloudflare-Worker-Gate (cloudflare/worker-gate.js) vor die Domain"

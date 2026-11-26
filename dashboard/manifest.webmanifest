@@ -82,6 +82,17 @@
           "sizes": "192x192"
         }
       ]
+    },
+    {
+      "name": "Agent (Workflows)",
+      "short_name": "Workflows",
+      "url": "./?tab=agent",
+      "icons": [
+        {
+          "src": "icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
     }
   ]
 }
