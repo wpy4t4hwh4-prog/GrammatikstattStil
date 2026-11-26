@@ -18,7 +18,7 @@
   :root {
     color-scheme: light;
     --bg: #f5f5f7; --card: #ffffff; --text: #1d1d1f; --muted: #86868b;
-    --accent: #0a84ff; --accent-2: #2f9bff; --border: rgba(0,0,0,.08); --shadow: 0 1px 2px rgba(0,0,0,.05), 0 8px 24px rgba(0,0,0,.05);
+    --accent: #007aff; --accent-2: #5e9eff; --border: rgba(0,0,0,.08); --shadow: 0 1px 2px rgba(0,0,0,.05), 0 8px 24px rgba(0,0,0,.05);
     --k1: #30d158; --k2: #64d2ff; --k3: #ffd60a; --k4: #ff453a; --k5: #bf5af2; --v: #8e8e93;
     --radius: 18px; --radius-lg: 22px;
     /* Liquid Glass */
@@ -219,10 +219,9 @@
   .sel { width: 100%; font: inherit; font-size: 12.5px; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--border);
     background: var(--bg); color: var(--text); cursor: pointer; }
   .sel:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
-  .chat { min-height: 480px; }
+  .chat { min-height: 480px; height: calc(100vh - var(--header-h) - 110px); height: calc(100dvh - var(--header-h) - 110px); max-height: 880px; }
   .chathead { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-  .thread { display: flex; flex-direction: column; gap: 10px; height: min(58vh, 520px); max-height: none; overflow-y: auto; padding: 6px 4px; scroll-behavior: smooth;
-    height: min(58dvh, 520px); /* iOS: dynamischer Viewport (dvh), vh oben als Fallback */
+  .thread { display: flex; flex-direction: column; gap: 10px; flex: 1 1 auto; min-height: 0; height: auto; max-height: none; overflow-y: auto; padding: 8px 10px; scroll-behavior: smooth;
     scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
   .thread::-webkit-scrollbar { width: 8px; }
   .thread::-webkit-scrollbar-thumb { background: var(--border); border-radius: 8px; }
@@ -234,7 +233,7 @@
   .msg .mtext { white-space: pre-wrap; line-height: 1.55; }
   .msg .mtext a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
   .msg .ts { margin: 4px 0 0; text-align: right; }
-  .msg.user { align-self: flex-end; background: linear-gradient(180deg, var(--accent-2), var(--accent)); color: #fff; border-color: transparent;
+  .msg.user { align-self: flex-end; border-bottom-right-radius: 6px; background: linear-gradient(180deg, var(--accent-2), var(--accent)); color: #fff; border-color: transparent;
     box-shadow: inset 0 1px 0 rgba(255,255,255,.3), 0 2px 10px rgba(10,132,255,.28); border-bottom-right-radius: 6px; }
   .msg.user .who, .msg.user .ts { color: rgba(255,255,255,.75); }
   .msg.user .mtext a { color: #fff; }
@@ -273,6 +272,42 @@
   }
   @keyframes neuPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(10,132,255,.35); } 50% { box-shadow: 0 0 0 6px rgba(10,132,255,0); } }
   .msg.streaming { opacity: .8; border-style: dashed; }
+  /* Nachrichten-Gruppierung (wie Messages): aufeinanderfolgende gleiche Rolle -> kompakt, ohne Absender-Label */
+  .msg + .msg.cont { margin-top: -6px; }
+  .msg.cont .who { display: none; }
+  /* Segmented Control (Ziel: Lokal/Agent) + runder Send-Button (iMessage-Pattern) */
+  .chathead-right { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .seg { display: inline-flex; background: var(--glass); border: 1px solid var(--glass-border); border-radius: 999px; padding: 2px; gap: 2px; flex: none; }
+  .seg button { border: 0; background: transparent; font: inherit; font-size: 12px; font-weight: 600; color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; min-height: 28px; }
+  .seg button.on { background: var(--glass-strong); color: var(--text); box-shadow: var(--shadow); }
+  .composer .sendbtn { flex: none; width: 38px; height: 38px; min-height: 38px; border-radius: 50%; padding: 0; display: grid; place-items: center;
+    font-size: 19px; line-height: 1; color: #fff; border: 0; background: linear-gradient(180deg, var(--accent-2), var(--accent));
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.35), 0 2px 6px rgba(0,122,255,.35); }
+  .composer .sendbtn:active { transform: scale(.92); }
+  .sess-toggle { display: none; }
+  /* Typing-Indicator (3 Punkte) */
+  .typing { display: inline-flex; gap: 4px; padding: 5px 2px; }
+  .typing span { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); opacity: .4; }
+  @media (prefers-reduced-motion: no-preference) {
+    .typing span { animation: tp 1.2s infinite; }
+    .typing span:nth-child(2) { animation-delay: .15s; } .typing span:nth-child(3) { animation-delay: .3s; }
+  }
+  @keyframes tp { 0%, 60%, 100% { opacity: .4; transform: none; } 30% { opacity: 1; transform: translateY(-3px); } }
+  /* Barrierefreiheit: sichtbarer Fokus überall */
+  button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus-visible, a:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px; }
+  @media (pointer: coarse) {
+    .seg button { min-height: 32px; }
+    .composer .sendbtn { width: 44px; height: 44px; min-height: 44px; font-size: 21px; }
+  }
+  @media (max-width: 940px) {
+    /* Session-Sidebar wird auf kompakten Screens zum einblendbaren Sheet (statt die Chat-Spalte zu verdrängen) */
+    .session { display: none; position: fixed; left: 12px; right: 12px; top: calc(var(--header-h) + env(safe-area-inset-top) + 8px);
+      z-index: 60; max-height: 72vh; max-height: 72dvh; overflow-y: auto; box-shadow: 0 24px 60px rgba(0,0,0,.35); }
+    .kommgrid.show-sess .session { display: flex; }
+    .sess-toggle { display: inline-block; }
+    .chat { height: calc(100vh - var(--header-h) - 90px); height: calc(100dvh - var(--header-h) - 90px); }
+  }
   .msg.system { align-self: center; max-width: 88%; background: transparent; border-style: dashed; box-shadow: none; font-size: 12.5px; color: var(--muted); text-align: center; }
   .composer { display: flex; gap: 10px; align-items: flex-end; padding: 12px; border-radius: 18px;
     background: var(--glass-strong); border: 1px solid var(--glass-border); box-shadow: var(--shadow), inset 0 1px 0 var(--glass-hi);
@@ -288,7 +323,7 @@
   .composer button.ghost:hover { background: var(--border); filter: none; }
   .composer button:disabled { opacity: .55; cursor: default; transform: none; }
   .composer-hint { min-height: 16px; margin: 2px 4px 0; }
-  #toast { position: fixed; left: 50%; bottom: 28px; transform: translate(-50%, 16px); z-index: 90; font-size: 13px; font-weight: 600; color: var(--text);
+  #toast { position: fixed; left: 50%; bottom: calc(28px + env(safe-area-inset-bottom)); transform: translate(-50%, 16px); z-index: 90; font-size: 13px; font-weight: 600; color: var(--text);
     background: var(--glass-strong); border: 1px solid var(--glass-border); border-radius: 999px; padding: 10px 18px;
     box-shadow: var(--shadow), inset 0 1px 0 var(--glass-hi); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
     opacity: 0; pointer-events: none; transition: opacity var(--dur) var(--ease-out), transform var(--dur) var(--ease-spring); }
@@ -492,18 +527,24 @@
           <button class="btn" id="btnOutClear" title="Postausgang löschen">Outbox leeren</button>
         </div>
         <p class="note" style="margin-top:10px">„Lokal“ protokolliert in <code>data/outbox.jsonl</code>. „An Agent senden“ geht live an den Mistral-Agenten
-        (Conversation-ID persistent in <code>data/agent-conv.json</code>; Agent-Name via <code>FORSCHUNG_AGENT_NAME</code>). Tastatur: <kbd>Enter</kbd> = lokal, <kbd>⌘Enter</kbd> = an Agent.</p>
+        (Conversation-ID persistent in <code>data/agent-conv.json</code>; Agent-Name via <code>FORSCHUNG_AGENT_NAME</code>). Tastatur: <kbd>Enter</kbd> = gewählte Zielrichtung, <kbd>⌘/Strg+Enter</kbd> = immer Agent, <kbd>⇧Enter</kbd> = Zeilenumbruch.</p>
       </aside>
       <div class="card chat">
         <div class="chathead">
           <div class="chart-title" style="margin:0">Kommunikation mit dem Forschungsagenten</div>
-          <span class="count" id="threadCount"></span>
+          <div class="chathead-right">
+            <span class="count" id="threadCount"></span>
+            <div class="seg" role="group" aria-label="Ziel der Nachricht">
+              <button type="button" id="segLocal" class="on">Lokal</button>
+              <button type="button" id="segAgent">Agent</button>
+            </div>
+            <button type="button" class="btn sess-toggle" id="btnSessToggle" aria-expanded="false" title="Session-Panel ein-/ausblenden">Session</button>
+          </div>
         </div>
-        <div class="thread" id="thread"></div>
+        <div class="thread" id="thread" role="log" aria-live="polite" aria-label="Nachrichtenverlauf"></div>
         <div class="composer">
-          <textarea id="msgInput" rows="1" placeholder="Nachricht an den Forschungsagenten …"></textarea>
-          <button id="sendBtn" class="ghost" title="Nur lokal protokollieren (Enter)">Lokal ⏎</button>
-          <button id="sendAgentBtn" class="primary" title="Live an den Agenten senden (⌘/Strg+Enter) — Antwort erscheint im Thread">An Agent senden ⌘↵</button>
+          <textarea id="msgInput" rows="1" placeholder="Nachricht an den Forschungsagenten …" aria-label="Nachricht an den Forschungsagenten"></textarea>
+          <button type="button" id="sendBtn" class="sendbtn" title="Lokal protokollieren (Enter)" aria-label="Nachricht senden">↑</button>
         </div>
         <div class="composer-hint note" id="sendStatus" aria-live="polite"></div>
       </div>
@@ -1637,14 +1678,16 @@ function renderThread(msgs) {
   if (!msgs.length) {
     th.innerHTML = '<div class="empty">Noch keine Nachrichten.<br>Unten eingeben und mit <kbd>Enter</kbd> lokal protokollieren oder mit <kbd>⌘Enter</kbd> live an den Forschungsagenten senden.</div>';
   } else {
-    let html = '', lastDay = '';
+    let html = '', lastDay = '', prevRole = null;
     msgs.forEach((m, i) => {
       const d = String(m.ts || '').slice(0, 10);
-      if (d && d !== lastDay) { html += '<div class="daysep">' + escapeHtml(prettyDay(d)) + '</div>'; lastDay = d; }
-      if (m.role === 'trace') { html += traceHtml(m, i); return; }
+      if (d && d !== lastDay) { html += '<div class="daysep">' + escapeHtml(prettyDay(d)) + '</div>'; lastDay = d; prevRole = null; }
+      if (m.role === 'trace') { html += traceHtml(m, i); prevRole = null; return; }
       const role = m.role === 'agent' ? 'agent' : (m.role === 'system' ? 'system' : 'user');
+      const cont = (role === prevRole);
+      prevRole = role;
       const who = role === 'agent' ? 'Agent · ' + AGENT_NAME : (role === 'system' ? 'System' : 'Ich');
-      html += '<div class="msg ' + role + '"><div class="who">' + escapeHtml(who) + '</div>' +
+      html += '<div class="msg ' + role + (cont ? ' cont' : '') + '"><div class="who">' + escapeHtml(who) + '</div>' +
         '<div class="mtext">' + (role === 'agent' ? (prettyAgent(m.text) || linkify(escapeHtml(m.text))) : linkify(escapeHtml(m.text))) + '</div>' +
         '<div class="ts">' + escapeHtml(fmtTs(m.ts) || 'aus Agent-Verlauf') + '</div></div>';
     });
@@ -1706,6 +1749,8 @@ async function loadSessions() {
 /* Session-Wechsel: Verlauf der gewählten Session sofort laden (nicht erst beim nächsten Poll) */
 $('#sessSel').addEventListener('change', async e => {
   curSess = e.target.value;
+  document.querySelector('.kommgrid').classList.remove('show-sess');
+  $('#btnSessToggle').setAttribute('aria-expanded', 'false');
   const h = await api('/api/agent/history?session_id=' + encodeURIComponent(curSess));
   if (h && h.live && h.messages) agentMsgs = h.messages.map(m => ({ role: m.role, kind: m.kind, name: m.name, args: m.args, ts: m.ts, text: m.text }));
   await loadMessages();
@@ -1746,14 +1791,14 @@ async function kommTick() {
       if (h.messages) agentMsgs = h.messages.map(m => ({ role: m.role, kind: m.kind, name: m.name, args: m.args, ts: m.ts, text: m.text }));
     }
     await loadMessages();
-    showStream(pendingCmd ? streamText : '');
+    showStream(streamText, !!pendingCmd);
   } catch (e) { /* stiller Poll-Fehler */ }
 }
 /* Live-Streaming-Bubble fuer den laufenden Agent-Turn (wird bei loadMessages neu gerendert, daher danach aufsetzen) */
-function showStream(txt) {
+function showStream(txt, pending) {
   const th = $('#thread');
   let el = document.getElementById('streamBubble');
-  if (!txt) { if (el) el.remove(); return; }
+  if (!txt && !pending) { if (el) el.remove(); return; }
   if (!el) {
     el = document.createElement('div');
     el.className = 'msg agent streaming';
@@ -1761,7 +1806,9 @@ function showStream(txt) {
     el.innerHTML = '<div class="who">Agent · ' + escapeHtml(AGENT_NAME) + ' · live</div><div class="mtext"></div>';
     th.appendChild(el);
   }
-  el.querySelector('.mtext').innerHTML = (prettyAgent(txt) || linkify(escapeHtml(txt))) + ' …';
+  el.querySelector('.mtext').innerHTML = txt
+    ? (prettyAgent(txt) || linkify(escapeHtml(txt))) + ' …'
+    : '<div class="typing" aria-label="Agent denkt nach"><span></span><span></span><span></span></div>';
   th.scrollTop = th.scrollHeight;
 }
 function startKommPolling() {
@@ -1771,7 +1818,6 @@ function startKommPolling() {
 }
 function setSending(on, msg) {
   $('#sendBtn').disabled = on;
-  $('#sendAgentBtn').disabled = on;
   $('#sendStatus').textContent = on ? (msg || '…') : '';
 }
 function autoresize(ta) { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 180) + 'px'; }
@@ -1836,13 +1882,27 @@ async function sendAgent() {
     loadMessages();
   }
 }
-$('#sendBtn').addEventListener('click', sendLocal);
-$('#sendAgentBtn').addEventListener('click', sendAgent);
+let destMode = 'local'; // 'local' | 'agent' — Segmented Control im Chat-Head
+function setDest(m) {
+  destMode = m;
+  $('#segLocal').classList.toggle('on', m === 'local');
+  $('#segAgent').classList.toggle('on', m === 'agent');
+  $('#sendBtn').title = m === 'agent' ? 'An Agenten senden (Enter) — Antwort erscheint im Thread' : 'Lokal protokollieren (Enter)';
+}
+$('#segLocal').addEventListener('click', () => setDest('local'));
+$('#segAgent').addEventListener('click', () => setDest('agent'));
+$('#sendBtn').addEventListener('click', () => (destMode === 'agent' ? sendAgent() : sendLocal()));
+$('#btnSessToggle').addEventListener('click', () => {
+  const g = document.querySelector('.kommgrid');
+  const open = g.classList.toggle('show-sess');
+  $('#btnSessToggle').setAttribute('aria-expanded', String(open));
+});
 $('#msgInput').addEventListener('input', e => autoresize(e.target));
+$('#msgInput').addEventListener('focus', () => setTimeout(() => $('#msgInput').scrollIntoView({ block: 'end', behavior: 'smooth' }), 60));
 $('#msgInput').addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
-    if (e.metaKey || e.ctrlKey) sendAgent(); else sendLocal();
+    if (e.metaKey || e.ctrlKey) sendAgent(); else if (destMode === 'agent') sendAgent(); else sendLocal();
   }
 });
 $('#btnAgentHist').addEventListener('click', async () => {

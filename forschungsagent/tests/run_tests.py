@@ -1178,12 +1178,51 @@ class PwaAppTests(unittest.TestCase):
         self.assertRegex(coarse.group(1), r'min-height:\s*44px')
         # dvh-Fallback ( dynamischer Viewport auf iOS )
         self.assertIn('dvh', s)
-        # kein 100vh-App-Shell (iOS- Adressleisten-Problem)
-        self.assertNotIn('100vh', s)
+        # vh nur als Fallback, immer mit dvh-Override (iOS-Adressleisten-Problem)
+        self.assertIn('100dvh', s)
+        self.assertEqual(s.count('100vh'), s.count('100dvh'))
         # Sprache
         self.assertIn('<html lang="de">', s)
         # jsdom-iPhone-Render-Test liegt als Tool bereit
         self.assertTrue(os.path.exists(os.path.join(self._dash(), 'tools/iphone_render_test.js')))
+
+    def test_komm_tab_apple_hig(self):
+        """Komm-Tab Redesign (Apple HIG): iMessage-Pattern, Segmented Control, Sheet auf mobil, Gruppierung, a11y."""
+        s = self._read('index.html')
+        # Composer: genau ein runder Send-Button, alte Doppel-Buttons entfernt
+        self.assertIn('id="sendBtn" class="sendbtn"', s)
+        self.assertNotIn('sendAgentBtn', s)
+        self.assertEqual(s.count('id="msgInput"'), 1)
+        self.assertEqual(s.count('id="thread"'), 1)
+        # Segmented Control Zielwahl + Session-Toggle
+        self.assertIn('id="segLocal"', s) and self.assertIn('id="segAgent"', s)
+        self.assertIn('id="btnSessToggle"', s)
+        # Thread als log + aria
+        self.assertIn('id="thread" role="log" aria-live="polite"', s)
+        # Nachrichten-Gruppierung + Bubble-Tail + Typing
+        self.assertIn('.msg + .msg.cont', s)
+        self.assertIn('.msg.cont .who { display: none; }', s)
+        self.assertIn('border-bottom-right-radius: 6px', s)
+        self.assertIn('.typing span', s)
+        # Chat fuellt Viewport (dvh mit vh-Fallback), Thread flex
+        self.assertIn('calc(100dvh - var(--header-h)', s)
+        self.assertRegex(s, r'\.thread \{[\s\S]*?flex: 1 1 auto')
+        # Mobil: Session-Sheet statt Spalten-Stack
+        self.assertRegex(s, r'@media \(max-width: 940px\) \{[\s\S]*?\.kommgrid\.show-sess \.session \{ display: flex; \}')
+        self.assertIn('.sess-toggle { display: none; }', s)
+        # Apple-exact Accent light (#007aff), dark behaelt #0a84ff
+        self.assertIn('--accent: #007aff;', s)
+        # Toast/Fokus safe-area + focus-visible
+        self.assertIn('bottom: calc(28px + env(safe-area-inset-bottom))', s)
+        self.assertIn(':focus-visible', s)
+        # JS-Wiring
+        self.assertIn('let destMode', s)
+        self.assertIn("destMode === 'agent' ? sendAgent() : sendLocal()", s)
+        self.assertIn('showStream(streamText, !!pendingCmd)', s)
+        self.assertIn("classList.toggle('show-sess')", s)
+        # weiterhin self-contained: genau ein Skript-Tag
+        self.assertEqual(s.count('<script'), 1)
+        self.assertEqual(s.count('</script'), 1)
 
     def test_sw_v29_app_shell(self):
         sw = self._read('sw.js')

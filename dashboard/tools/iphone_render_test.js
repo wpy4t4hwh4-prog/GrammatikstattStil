@@ -92,7 +92,7 @@ function makeDom(url) {
   assert(/@media \(pointer: coarse\)[\s\S]*font-size:\s*16px/.test(html), 'Coarse: Inputs 16px (kein iOS-Auto-Zoom)');
   assert(/@media \(pointer: coarse\)[\s\S]*min-height:\s*44px/.test(html), 'Coarse: Touch-Targets >= 44px');
   assert(html.includes('touch-action: manipulation'), 'touch-action: manipulation (kein Doppel-Tipp-Zoom)');
-  assert(html.includes('58dvh'), 'Chat-Thread mit dvh-Fallback');
+  assert(html.includes('100dvh'), 'Chat-Card mit dvh-Viewport (Composer bleibt sichtbar)');
   assert((html.match(/env\(safe-area-inset/g) || []).length >= 4, 'safe-area-Insets an >= 4 Stellen');
   assert(html.includes('-webkit-backdrop-filter'), '-webkit-backdrop-filter fuer aeltere Safari');
 
