@@ -1142,6 +1142,49 @@ class PwaAppTests(unittest.TestCase):
         nav_html = s.split('<body')[1].split('<script>')[0]
         self.assertEqual(len(re.findall(r'data-page="[a-z]+"', nav_html)), 9)
 
+    def test_index_ios_safari_optimierung(self):
+        """iPhone/Safari-Audit (Review 2026-11-26): Viewport, Safe-Area, Touch, Zoom, Standalone."""
+        s = self._read('index.html')
+        # Viewport: viewport-fit=cover + interactiveWidget, aber KEIN Zoom-Block (Accessibility)
+        m = re.search(r'<meta name="viewport" content="([^"]*)"', s)
+        self.assertIsNotNone(m)
+        vp = m.group(1)
+        self.assertIn('viewport-fit=cover', vp)
+        self.assertIn('interactiveWidget=resizes-content', vp)   # iOS-Tastatur schrumpft Layout-Viewport
+        self.assertNotRegex(vp, r'maximum-scale=1|user-scalable=no')
+        # iOS-Metas
+        for meta in ('apple-mobile-web-app-capable', 'mobile-web-app-capable',
+                     'apple-mobile-web-app-status-bar-style', 'apple-mobile-web-app-title',
+                     'format-detection'):
+            self.assertIn('name="%s"' % meta, s)
+        self.assertIn('content="telephone=no"', s)
+        self.assertIn('rel="apple-touch-icon"', s)
+        self.assertIn('name="color-scheme" content="light dark"', s)
+        # Safe-Area an allen kritischen Stellen
+        self.assertGreaterEqual(len(re.findall(r'env\(safe-area-inset', s)), 4)
+        self.assertIn('padding-top: env(safe-area-inset-top)', s)
+        # Safari-Quirks
+        self.assertIn('-webkit-backdrop-filter', s)
+        self.assertIn('-webkit-tap-highlight', s)
+        self.assertIn('-webkit-text-size-adjust', s)
+        self.assertIn("typeof d.showModal === 'function'", s)     # dialog-Fallback Safari < 15.4
+        self.assertIn("'serviceWorker' in navigator", s)           # SW-Registrierung ge guarded
+        self.assertIn('overscroll-behavior-y: none', s)            # kein Pull-to-Refresh-Reload im Standalone
+        self.assertIn('touch-action: manipulation', s)             # kein Doppel-Tipp-Zoom
+        # Coarse-Pointer (Touch): 16px-Inputs gegen iOS-Auto-Zoom, 44px-Touch-Targets
+        coarse = re.search(r'@media \(pointer: coarse\) \{(.*?)\n  \}', s, re.S)
+        self.assertIsNotNone(coarse)
+        self.assertRegex(coarse.group(1), r'font-size:\s*16px')
+        self.assertRegex(coarse.group(1), r'min-height:\s*44px')
+        # dvh-Fallback ( dynamischer Viewport auf iOS )
+        self.assertIn('dvh', s)
+        # kein 100vh-App-Shell (iOS- Adressleisten-Problem)
+        self.assertNotIn('100vh', s)
+        # Sprache
+        self.assertIn('<html lang="de">', s)
+        # jsdom-iPhone-Render-Test liegt als Tool bereit
+        self.assertTrue(os.path.exists(os.path.join(self._dash(), 'tools/iphone_render_test.js')))
+
     def test_sw_v29_app_shell(self):
         sw = self._read('sw.js')
         self.assertIn("const CACHE = 'research-hub-v29';", sw)
