@@ -1,7 +1,9 @@
 /* Research Hub Service Worker.
    Strategie: /api/* = network-first (Live-Daten frisch, Cache als Offline-Fallback nur bei GET);
    statische Assets = cache-first mit Runtime-Caching. Version bei Aenderungen erhoehen. */
-const CACHE = 'research-hub-v29';
+const CACHE = 'research-hub-v30';
+// Token aktiv (URL ?token= oder sessionStorage) -> echte Daten (/data/*) nie cachen
+const HAS_TOKEN = new URLSearchParams(location.search).has('token') || !!sessionStorage.getItem('hubToken');
 const PRECACHE = [
   './', 'index.html', 'manifest.webmanifest',
   'data/project.json', 'data/sample-data.js', 'data/templates.json',
@@ -31,6 +33,7 @@ self.addEventListener('fetch', e => {
 
   if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/data/')) {
     if (url.searchParams.has('token')) return; // Token-URLs nie cachen (Cache-Key waere token-abhaengig)
+    if (HAS_TOKEN && url.pathname.startsWith('/data/')) return; // mit Token: /data/* (echte Daten) nie cachen
     e.respondWith(
       fetch(e.request).then(res => {
         if (e.request.method === 'GET' && res.ok) {

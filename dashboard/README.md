@@ -96,7 +96,7 @@ Standardmäßig bindet der Server nur an `127.0.0.1` — dann ist nur der lokale
 python3 serve.py --host 0.0.0.0 --port 8765
 ```
 
-IP des Mac ablesen (Systemeinstellungen → WLAN → Details), z. B. `192.168.1.23`; am iPhone im **gleichen WLAN** Safari öffnen: `http://192.168.1.23:8765/`. macOS-Firewall ggf. freigeben. Achtung: dann ist das Dashboard im LAN ohne Auth sichtbar — nur in vertrauenswürdigen Netzen nutzen, nie öffentlich ins Internet exponieren (kein Tunnel/Port-Forwarding).
+IP des Mac ablesen (Systemeinstellungen → WLAN → Details), z. B. `192.168.1.23`; am iPhone im **gleichen WLAN** Safari öffnen: `http://192.168.1.23:8765/`. macOS-Firewall ggf. freigeben. Achtung: dann ist das Dashboard im LAN ohne Auth sichtbar — nur in vertrauenswürdigen Netzen nutzen, nie öffentlich ins Internet exponieren (kein Tunnel/Port-Forwarding). **Fail-closed:** Start mit `--host` außerhalb von Loopback ohne `--token`/`DASHBOARD_TOKEN` wird verweigert (Exit 2); Access-Log redactet `?token=`; Antworten senden `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Permissions-Policy` und CSP `frame-ancestors 'none'`.
 
 **Offline ohne Server:** Ordner `dashboard/` aufs iPhone kopieren (AirDrop/iCloud) und `index.html` direkt in Safari öffnen — Fallback-Daten aus `data/sample-data.js`, Postausgang deaktiviert.
 
