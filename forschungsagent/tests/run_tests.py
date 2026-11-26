@@ -1221,13 +1221,23 @@ class PwaAppTests(unittest.TestCase):
         self.assertIn('showStream(streamText, !!pendingCmd)', s)
         self.assertIn("classList.toggle('show-sess')", s)
         # v2 (iPhone): Bedienelemente IM Composer-Container, Chat-Head nur Titel+Count
-        self.assertNotIn('chathead-right', s)
+        self.assertGreater(s.find('id="segLocal"'), s.find('class="chathead-right"'))  # seg NICHT im Header, sondern im Composer
         self.assertIn('class="composer-row"', s)
         self.assertIn('class="composer-bar"', s)
         cpos = s.find('<div class="composer">')
         self.assertGreater(s.find('id="segLocal"'), cpos)          # Segmented Control im Composer
         self.assertGreater(s.find('id="sendStatus"'), cpos)         # Status-Hinweis im Composer
-        self.assertGreater(s.find('id="btnSessToggle"'), cpos)      # Session-Toggle im Composer
+        hp = s.find('class="chathead"')
+        self.assertGreater(s.find('id="btnSessToggle"'), hp)           # Session-Toggle als trailing Nav-Button im Chat-Head
+        self.assertLess(s.find('id="btnSessToggle"'), cpos)             # ... NICHT mehr im Composer
+        # Glossar: zentrierte Spalte + mobil gestapelt
+        self.assertIn('.glossar { grid-template-columns: 1fr; max-width: 760px; margin: 0 auto; }', s)
+        self.assertIn('.glossar .card { flex-direction: column; align-items: flex-start; gap: 4px; }', s)
+        self.assertIn('.glossar .begriff { min-width: 0; }', s)
+        # Tastatur/Eventualitäten: visualViewport-Handler + Landscape-Regel + kompaktes seg
+        self.assertIn('visualViewport', s)
+        self.assertIn('@media (max-height: 500px) { .chat { min-height: 0; } }', s)
+        self.assertIn('#page-komm .seg button { padding: 4px 10px; font-size: 11px; min-height: 28px; }', s)
         self.assertGreater(s.find('id="sendBtn"'), s.find('composer-row'))
         # Header-Höhe live gemessen (iPhone-Header wrappt auf 2 Zeilen)
         self.assertIn('--header-h-live', s)
