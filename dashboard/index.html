@@ -42,6 +42,7 @@
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { overscroll-behavior-y: none; } /* iOS: kein Pull-to-Refresh-Reload im Standalone */
+  html { overflow-x: clip; } /* nie breiter als der Viewport (clip statt hidden: position:sticky bleibt erhalten) */
   @media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
   body { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
          background: var(--bg); color: var(--text); -webkit-font-smoothing: antialiased;
@@ -115,7 +116,7 @@
   }
   .grid { display: grid; gap: var(--sp-4); }
   .stats { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
-  .card { background: var(--glass-strong); border: 1px solid var(--glass-border); border-radius: var(--radius-lg);
+  .card { min-width: 0; background: var(--glass-strong); border: 1px solid var(--glass-border); border-radius: var(--radius-lg);
           box-shadow: var(--shadow), inset 0 1px 0 var(--glass-hi);
           -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
           padding: var(--sp-5);
@@ -207,8 +208,9 @@
   .note { font-size: 12px; color: var(--muted); line-height: 1.5; }
   kbd { font: 600 10.5px/1 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted); background: var(--bg); border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 5px; padding: 2px 5px; }
   /* --- Kommunikation: zweispaltiges Layout --- */
-  .kommgrid { display: grid; grid-template-columns: 300px minmax(0,1fr); gap: 16px; align-items: start; max-width: 1040px; margin: 0 auto; } /* Chat-Block zentriert */
-  @media (max-width: 940px) { .kommgrid { grid-template-columns: 1fr; } }
+  .kommgrid { display: grid; grid-template-columns: 300px minmax(0,1fr); gap: 16px; align-items: start; max-width: 1040px; margin: 0 auto; width: 100%; } /* Chat-Block zentriert */
+  .kommgrid > * { min-width: 0; } /* Grid-Items duerfen schrumpfen — sonst schiebt der Chat nach rechts über den Header hinaus */
+  @media (max-width: 940px) { .kommgrid { grid-template-columns: minmax(0,1fr); } }
   .session { display: flex; flex-direction: column; gap: 10px; position: sticky; top: 76px; }
   .session .srow { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 13px; }
   .session .slbl { color: var(--muted); font-size: 12px; flex: none; }
@@ -223,7 +225,7 @@
   .chathead { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   .chathead-right { display: flex; align-items: center; gap: 10px; min-width: 0; }
   .chathead .chart-title { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } /* kein Rechts-Überlauf */
-  .thread { display: flex; flex-direction: column; gap: 10px; flex: 1 1 auto; min-height: 0; height: auto; max-height: none; overflow-y: auto; padding: 8px 10px; scroll-behavior: smooth;
+  .thread { display: flex; flex-direction: column; gap: 10px; flex: 1 1 auto; min-height: 0; min-width: 0; height: auto; max-height: none; overflow-y: auto; padding: 8px 10px; scroll-behavior: smooth;
     scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
   .thread::-webkit-scrollbar { width: 8px; }
   .thread::-webkit-scrollbar-thumb { background: var(--border); border-radius: 8px; }
@@ -232,7 +234,7 @@
     border-radius: 999px; padding: 4px 12px; -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
   .msg { max-width: 76%; border-radius: 18px; animation: pageIn var(--dur) var(--ease-spring); word-break: break-word; }
   .msg .who { font-size: 11px; font-weight: 700; color: var(--muted); margin-bottom: 2px; letter-spacing: .02em; }
-  .msg .mtext { white-space: pre-wrap; line-height: 1.55; }
+  .msg .mtext { white-space: pre-wrap; line-height: 1.55; overflow-wrap: anywhere; } /* lange Links/JSON sprengen die Breite nicht */
   .msg .mtext a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
   .msg .ts { margin: 4px 0 0; text-align: right; }
   .msg.user { align-self: flex-end; border-bottom-right-radius: 6px; background: linear-gradient(180deg, var(--accent-2), var(--accent)); color: #fff; border-color: transparent;

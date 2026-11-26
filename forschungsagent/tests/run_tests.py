@@ -1259,13 +1259,21 @@ class PwaAppTests(unittest.TestCase):
         self.assertIn('main.wrap { padding-top: var(--sp-4);', s)
         # v4: Zoom-Fix (iOS), Chat zentriert, Pruef-Addbar
         self.assertIn('.composer-row textarea, .addbar textarea, #pNew { font-size: 16px; }', s)  # 16px auch mit hoeherer Spezifitaet
-        self.assertIn('max-width: 1040px; margin: 0 auto; } /* Chat-Block zentriert */', s)
+        self.assertIn('max-width: 1040px; margin: 0 auto; width: 100%; } /* Chat-Block zentriert */', s)
         self.assertEqual(s.count('enterkeyhint="send"'), 2)                                     # msgInput + pNew
         self.assertIn('class="addbar"', s)
         self.assertIn('id="pAdd" class="sendbtn"', s)
         self.assertIn('.addbar:focus-within', s)
         self.assertNotIn('.composer .sendbtn', s)                                               # sendbtn-Scope verallgemeinert
         self.assertIn("$('#pNew').addEventListener('focus'", s)
+        # v5: kein horizontales Überlaufen (iPhone: Chat nicht breiter als Header)
+        self.assertIn('html { overflow-x: clip; }', s)                                   # clip statt hidden: sticky bleibt erhalten
+        self.assertIn('grid-template-columns: minmax(0,1fr); } }', s)                    # mobil: 1fr -> minmax(0,1fr)
+        self.assertIn('.kommgrid > * { min-width: 0; }', s)                              # Grid-Items schrumpfen
+        self.assertIn('.card { min-width: 0;', s)
+        self.assertIn('min-width: 0; height: auto; max-height: none;', s)                # thread
+        self.assertIn('overflow-wrap: anywhere; } /* lange Links/JSON', s)               # bubble text bricht um
+        self.assertIn('max-width: 1040px; margin: 0 auto; width: 100%;', s)              # kommgrid zentriert, volle Breite
         # weiterhin self-contained: genau ein Skript-Tag
         self.assertEqual(s.count('<script'), 1)
         self.assertEqual(s.count('</script'), 1)
