@@ -60,11 +60,33 @@ Beide antworten ohne Key mit `{"live": false, "grund": ...}`.
 
 ## API-Übersicht
 
-`GET /api/stats` · `/api/verzeichnis` · `/api/glossar` · `/api/messages` · `/api/live` · `/api/ablage` · `/api/ablage/doc` · `/api/libraries` · `/api/library/docs` · `/api/library/doc` · `/api/qv` · `/api/qv/aenderungen` · `/api/qv/export` · `/api/quellen` · `/api/templates` — sowie `POST /api/message` · `POST /api/qv/hebung` · `POST /api/render` · `POST /api/diff`.
+`GET /api/stats` (inkl. `extra`: Jahresdekaden, Quellentypen, Gruppe×K-Matrix) · `/api/verzeichnis` · `/api/glossar` · `/api/historie` (K-Stand-Verlauf aus den Standzeilen) · `/api/messages` · `/api/live` · `/api/ablage` · `/api/ablage/doc` (mit `offset` seitenweise) · `/api/libraries` · `/api/library/docs` · `/api/library/doc` (mit `offset`) · `/api/qv` (mit `q/k/rel/limit/offset`) · `/api/qv/aenderungen` · `/api/qv/export` (JSON-Download; `?format=ris|bib` für RIS/BibTeX) · `/api/qv/snapshots` · `/api/qv/diff?a=&b=` (Snapshot-Vergleich: hinzu/entfernt/geändert) · `/api/dupes` · `/api/pruef` · `/api/coverage` (Zitations-Coverage gegen das Essay in der Projekt-Bibliothek) · `/api/quellen` · `/api/templates` — sowie `POST /api/message` · `POST /api/qv/hebung` · `POST /api/qv/edit` (Titel/Quelle/Vermerk/Rel/Prio, Write-Through) · `POST /api/pruef` · `POST /api/import` (Re-Import aus der Apparat-Bibliothek, legt Snapshot an) · `POST /api/render` · `POST /api/diff` · `POST /api/agent/send` (live an den Forschungsagenten, s. u.)
+
+Optionen: `--token <t>` (schützt `/api/*` und `/data/*` via `?token=` oder Header `X-Hub-Token`; Env `DASHBOARD_TOKEN`), `--log` (Access-Log nach `data/hub.log`). Live-Endpunkte (`/api/live`, `/api/ablage*`, `/api/libraries`, `/api/library/*`, `/api/coverage`) werden 20–300 s gecacht und bei Fehler einmal mit Backoff wiederholt. Der Server spricht HTTP/1.1 (Keep-Alive), beantwortet `HEAD`, und serviert statisch nur eine Whitelist an Dateiendungen (`.html .js .css .json .md .webmanifest .png .svg .ico .db .map`, keine Dotfiles) — Quellcode unter `dashboard/` bleibt 404. Alle Antworten tragen `X-Content-Type-Options: nosniff` und `Cache-Control: no-store`. POST-Fehler werden mit Traceback in `data/debug-trace.log` protokolliert.
+
+## Tabs
+
+Übersicht (Stats mit Count-up, K-Donut, Gruppen-Balken, **Erschließungsquote im Verlauf**, **Gruppe×K-Heatmap**, Relevanz-Donut, Coverage-Karte — Klick auf Segmente/Zellen/Legende filtert das Verzeichnis) · Verzeichnis (Suche/FTS, Filter K/Rel./Gruppe/Prio/nur-zitierte/Duplikate, **Sortieren per Klick auf Spaltenkopf**, Inline-Edit per Doppelklick, K-Hebung, RIS/BibTeX/JSON-Export, QV-aktualisieren-Button) · Quellen · **Prüfaufgaben** (aus dem QV-Abschnitt „Offene Prüfaufgaben“, Status offen/erledigt serverseitig persistiert) · Ablage (live, Neu-Badges, seitenweise Vorschau) · Bibliothek · Text · Glossar · Kommunikation.
+
+## Dashboard in die Library ablegen (Zugriff für Online-Agent-Sessions)
+
+`tools/upload_dashboard.py` (venv-Python mit `mistralai`, Key aus Env/Schlüsselbund) lädt das **komplette Dashboard** in die Library **„Hub-Uebergabe (Dashboard Handoff)"** — alle Text/Code-Dateien, Icons, `data/project.json`, `data/qv-export.json` (vollständige DB inkl. Änderungslog), `data/agent-conv.json` (aktuelle Session-ID) und ein generiertes `index.md` als Datei-Map. Idempotent über das Namenspräfix `dashboard-<YYYY-MM-DD>-`. Online-Sessions des Agents können die Library danach durchsuchen. Nicht hochgeladen: `qv.db` (binär), `snapshots/`, `__pycache__`.
+
+## Daten-Import
+
+`tools/import_apparat.py` liest `Apparat_Quellenverzeichnis.md` + `Apparat_Volltext-Inventar.md` aus der Apparat-Bibliothek und schreibt `data/project.json` (Positionen mit K/Rel/Prio/Jahr/Typ, Prüfaufgaben, Historie) + `data/sample-data.js`. Re-Import im laufenden Betrieb: Button „QV aktualisieren“ im Verzeichnis-Tab (`POST /api/import`, legt vorher `data/snapshots/project-<ts>.json` an; `GET /api/qv/snapshots` + `GET /api/qv/diff` zeigen die Änderung zwischen zwei Ständen). Die QV-DB seedet bei mtime-/Schema-Wechsel automatisch neu.
+
+Smoke-Test: `python3 tools/smoke_test.py` (29 Checks gegen den laufenden Server).
+
+Die QV-SQLite (`data/qv.db`) wird bei jedem `/api/qv*`-Aufruf gegen die mtime von `data/project.json` geprüft und bei Änderung (z. B. Re-Import via `tools/import_apparat.py`) automatisch neu geseedet — kein Server-Neustart nötig.
+
+## Direkt an den Forschungsagenten senden
+
+`POST /api/agent/send` `{"text": "..."}` schickt die Nachricht asynchron an den Managed Agent `grammatik-statt-stil-research` (chat.mistral.ai/managed-agents, Name via Env `FORSCHUNG_AGENT_NAME` änderbar) über die Agents-v2-Sessions-API (`POST /v2/agents/sessions` + `/sessions/{id}/commands`; Control-Plane via Env `FORSCHUNG_AGENTS_BASE` änderbar). Antwort: sofort `{"live": true, "queued": true, "command_id": ..., "session_id": ...}`; die Antwort selbst pollt das Dashboard per `GET /api/agent/pending?command_id=...&wait=25` (Events aus `/sessions/{id}/events/history` bis `turn_terminated`). Mit `{"sync": true, "wait": 180}` bleibt der Aufruf blockierend (CLI/curl). Die Session-ID bleibt in `data/agent-conv.json` (gitignored) gespeichert — Folgemessages gehen an dieselbe Session. `GET /api/agent/history` liest den Session-Verlauf, `POST /api/agent/reset` löscht die Session-ID (nächste Nachricht startet eine neue Session). Ohne API-Key: `{"live": false, "grund": ...}` — das Dashboard bleibt dann lokal.
 
 ## Versand an den produktiven Agenten
 
-Das Deployment `grammatik-statt-stil-research` (Branch `vibe/forschungsagent-b21b74`) wird über die Mistral-Plattform betrieben. Nachrichten vom Dashboard werden lokal im Postausgang (`data/outbox.jsonl`) gehalten; der Versand an den Agenten erfolgt über die MCP-/Studio-Schnittstelle (`execute_workflow` bzw. Signale `submit_command` / `send_message` / `start_turn`) mit dem eigenen Workspace-Key.
+Das Deployment `grammatik-statt-stil-research` (Branch `vibe/forschungsagent-b21b74`, siehe `forschungsagent/` im Repo) wird als Managed Agent auf der Mistral-Plattform betrieben (chat.mistral.ai/managed-agents/grammatik-statt-stil-research). Das Dashboard spricht ihn direkt über die Sessions-API an (s. o.); zusätzlich kann der Versand über die MCP-/Studio-Schnittstelle erfolgen.
 
 ## Zugriff vom iPhone / anderen Geräten (gleiches WLAN)
 
@@ -80,6 +102,6 @@ IP des Mac ablesen (Systemeinstellungen → WLAN → Details), z. B. `192.168.1.
 
 ## PWA („Zum Home-Bildschirm“ / Standalone-App)
 
-`manifest.webmanifest` + `sw.js` + Icons (`icons/`, erzeugt mit `python3 tools/make_icons.py`, reines stdlib) sind enthalten. Safari/iOS: „Zum Home-Bildschirm“ — die App läuft dann standalone mit Icon. Service Worker: statische Assets cache-first, `/api/*` network-first (Offline-Fallback: gecachte Antwort bzw. `{"live": false, "grund": "offline"}`); nur bei http(s) aktiv, nicht bei file://. Tastatur: **⌘/Strg+1–8** wechselt den Tab, **/** fokussiert die Suche des aktiven Tabs.
+`manifest.webmanifest` + `sw.js` + Icons (`icons/`, erzeugt mit `python3 tools/make_icons.py`, reines stdlib) sind enthalten. Safari/iOS: „Zum Home-Bildschirm“ — die App läuft dann standalone mit Icon. Service Worker: statische Assets cache-first, `/api/*` und `/data/*` network-first (Offline-Fallback: gecachte Antwort bzw. `{"live": false, "grund": "offline"}`; Schreibzugriffe POST offline → 503, nie ein fingiertes OK); nur bei http(s) aktiv, nicht bei file://. `data/sample-data.js` wird erst bei Bedarf nachgeladen (Fallback, wenn `data/project.json` nicht erreichbar ist) und liegt für den Offline-Fallback im Precache. Tastatur: **⌘/Strg+1–8** wechselt den Tab, **/** fokussiert die Suche des aktiven Tabs.
 
 Das Dashboard ist bewusst **nicht** Teil des Workflow-Deployments (`grammatik-statt-stil-research` serviert den Agenten, nicht das Dashboard).

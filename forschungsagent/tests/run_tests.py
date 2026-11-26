@@ -6,6 +6,7 @@ Keine Netzwerk- oder API-Calls.
 import asyncio
 import json
 import os
+import re
 import sys
 import types
 import unittest
@@ -1093,45 +1094,122 @@ class StartPromptV5Tests(unittest.TestCase):
 
 
 class PwaAppTests(unittest.TestCase):
-    """Dashboard als installierbare App (PWA): Manifest vollstaendig, iOS-Meta, SW v3 App-Shell, Deep-Links."""
+    """Dashboard als installierbare App (PWA) + Port des verfeinerten Dashboards (2026-11-26):
+    Manifest vollstaendig, iOS-Meta, SW v29 App-Shell (navigate network-first, Token-Bypass),
+    Deep-Links, serve.py (Token-Auth, Whitelist, Agent-Control-Plane), keine echten Daten/Secrets im Repo."""
 
     def _dash(self):
         return os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + '/../dashboard'
 
+    def _read(self, rel):
+        with open(os.path.join(self._dash(), rel), encoding='utf-8') as _f:
+            return _f.read()
+
     def test_manifest_install_kriterien(self):
         import json
-        with open(os.path.join(self._dash(), 'manifest.webmanifest'), encoding='utf-8') as _f:
-            m = json.load(_f)
+        m = json.loads(self._read('manifest.webmanifest'))
         self.assertIn('name', m) and self.assertIn('short_name', m)
         self.assertEqual(m['display'], 'standalone')
         self.assertIn('start_url', m) and self.assertIn('scope', m)
         self.assertEqual(m.get('id'), './')
+        self.assertFalse(m.get('prefer_related_applications', False))
+        self.assertIn('standalone', m.get('display_override', []))
+        self.assertTrue(m.get('categories'), 'categories fehlen')
         sizes = {i['sizes'] for i in m['icons']}
         self.assertIn('192x192', sizes) and self.assertIn('512x512', sizes)
         self.assertTrue(any(i.get('purpose') == 'maskable' for i in m['icons']))
         self.assertTrue(m.get('shortcuts'), 'App-Shortcuts fehlen')
+        tabs = set()
         for sc in m['shortcuts']:
             self.assertIn('url', sc) and self.assertIn('name', sc)
             self.assertIn('tab=', sc['url'])
+            tabs.add(sc['url'].split('tab=')[1])
+        self.assertEqual(tabs, {'verzeichnis', 'pruef', 'ablage', 'komm'})
 
     def test_index_ios_meta_und_deeplink(self):
-        with open(os.path.join(self._dash(), 'index.html'), encoding='utf-8') as _f:
-            s = _f.read()
+        s = self._read('index.html')
         self.assertIn('apple-mobile-web-app-capable', s)
         self.assertIn('apple-touch-icon', s)
         self.assertIn('name="theme-color"', s)
         self.assertIn('rel="manifest"', s)
         self.assertIn('[?&]tab=', s)          # Deep-Link ?tab= aus App-Shortcuts
         self.assertIn('#tab=', s)
-        self.assertNotIn('<script', s.split('<script>')[1].split('</script>')[0].lower())  # PR-#17-Regression
+        self.assertIn('data-page="ablage"', s) and self.assertIn('data-page="komm"', s)
+        self.assertEqual(s.count('<script'), 1)      # self-contained: genau ein Inline-Skript
+        self.assertEqual(s.count('</script'), 1)
+        body = s.split('<script>')[1].split('</script>')[0]
+        self.assertNotIn('<script', body.lower())     # PR-#17-Regression
+        nav_html = s.split('<body')[1].split('<script>')[0]
+        self.assertEqual(len(re.findall(r'data-page="[a-z]+"', nav_html)), 9)
 
-    def test_sw_v3_app_shell(self):
-        with open(os.path.join(self._dash(), 'sw.js'), encoding='utf-8') as _f:
-            sw = _f.read()
-        self.assertIn("const CACHE = 'research-hub-v3';", sw)
+    def test_sw_v29_app_shell(self):
+        sw = self._read('sw.js')
+        self.assertIn("const CACHE = 'research-hub-v29';", sw)
         self.assertIn('icon-512-maskable.png', sw)                 # maskable Icon precachen
+        self.assertIn('data/templates.json', sw)
         self.assertIn("e.request.mode === 'navigate'", sw)         # App-Shell: Navigation network-first
         self.assertIn("caches.match('index.html')", sw)             # Offline-Fallback Shell
+        self.assertIn("url.searchParams.has('token')", sw)          # Token-URLs nie cachen
+        self.assertIn("url.pathname.startsWith('/api/')", sw)       # API network-first + GET-Cache
+
+    def test_serve_py_refined_port(self):
+        import py_compile
+        serve = self._read('serve.py')
+        py_compile.compile(os.path.join(self._dash(), 'serve.py'), doraise=True)
+        self.assertGreater(len(serve), 60000)                       # verfeinerter Server (~64,7 KB)
+        self.assertIn('STATIC_SUFFIXES', serve)
+        m = re.search(r'STATIC_SUFFIXES\s*=\s*\{([^}]*)\}', serve)
+        self.assertIsNotNone(m)
+        self.assertNotIn('".py"', m.group(1))                       # Quellcode nicht auslieferbar
+        self.assertIn('".."', serve)                                # Traversal-Guard
+        self.assertIn('def _check_token', serve)
+        self.assertIn('"/api/"', serve) and self.assertIn('"/data/"', serve)  # Token schuetzt API+Data
+        self.assertIn('X-Hub-Token', serve)
+        self.assertIn('1000000', serve)                             # Body-Cap 1 MB
+        for ep in ('/api/agent/send', '/api/agent/stop', '/api/agent/archive', '/api/agent/reset',
+                   '/api/agent/history', '/api/agent/sessions', '/api/agent/pending',
+                   '/api/qv/snapshots', '/api/dupes', '/api/pruef', '/api/coverage',
+                   '/api/import', '/api/qv/export', '/api/meta', '/api/historie'):
+            self.assertIn(ep, serve)
+        for t in ('tools/start.sh', 'tools/smoke_test.py', 'tools/upload_dashboard.py',
+                  'tools/import_apparat.py', 'tools/make_icons.py'):
+            self.assertTrue(os.path.exists(os.path.join(self._dash(), t)), t + ' fehlt')
+        for t in ('tools/smoke_test.py', 'tools/upload_dashboard.py', 'tools/import_apparat.py',
+                  'tools/make_icons.py'):
+            py_compile.compile(os.path.join(self._dash(), t), doraise=True)
+
+    def test_repo_keine_echten_daten_und_kein_secret(self):
+        dash = self._dash()
+        # .gitignore schuetzt echte Daten/Logs
+        gi = self._read('.gitignore')
+        for pat in ('data/qv-export.json', 'data/agent-conv.json', 'data/hub.log',
+                    'data/debug-trace.log', 'data/snapshots/', 'data/*.db'):
+            self.assertIn(pat, gi)
+        # Daten-Dateien im Repo bleiben klein (nur Samples)
+        for rel in ('data/project.json', 'data/sample-data.js', 'data/templates.json'):
+            p = os.path.join(dash, rel)
+            self.assertTrue(os.path.exists(p), rel)
+            self.assertLess(os.path.getsize(p), 10 * 1024, rel + ' zu gross -> echte Daten im Repo?')
+        # echte Daten duerfen nicht im Repo liegen
+        for rel in ('data/qv-export.json', 'data/outbox.jsonl', 'data/agent-conv.json',
+                    'data/qv.db', 'data/hub.log', 'data/debug-trace.log'):
+            self.assertFalse(os.path.exists(os.path.join(dash, rel)), rel + ' darf nicht im Repo sein')
+        # kein Secret in irgendeiner Dashboard-Textdatei
+        secret_re = re.compile(r'ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|\bsk-[A-Za-z0-9]{20,}')
+        for root, _dirs, files in os.walk(dash):
+            if '__pycache__' in root:
+                continue
+            for fn in files:
+                p = os.path.join(root, fn)
+                if os.path.getsize(p) > 2 * 1024 * 1024:
+                    continue
+                with open(p, 'rb') as _f:
+                    raw = _f.read()
+                try:
+                    txt = raw.decode('utf-8')
+                except UnicodeDecodeError:
+                    continue
+                self.assertIsNone(secret_re.search(txt), 'Secret in ' + p)
 
 
 if __name__ == "__main__":

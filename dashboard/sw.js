@@ -1,20 +1,19 @@
 /* Research Hub Service Worker.
    Strategie: /api/* = network-first (Live-Daten frisch, Cache als Offline-Fallback nur bei GET);
    statische Assets = cache-first mit Runtime-Caching. Version bei Aenderungen erhoehen. */
-const CACHE = 'research-hub-v3';
-// data/project.json ist OPTIONAL (gitignored; auf GitHub Pages 404) - einzeln precachen,
-// damit ein 404 das SW-Install nicht killt (addAll wuerde sonst komplett fehlschlagen).
+const CACHE = 'research-hub-v29';
 const PRECACHE = [
   './', 'index.html', 'manifest.webmanifest',
-  'data/sample-data.js', 'data/templates.json',
+  'data/project.json', 'data/sample-data.js', 'data/templates.json',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-180.png', 'icons/icon-512-maskable.png'
 ];
 
 self.addEventListener('install', e => {
   e.waitUntil(
-    caches.open(CACHE)
-      .then(c => Promise.all(PRECACHE.map(p => c.add(p).catch(() => null))))
-      .then(() => self.skipWaiting())
+    caches.open(CACHE).then(c =>
+      // pro Item cachen: ein 403 (z. B. data/* mit Token) darf die Installation nicht killen
+      Promise.all(PRECACHE.map(u => c.add(u).catch(() => {})))
+    ).then(() => self.skipWaiting())
   );
 });
 
@@ -30,7 +29,8 @@ self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
   if (url.origin !== location.origin) return;
 
-  if (url.pathname.startsWith('/api/')) {
+  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/data/')) {
+    if (url.searchParams.has('token')) return; // Token-URLs nie cachen (Cache-Key waere token-abhaengig)
     e.respondWith(
       fetch(e.request).then(res => {
         if (e.request.method === 'GET' && res.ok) {
@@ -38,12 +38,17 @@ self.addEventListener('fetch', e => {
           caches.open(CACHE).then(c => c.put(e.request, copy));
         }
         return res;
-      }).catch(() =>
-        caches.match(e.request).then(cached => cached || new Response(
+      }).catch(() => {
+        // Schreibzugriffe (POST) duerfen offline nicht als Erfolg aussehen
+        if (e.request.method !== 'GET') {
+          return new Response(JSON.stringify({ fehler: 'offline (Service Worker)' }),
+            { status: 503, headers: { 'Content-Type': 'application/json; charset=utf-8' } });
+        }
+        return caches.match(e.request).then(cached => cached || new Response(
           JSON.stringify({ live: false, grund: 'offline (Service Worker)' }),
           { status: 200, headers: { 'Content-Type': 'application/json; charset=utf-8' } }
-        ))
-      )
+        ));
+      })
     );
     return;
   }
