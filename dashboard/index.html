@@ -184,7 +184,7 @@
     background-repeat: no-repeat; background-position: right 12px center; background-size: 12px 8px; }
   input[type="search"] { flex: 1; min-width: 200px; }
   .count { font-size: 12px; color: var(--muted); }
-  .glossar { grid-template-columns: 1fr; }
+  .glossar { grid-template-columns: 1fr; max-width: 760px; margin: 0 auto; } /* zentrierte Spalte */
   .glossar .card { display: flex; gap: 14px; align-items: baseline; }
   .glossar .begriff { font-weight: 700; font-size: 14px; min-width: 120px; color: var(--accent); }
   .glossar .text { font-size: 14px; line-height: 1.5; }
@@ -221,6 +221,7 @@
   .sel:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
   .chat { min-height: 480px; height: calc(100vh - var(--header-h-live, var(--header-h)) - 110px); height: calc(100dvh - var(--header-h-live, var(--header-h)) - 110px); max-height: 880px; }
   .chathead { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .chathead-right { display: flex; align-items: center; gap: 10px; min-width: 0; }
   .thread { display: flex; flex-direction: column; gap: 10px; flex: 1 1 auto; min-height: 0; height: auto; max-height: none; overflow-y: auto; padding: 8px 10px; scroll-behavior: smooth;
     scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
   .thread::-webkit-scrollbar { width: 8px; }
@@ -302,7 +303,11 @@
   @media (max-width: 940px) {
     main.wrap { padding-top: var(--sp-4); padding-bottom: var(--sp-4); } /* kompakter vertikaler Rhythmus auf mobil */
   }
+  @media (max-height: 500px) { .chat { min-height: 0; } } /* Landscape iPhone: keine min-height -> kein Springen */
   @media (max-width: 560px) {
+    .glossar .card { flex-direction: column; align-items: flex-start; gap: 4px; } /* mobil: Begriff über Text, statt 120px-Spalte */
+    .glossar .begriff { min-width: 0; }
+    #page-komm .seg button { padding: 4px 10px; font-size: 11px; min-height: 28px; } /* kompakter im Composer */
     #page-komm .card { padding: var(--sp-4); }        /* 16px statt 20px */
     #page-komm .thread { padding: 12px; gap: 8px; }    /* 4px-Raster */
     #page-komm .composer { padding: 12px; gap: 8px; }
@@ -324,7 +329,6 @@
   .composer-row { display: flex; gap: 10px; align-items: flex-end; }
   .composer-bar { display: flex; align-items: center; gap: 8px; min-height: 32px; }
   .composer-bar .seg { flex: none; }
-  .composer-bar .sess-toggle { flex: none; margin-left: auto; }
   .composer-row textarea { flex: 1; font: inherit; font-size: 14px; line-height: 1.45; padding: 8px 4px; border: 0; border-radius: 0; resize: none; min-height: 24px; max-height: 180px;
     background: transparent; color: var(--text); box-shadow: none; }
   .composer-row textarea:focus { outline: none; }
@@ -544,7 +548,10 @@
       <div class="card chat">
         <div class="chathead">
           <div class="chart-title" style="margin:0">Kommunikation mit dem Forschungsagenten</div>
-          <span class="count" id="threadCount"></span>
+          <div class="chathead-right">
+            <span class="count" id="threadCount"></span>
+            <button type="button" class="btn sess-toggle" id="btnSessToggle" aria-expanded="false" title="Session-Panel ein-/ausblenden">Session</button>
+          </div>
         </div>
         <div class="thread" id="thread" role="log" aria-live="polite" aria-label="Nachrichtenverlauf"></div>
         <div class="composer">
@@ -558,7 +565,6 @@
               <button type="button" id="segAgent">Agent</button>
             </div>
             <span class="composer-hint note" id="sendStatus" aria-live="polite"></span>
-            <button type="button" class="btn sess-toggle" id="btnSessToggle" aria-expanded="false" title="Session-Panel ein-/ausblenden">Session</button>
           </div>
         </div>
       </div>
@@ -1913,6 +1919,13 @@ $('#btnSessToggle').addEventListener('click', () => {
 });
 $('#msgInput').addEventListener('input', e => autoresize(e.target));
 $('#msgInput').addEventListener('focus', () => setTimeout(() => $('#msgInput').scrollIntoView({ block: 'end', behavior: 'smooth' }), 60));
+/* iOS-Tastatur: bei visualViewport-Resize (Tastatur auf/zu) Composer in Sicht halten + Thread nach unten */
+if (window.visualViewport) visualViewport.addEventListener('resize', () => {
+  if (document.activeElement && document.activeElement.id === 'msgInput') {
+    $('#msgInput').scrollIntoView({ block: 'end' });
+    const th = $('#thread'); if (th) th.scrollTop = th.scrollHeight;
+  }
+});
 $('#msgInput').addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
