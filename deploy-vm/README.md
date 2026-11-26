@@ -14,16 +14,24 @@ Browser ──HTTPS──> nginx (:443) ──> serve.py (127.0.0.1:8765, system
 
 - GitHub/Pages enthält nur statischen Code + `sample-data.js` (Fallback). `dashboard/data/project.json`
   (echter Snapshot) ist gitignored und wird nicht gepusht.
-- Schutz der Seite: Cloudflare-Worker-Gate (`cloudflare/worker-gate.js`) vor die Domain legen
-  ODER nginx Basic-Auth (htpasswd). Beides gratis.
-- `serve.py` hat CORS-Header (`CORS_ORIGIN` in Env, default `*`) + `do_OPTIONS`, damit optional auch
-  eine statische Shell von GitHub Pages die Live-API auf der VM rufen kann (`window.API_BASE` in index.html).
+- Schutz der Seite (Edge): **Cloudflare Access** (E-Mail-OTP, gratis ≤ 50 Nutzer) empfohlen —
+  Alternativen: Cloudflare-Worker-Gate (`cloudflare/worker-gate.js`) oder nginx basic auth.
+  **Zusätzlich immer App-seitig in serve.py:** Session-Auth (`DASHBOARD_PASSWORD` -> Cookie
+  HttpOnly/SameSite=Strict/Secure + CSRF auf POSTs, Rate-Limit+Lockout, Host-Guard via
+  `DASHBOARD_ALLOWED_HOSTS`, fail-closed bei non-loopback ohne Token/Passwort).
+- Komplette Schritt-für-Schritt-Anleitung inkl. OCI Always-Free (2 OCPU/12 GB seit 06/2026),
+  DuckDNS, Cloudflare-Tunnel, Keepalive: **`deploy-vm/RUNBOOK.md`**.
+- Projekte: Library = Projekt; Header-Picker wählt die aktive Library serverseitig pro Session
+  (`/api/projects`, `/api/projects/select|create`); Agent-Tab (`/api/wf/*`, `/api/apparat/qv` A1,
+  `/api/notes` Write-Through) — Details in `dashboard/README.md`.
 
 ## Host (gratis, immer an)
 
-Oracle Cloud **Always-Free ARM**: 2 VMs (je 1 OCPU/6 GB oder 4 OCPU/24 GB gesamt) dauerhaft gratis.
-Alternativ jeder Always-Free-VPS. Setup: `sudo bash deploy-vm/setup.sh dashboard.deinedomain.at`
-(DNS-A-Record auf VM-IP, Ports 80/443 offen; Key in `/etc/research-hub.env` eintragen).
+Oracle Cloud **Always-Free ARM**: seit 15.06.2026 **2 OCPU / 12 GB gesamt** (1.500 OCPU-h + 9.000 GB-h/Monat)
+— für serve.py (stdlib) völlig ausreichend. 200 GB Block Storage + 10 TB Egress inklusive.
+Setup: `sudo bash deploy-vm/setup.sh dashboard.deinedomain.at`
+(DNS-A-Record auf VM-IP, Ports 80/443 offen — oder Cloudflare Tunnel ohne offene Ports;
+Key + Passwort in `/etc/research-hub.env` eintragen, siehe RUNBOOK.md).
 
 ## Hinweis zur History
 

@@ -1124,7 +1124,7 @@ class PwaAppTests(unittest.TestCase):
             self.assertIn('url', sc) and self.assertIn('name', sc)
             self.assertIn('tab=', sc['url'])
             tabs.add(sc['url'].split('tab=')[1])
-        self.assertEqual(tabs, {'verzeichnis', 'pruef', 'ablage', 'komm'})
+        self.assertEqual(tabs, {'verzeichnis', 'pruef', 'ablage', 'komm', 'agent'})
 
     def test_index_ios_meta_und_deeplink(self):
         s = self._read('index.html')
@@ -1140,7 +1140,7 @@ class PwaAppTests(unittest.TestCase):
         body = s.split('<script>')[1].split('</script>')[0]
         self.assertNotIn('<script', body.lower())     # PR-#17-Regression
         nav_html = s.split('<body')[1].split('<script>')[0]
-        self.assertEqual(len(re.findall(r'data-page="[a-z]+"', nav_html)), 9)
+        self.assertEqual(len(re.findall(r'data-page="[a-z]+"', nav_html)), 10)  # + Agent-Tab
 
     def test_index_ios_safari_optimierung(self):
         """iPhone/Safari-Audit (Review 2026-11-26): Viewport, Safe-Area, Touch, Zoom, Standalone."""
@@ -1260,7 +1260,7 @@ class PwaAppTests(unittest.TestCase):
         # v4: Zoom-Fix (iOS), Chat zentriert, Pruef-Addbar
         self.assertIn('.composer-row textarea, .addbar textarea, #pNew { font-size: 16px; }', s)  # 16px auch mit hoeherer Spezifitaet
         self.assertIn('max-width: 1040px; margin: 0 auto; width: 100%; } /* Chat-Block zentriert */', s)
-        self.assertEqual(s.count('enterkeyhint="send"'), 2)                                     # msgInput + pNew
+        self.assertEqual(s.count('enterkeyhint="send"'), 3)                                     # msgInput + pNew + wfInput
         self.assertIn('class="addbar"', s)
         self.assertIn('id="pAdd" class="sendbtn"', s)
         self.assertIn('.addbar:focus-within', s)
@@ -1282,12 +1282,13 @@ class PwaAppTests(unittest.TestCase):
     def test_serve_py_security_haertung(self):
         """Security-Härtung serve.py: fail-closed Host/Token, Log-Redaction, compare_digest, Security-Header."""
         serve = self._read('serve.py')
-        # fail-closed: non-loopback ohne Token -> exit 2
+        # fail-closed: non-loopback ohne Token UND ohne Passwort -> exit 2
         self.assertIn('sys.exit(2)', serve)
         self.assertRegex(serve, r'_loopback = args\.host in \("127\.0\.0\.1"')
-        self.assertIn('if not _loopback and not HUB_TOKEN:', serve)
-        # Token im Access-Log redacten
+        self.assertIn('if not _loopback and not HUB_TOKEN and not HUB_PASSWORD_HASH:', serve)
+        # Token/Passwort im Access-Log redacten
         self.assertIn('token=[REDACTED]', serve)
+        self.assertIn('password=[REDACTED]', serve)
         self.assertIn('_access_log', serve)
         # konstant-zeitlicher Vergleich
         self.assertIn('hmac.compare_digest', serve)
@@ -1302,9 +1303,152 @@ class PwaAppTests(unittest.TestCase):
         csp = re.search(r'Content-Security-Policy", "([^"]+)"', serve).group(1)
         self.assertNotIn('script-src', csp)
 
-    def test_sw_v30_app_shell(self):
+    def test_serve_py_session_auth_projekte_agent(self):
+        """Session-Auth (Passwort), CSRF, Host-Guard, Projekte, Live-QV (A1), Agent-Workflows, Write-Through."""
+        serve = self._read('serve.py')
+        for marker in ('DASHBOARD_PASSWORD', 'HUB_PASSWORD_HASH', '_pass_hash', 'hashlib.sha256',
+                       'secrets.token_urlsafe', 'def _session', 'hub_sid', 'HttpOnly', 'SameSite=Strict',
+                       'X-Hub-CSRF', 'X-Forwarded-Proto', 'DASHBOARD_ALLOWED_HOSTS', '_LOGIN_FAILS',
+                       '429', '"/api/auth/login"', '"/api/auth/logout"', '"/api/auth/me"',
+                       '"/api/projects"', '"/api/projects/select"', '"/api/projects/create"',
+                       '"/api/project"', '"/api/apparat/qv"', '"/api/wf/status"', '"/api/wf/runs"',
+                       '"/api/wf/schedules"', '"/api/wf/run"', '"/api/notes"',
+                       'execute_workflow_async', 'get_deployment_async', 'list_runs_async',
+                       'get_workflow_execution_logs_async', 'get_schedules_async',
+                       'upload_async', 'create_async', 'apparat_qv', 'note_write', 'project_config',
+                       'projects_list_live', '_active_lib', '_default_deployment'):
+            self.assertIn(marker, serve)
+        # Klartext-Passwort wird nur gehasht verglichen, nie geloggt/gespeichert
+        self.assertIn('hmac.compare_digest(_pass_hash(pw)', serve)
+        # 401 wenn Passwort-Modus an und keine Session
+        self.assertIn('"nicht angemeldet", "auth": True}, 401', serve)
+        # Host-Guard bei exponiertem Server
+        self.assertIn('"bad host"}, 400', serve)
+
+    def test_serve_py_session_flow_live(self):
+        """Dynamisch: Server mit DASHBOARD_PASSWORD — 401 ohne Session, Login, Cookie-Flags, CSRF, Host-Guard, Logout."""
+        import subprocess, socket, time, urllib.request, urllib.error, json as _json
+        dash = self._dash()
+        data_dir = os.path.join(dash, 'data')
+        # Vorherige Artefakte sichern + entfernen, damit test_repo_keine_echten_daten gruen bleibt
+        _artifacts = ('outbox.jsonl', 'qv.db', 'hub.log', 'debug-trace.log', 'agent-conv.json', 'qv-export.json')
+        _saved = {}
+        for fn in _artifacts:
+            p = os.path.join(data_dir, fn)
+            if os.path.exists(p):
+                with open(p, 'rb') as f:
+                    _saved[fn] = f.read()
+                os.remove(p)
+        s = socket.socket(); s.bind(('127.0.0.1', 0)); port = s.getsockname()[1]; s.close()
+        env = dict(os.environ)
+        env['DASHBOARD_PASSWORD'] = 'testpw-f32362'
+        env.pop('DASHBOARD_TOKEN', None)
+        p = subprocess.Popen([sys.executable, 'serve.py', '--host', '127.0.0.1', '--port', str(port)],
+                             cwd=dash, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        base = 'http://127.0.0.1:%d' % port
+
+        def req(method, path, body=None, headers=None):
+            r = urllib.request.Request(base + path, data=_json.dumps(body).encode() if body is not None else None,
+                                       method=method, headers=headers or {})
+            try:
+                with urllib.request.urlopen(r, timeout=5) as resp:
+                    return resp.status, dict(resp.headers), resp.read().decode()
+            except urllib.error.HTTPError as e:
+                return e.code, dict(e.headers), e.read().decode()
+
+        try:
+            up = False
+            for _ in range(60):
+                try:
+                    urllib.request.urlopen(base + '/', timeout=1); up = True; break
+                except Exception:
+                    time.sleep(0.1)
+            self.assertTrue(up, 'Server startet nicht')
+            st, _, _ = req('GET', '/api/stats')
+            self.assertEqual(st, 401)
+            st, _, _ = req('POST', '/api/auth/login', {'password': 'falsch'}, {'Content-Type': 'application/json'})
+            self.assertEqual(st, 401)
+            st, h, _ = req('POST', '/api/auth/login', {'password': 'testpw-f32362'}, {'Content-Type': 'application/json'})
+            self.assertEqual(st, 200)
+            ck = h.get('Set-Cookie', '')
+            self.assertIn('hub_sid=', ck)
+            self.assertIn('HttpOnly', ck)
+            self.assertIn('SameSite=Strict', ck)
+            self.assertNotIn('Secure', ck)  # lokal http — Secure erst hinter nginx (X-Forwarded-Proto=https)
+            cookie = 'hub_sid=' + ck.split('hub_sid=')[1].split(';')[0]
+            st, _, _ = req('GET', '/api/stats', None, {'Cookie': cookie})
+            self.assertEqual(st, 200)
+            st, _, b = req('GET', '/api/auth/me', None, {'Cookie': cookie})
+            me = _json.loads(b)
+            self.assertTrue(me['authenticated'] and me['password_mode'] and me['csrf'])
+            st, _, _ = req('POST', '/api/message', {'text': 'x'}, {'Content-Type': 'application/json', 'Cookie': cookie})
+            self.assertEqual(st, 403)  # CSRF fehlt
+            st, _, _ = req('POST', '/api/message', {'text': 'x'},
+                           {'Content-Type': 'application/json', 'Cookie': cookie, 'X-Hub-CSRF': me['csrf']})
+            self.assertEqual(st, 200)
+            st, _, _ = req('GET', '/api/stats', None, {'Cookie': cookie, 'Host': 'evil.example.com'})
+            self.assertEqual(st, 400)  # DNS-Rebinding-Guard
+            st, _, _ = req('GET', '/api/projects', None, {'Cookie': cookie})
+            self.assertEqual(st, 200)  # ohne API-Key live:false, aber erreichbar
+            st, _, _ = req('POST', '/api/auth/logout', {}, {'Content-Type': 'application/json', 'Cookie': cookie, 'X-Hub-CSRF': me['csrf']})
+            self.assertEqual(st, 200)
+            st, _, _ = req('GET', '/api/stats', None, {'Cookie': cookie})
+            self.assertEqual(st, 401)
+        finally:
+            p.terminate()
+            try:
+                p.wait(timeout=5)
+            except Exception:
+                p.kill()
+            # Artefakte des Testlaufs entfernen, gesicherte Vorgaenger-Inhalte wiederherstellen
+            if os.path.isdir(data_dir):
+                for fn in _artifacts:
+                    pth = os.path.join(data_dir, fn)
+                    if os.path.exists(pth):
+                        try:
+                            os.remove(pth)
+                        except OSError:
+                            pass
+                    if fn in _saved:
+                        with open(pth, 'wb') as f:
+                            f.write(_saved[fn])
+
+    def test_serve_py_fail_closed_exposed(self):
+        """fail-closed: --host 0.0.0.0 ohne Token UND ohne Passwort -> exit 2."""
+        import subprocess, socket
+        dash = self._dash()
+        s = socket.socket(); s.bind(('127.0.0.1', 0)); port = s.getsockname()[1]; s.close()
+        env = dict(os.environ)
+        env.pop('DASHBOARD_TOKEN', None)
+        env.pop('DASHBOARD_PASSWORD', None)
+        r = subprocess.run([sys.executable, 'serve.py', '--host', '0.0.0.0', '--port', str(port)],
+                           cwd=dash, env=env, capture_output=True, timeout=30)
+        self.assertEqual(r.returncode, 2)
+        self.assertIn(b'fail-closed', r.stderr)
+
+    def test_index_login_projekte_agent_tab(self):
+        """Login-Overlay, Projekt-Picker, Agent-Tab, CSRF-Wiring — weiter genau 1 <script>-Tag, iOS 16px-Inputs."""
+        s = self._read('index.html')
+        self.assertEqual(len(re.findall(r'<script>', s)), 1)
+        for marker in ('id="loginOverlay"', 'id="loginForm"', 'id="loginPw"', 'autocomplete="current-password"',
+                       'id="projWrap"', 'id="projSel"', 'id="projNew"',
+                       'id="page-agent"', 'data-page="agent"', 'id="wfBadge"', 'id="wfDep"', 'id="wfRun"',
+                       'id="wfRuns"', 'id="wfLogs"', 'id="wfSched"', 'id="noteSend"', 'id="btnQvLive"', 'id="qvLiveText"',
+                       "'X-Hub-CSRF'", 'same-origin', '/api/auth/login', '/api/auth/me',
+                       '/api/projects/select', '/api/projects/create', '/api/wf/run', '/api/notes', '/api/apparat/qv',
+                       'function boot()', 'showLogin()'):
+            self.assertIn(marker, s)
+        # iOS: Login-Passwortfeld 16px (kein Auto-Zoom) + 44px-Targets
+        self.assertIn('#loginPw { width: 100%; font: inherit; font-size: 16px; min-height: 44px;', s)
+        self.assertIn('#loginBtn { width: 100%; min-height: 44px; }', s)
+        # Login-Overlay startet hidden (kein Flash vor /api/auth/me)
+        self.assertIn('aria-labelledby="loginTitle" hidden', s)
+        # Mobile: Agent-Grid kollabiert auf 1 Spalte
+        self.assertIn('@media (max-width: 760px) { #agentGrid { grid-template-columns: 1fr !important; }', s)
+
+    def test_sw_v31_app_shell(self):
         sw = self._read('sw.js')
-        self.assertIn("const CACHE = 'research-hub-v30';", sw)
+        self.assertIn("const CACHE = 'research-hub-v31';", sw)
         self.assertIn('HAS_TOKEN', sw)                               # /data/* mit Token nie cachen
         self.assertIn("url.pathname.startsWith('/data/')", sw)
         self.assertIn('icon-512-maskable.png', sw)                 # maskable Icon precachen
@@ -1312,7 +1456,12 @@ class PwaAppTests(unittest.TestCase):
         self.assertIn("e.request.mode === 'navigate'", sw)         # App-Shell: Navigation network-first
         self.assertIn("caches.match('index.html')", sw)             # Offline-Fallback Shell
         self.assertIn("url.searchParams.has('token')", sw)          # Token-URLs nie cachen
-        self.assertIn("url.pathname.startsWith('/api/')", sw)       # API network-first + GET-Cache
+        # v31: /api/* network-only und NIEMALS cachen (Session-Modus), offline -> 503
+        self.assertIn("url.pathname.startsWith('/api/')", sw)
+        self.assertIn('NIEMALS cachen', sw)
+        api_block = sw.split("url.pathname.startsWith('/api/')")[1].split("url.pathname.startsWith('/data/')")[0]
+        self.assertNotIn('c.put(', api_block)
+        self.assertIn('status: 503', api_block)
 
     def test_serve_py_refined_port(self):
         import py_compile

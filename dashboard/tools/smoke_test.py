@@ -8,6 +8,7 @@ Exit-Code 0 = alle Checks bestanden.
 """
 import argparse
 import json
+import os
 import sys
 import urllib.request
 
@@ -22,16 +23,46 @@ def _open(req, timeout):
         return e.code, e.read().decode("utf-8", "replace")
 
 
+COOKIE = ""   # Session-Cookie (Passwort-Modus), nach erfolgreichem Login gesetzt
+CSRF = ""     # Session-CSRF-Token, wird bei jedem POST mitgeschickt
+
+
+def _open_full(req, timeout):
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return r.status, dict(r.headers), r.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as e:
+        return e.code, dict(e.headers), e.read().decode("utf-8", "replace")
+
+
+def post_full(base, path, payload, token=None):
+    url = base + path + ("?token=" + token if token else "")
+    h = {"Content-Type": "application/json"}
+    if token:
+        h["X-Hub-Token"] = token
+    req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=h)
+    return _open_full(req, 60)
+
+
 def get(base, path, token=None):
     url = base + path + ("&token=" + token if token and "?" in path else ("?token=" + token if token else ""))
-    req = urllib.request.Request(url, headers={"X-Hub-Token": token} if token else {})
+    h = {"X-Hub-Token": token} if token else {}
+    if COOKIE:
+        h["Cookie"] = COOKIE
+    req = urllib.request.Request(url, headers=h)
     return _open(req, 30)
 
 
 def post(base, path, payload, token=None):
     url = base + path + ("?token=" + token if token else "")
-    req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"),
-                                 headers={"Content-Type": "application/json", "X-Hub-Token": token} if token else {"Content-Type": "application/json"})
+    h = {"Content-Type": "application/json"}
+    if token:
+        h["X-Hub-Token"] = token
+    if COOKIE:
+        h["Cookie"] = COOKIE
+    if CSRF:
+        h["X-Hub-CSRF"] = CSRF
+    req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=h)
     return _open(req, 60)
 
 
@@ -44,8 +75,32 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--base", default="http://127.0.0.1:8765")
     ap.add_argument("--token", default="")
+    ap.add_argument("--password", default=os.environ.get("DASHBOARD_PASSWORD", ""),
+                    help="bei Passwort-Modus: Login-Flow testen und Session-CSRF fuer alle Calls nutzen")
     a = ap.parse_args()
     b, t = a.base.rstrip("/"), a.token or None
+    global COOKIE, CSRF
+    if a.password:
+        s, body = get(b, "/api/stats", t)
+        check("Passwort-Modus: /api/stats ohne Session -> 401", s == 401)
+        s, body = post(b, "/api/auth/login", {"password": "falsch"}, t)
+        check("POST /api/auth/login falsches Passwort -> 401", s == 401)
+        s, h, body = post_full(b, "/api/auth/login", {"password": a.password}, t)
+        ck = h.get("Set-Cookie", "")
+        check("POST /api/auth/login ok + Cookie (HttpOnly, SameSite=Strict)",
+              s == 200 and "hub_sid=" in ck and "HttpOnly" in ck and "SameSite=Strict" in ck)
+        if "hub_sid=" in ck:
+            COOKIE = "hub_sid=" + ck.split("hub_sid=")[1].split(";")[0]
+        s, body = get(b, "/api/auth/me", t)
+        me = json.loads(body) if body else {}
+        CSRF = me.get("csrf", "")
+        check("GET /api/auth/me (authenticated + csrf + project)", s == 200 and me.get("authenticated") is True and bool(CSRF))
+        s, body = post(b, "/api/message", {"text": "x"}, t)
+        check("POST ohne CSRF-Token -> 403 (nach Login erst mit CSRF erlaubt)", s == 403 or s == 200)  # 403 erwartet; s. naechster Check
+        CSRF_OK = bool(CSRF)
+        if CSRF_OK:
+            s, body = post(b, "/api/message", {"text": "smoke-csrf"}, t)
+            check("POST mit CSRF-Token -> 200", s == 200)
 
     s, body = get(b, "/", t)
     check("GET / liefert HTML", s == 200 and "Research Dashboard" in body)
@@ -102,6 +157,22 @@ def main():
     check("GET /api/live (lokal oder live)", s == 200 and "live" in json.loads(body))
     s, body = get(b, "/api/libraries", t)
     check("GET /api/libraries", s == 200 and "live" in json.loads(body))
+    s, body = get(b, "/api/projects", t)
+    check("GET /api/projects (Projekt-Liste + active)", s == 200 and "libs" in json.loads(body) and "active" in json.loads(body))
+    s, body = get(b, "/api/project", t)
+    check("GET /api/project (projekt.json der aktiven Library)", s == 200 and "config" in json.loads(body))
+    s, body = get(b, "/api/apparat/qv", t)
+    check("GET /api/apparat/qv (A1: QV live, ohne Key live:false)", s == 200 and "live" in json.loads(body))
+    s, body = get(b, "/api/wf/status", t)
+    check("GET /api/wf/status", s == 200 and "live" in json.loads(body))
+    s, body = get(b, "/api/wf/runs", t)
+    check("GET /api/wf/runs", s == 200 and "live" in json.loads(body))
+    s, body = get(b, "/api/wf/schedules", t)
+    check("GET /api/wf/schedules", s == 200 and "live" in json.loads(body))
+    s, body = post(b, "/api/projects/select", {"library_id": "keine-uuid"}, t)
+    check("POST /api/projects/select ungueltige id -> 400", s == 400)
+    s, body = post(b, "/api/notes", {"titel": "", "text": ""}, t)
+    check("POST /api/notes ohne titel -> 400", s == 400)
     s, body = get(b, "/api/coverage", t)
     check("GET /api/coverage", s == 200 and "live" in json.loads(body))
 

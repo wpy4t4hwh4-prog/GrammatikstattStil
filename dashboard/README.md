@@ -13,6 +13,28 @@ python3 serve.py            # http://127.0.0.1:8765/
 
 Aufruf im Browser: **http://127.0.0.1:8765/** — der Server bindet nur an `127.0.0.1` (Loopback, kein externer Zugriff).
 
+## Anmeldung / Session-Auth (Passwort-Modus)
+
+```bash
+DASHBOARD_PASSWORD='geheim' python3 serve.py --host 0.0.0.0 --port 8765 \
+  --allowed-hosts dashboard.deinedomain.at
+# fail-closed: non-loopback ohne --token/DASHBOARD_TOKEN UND ohne --password/DASHBOARD_PASSWORD -> exit 2
+```
+
+- `POST /api/auth/login` -> Session-Cookie `hub_sid` (**HttpOnly, SameSite=Strict**, `Secure` automatisch hinter nginx/Cloudflare via `X-Forwarded-Proto`); Klartext-Passwort bleibt im Prozess (nur sha256-Hash im Speicher), wird nie geloggt (`password=[REDACTED]`).
+- `GET /api/auth/me` -> `{authenticated, csrf, project, password_mode}`; `POST /api/auth/logout`.
+- Alle schreibenden `/api/*`-Calls brauchen im Passwort-Modus den Header `X-Hub-CSRF` (403 sonst); GETs brauchen die Session (401 sonst). Token-Modus (`?token=`/`X-Hub-Token`) bleibt als Back-Compat bestehen.
+- Login-Rate-Limit: >=5 Fehlversuche in 300 s pro IP -> 900 s Lockout (429). Host-Header-Guard gegen DNS-Rebinding (`--allowed-hosts`/`DASHBOARD_ALLOWED_HOSTS`, default loopback).
+- UI: Login-Overlay (iOS: 16px-Input, 44px-Button), Boot prüft `/api/auth/me` vor App-Start.
+
+## Projekte (Library = Projekt) + Agent-Tab
+
+- `GET /api/projects` (alle Libraries des Workspace), `POST /api/projects/select {library_id}` (serverseitig pro Session), `POST /api/projects/create {name}` (neue Library + Seed `00-projektstand.md`/`projekt.json`), `GET /api/project` (projekt.json: `agenten[]`, `cron`, `apparat_library`).
+- Projekt-Picker im Header; Ablage/Live-QV sind projekt-scoped.
+- Agent-Tab (`?tab=agent`): `GET /api/wf/status|runs|schedules`, `GET /api/wf/runs/{id}/logs`, `POST /api/wf/run` (kostet Modelllauf), `POST /api/notes` (Write-Through: Notiz in die aktive Projekt-Library), `GET /api/apparat/qv` (A1: komplettes QV live, Standzeile + paged Text).
+- Service Worker v31: `/api/*` wird **nie** gecacht (network-only, offline 503); `/data/*` nur ohne Token.
+- Produktiv-Deployment (0 €): siehe `deploy-vm/RUNBOOK.md` (OCI Always-Free + Cloudflare Access/Tunnel + nginx/certbot).
+
 Ohne Server genügt auch das direkte Öffnen von `index.html` (file://) — dann dienen die Fallback-Daten aus `data/sample-data.js` und der Postausgang ist deaktiviert.
 
 ## Inhalte (Module)

@@ -5,7 +5,7 @@
    ohne jsdom wird SKIP ausgegeben und Exit-Code 0 geliefert (kein Harter Fehler).
 
    Emuliert iPhone 14 (390x844, iPhone-Safari-UA, maxTouchPoints=5, kein serviceWorker)
-   und prueft: Rendern der 9 Nav-Buttons, Deep-Link ?tab=, Tab-Wechsel per Tap,
+   und prueft: Rendern der 10 Nav-Buttons (inkl. Agent), Deep-Link ?tab=, Tab-Wechsel per Tap,
    Daten-Laden aus data/project.json, iOS-kritische Metas (viewport-fit=cover,
    kein Zoom-Block, apple-*-Metas, apple-touch-icon, manifest), dialog-Fallback,
    keine JS-Fehler. */
@@ -66,7 +66,7 @@ function makeDom(url) {
   const w = dom.window, d = w.document;
   await new Promise(r => setTimeout(r, 400));
 
-  assert(d.querySelectorAll('nav button').length === 9, 'iPhone: 9 Nav-Buttons rendern');
+  assert(d.querySelectorAll('nav button').length === 10, 'iPhone: 10 Nav-Buttons rendern (inkl. Agent)');
   const active = d.querySelector('nav button.active');
   assert(active && active.dataset.page === 'verzeichnis', 'iPhone: Deep-Link ?tab=verzeichnis aktiv');
   assert(d.querySelector('section.page.active') && d.querySelector('section.page.active').id === 'page-verzeichnis', 'iPhone: page-verzeichnis aktiv');
@@ -95,6 +95,20 @@ function makeDom(url) {
   assert(html.includes('100dvh'), 'Chat-Card mit dvh-Viewport (Composer bleibt sichtbar)');
   assert((html.match(/env\(safe-area-inset/g) || []).length >= 4, 'safe-area-Insets an >= 4 Stellen');
   assert(html.includes('-webkit-backdrop-filter'), '-webkit-backdrop-filter fuer aeltere Safari');
+
+  // Session-Auth + Projekte + Agent-Tab (Hub-Modus)
+  assert(!!d.querySelector('#loginOverlay[hidden]'), 'Login-Overlay vorhanden und initial hidden');
+  assert(!!d.querySelector('#loginForm #loginPw'), 'Login-Passwortfeld vorhanden');
+  assert(/#loginPw \{[^}]*font-size: 16px/.test(html), 'Login-Input 16px (kein iOS-Auto-Zoom)');
+  assert(/#loginPw \{[^}]*min-height: 44px/.test(html), 'Login-Input 44px Touch-Target');
+  assert(!!d.querySelector('#projWrap #projSel') && !!d.querySelector('#projWrap #projNew'), 'Projekt-Picker im Header');
+  assert(!!d.querySelector('nav button[data-page="agent"]'), 'Agent-Nav-Button vorhanden');
+  assert(!!d.querySelector('#page-agent'), 'Agent-Seite vorhanden');
+  assert(!!d.querySelector('#page-agent #wfRun') && !!d.querySelector('#page-agent #noteSend') && !!d.querySelector('#page-agent #btnQvLive'), 'Agent-Tab: Run/Notiz/QV-live Buttons');
+  assert(/@media \(max-width: 760px\) \{ #agentGrid \{ grid-template-columns: 1fr !important; \}/.test(html), 'Agent-Grid mobil 1 Spalte');
+  assert(html.includes("'X-Hub-CSRF'"), 'CSRF-Header im api()-Wrapper');
+  assert(html.includes('async function boot()'), 'Boot prueft /api/auth/me vor App-Start');
+  assert(/id="wfInput"[\s\S]{0,400}font-size:\s*16px/.test(html), 'Agent-Input 16px (kein iOS-Zoom)');
 
   const realErrors = errors.filter(e => !/Could not load|not implemented|css/i.test(e));
   assert(realErrors.length === 0, 'keine JS-Fehler' + (realErrors.length ? ': ' + realErrors.slice(0, 3).join(' | ') : ''));
