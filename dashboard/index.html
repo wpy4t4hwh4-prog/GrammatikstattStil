@@ -109,7 +109,7 @@
     .doclist button { padding: 13px 14px; }
     .composer button { min-height: 44px; }
     dialog .actions button { padding: 11px 18px; }
-    input, select, textarea, .sel { font-size: 16px; } /* iOS: verhindert Auto-Zoom beim Fokus (<16px) */
+    input, select, textarea, .sel, .composer-row textarea, .addbar textarea, #pNew { font-size: 16px; } /* iOS: verhindert Auto-Zoom beim Fokus (<16px) — auch spezifischere Regeln schlagen das nicht */
     nav button, .btn, .rowbtn, .doclist button { min-height: 44px; } /* Apple HIG: Touch-Target >= 44pt */
     button { touch-action: manipulation; } /* iOS: kein Doppel-Tipp-Zoom auf Buttons */
   }
@@ -207,7 +207,7 @@
   .note { font-size: 12px; color: var(--muted); line-height: 1.5; }
   kbd { font: 600 10.5px/1 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted); background: var(--bg); border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 5px; padding: 2px 5px; }
   /* --- Kommunikation: zweispaltiges Layout --- */
-  .kommgrid { display: grid; grid-template-columns: 300px minmax(0,1fr); gap: 16px; align-items: start; }
+  .kommgrid { display: grid; grid-template-columns: 300px minmax(0,1fr); gap: 16px; align-items: start; max-width: 1040px; margin: 0 auto; } /* Chat-Block zentriert */
   @media (max-width: 940px) { .kommgrid { grid-template-columns: 1fr; } }
   .session { display: flex; flex-direction: column; gap: 10px; position: sticky; top: 76px; }
   .session .srow { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 13px; }
@@ -281,10 +281,10 @@
   .seg { display: inline-flex; background: var(--glass); border: 1px solid var(--glass-border); border-radius: 999px; padding: 2px; gap: 2px; flex: none; }
   .seg button { border: 0; background: transparent; font: inherit; font-size: 12px; font-weight: 600; color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; min-height: 28px; }
   .seg button.on { background: var(--glass-strong); color: var(--text); box-shadow: var(--shadow); }
-  .composer .sendbtn { flex: none; width: 38px; height: 38px; min-height: 38px; border-radius: 50%; padding: 0; display: grid; place-items: center;
+  .sendbtn { flex: none; width: 38px; height: 38px; min-height: 38px; border-radius: 50%; padding: 0; display: grid; place-items: center;
     font-size: 19px; line-height: 1; color: #fff; border: 0; background: linear-gradient(180deg, var(--accent-2), var(--accent));
     box-shadow: inset 0 1px 0 rgba(255,255,255,.35), 0 2px 6px rgba(0,122,255,.35); }
-  .composer .sendbtn:active { transform: scale(.92); }
+  .sendbtn:active { transform: scale(.92); }
   /* HIG Bottom-Sheet (Liquid Glass): Backdrop + Sheet mit Grabber, 22px-Radius, Blur, 44pt-Aktionen */
   .backdrop { position: fixed; inset: 0; z-index: 55; background: rgba(0,0,0,.32);
     -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
@@ -315,7 +315,7 @@
     outline: 2px solid var(--accent); outline-offset: 2px; }
   @media (pointer: coarse) {
     .seg button { min-height: 32px; }
-    .composer .sendbtn { width: 44px; height: 44px; min-height: 44px; font-size: 21px; }
+    .sendbtn { width: 44px; height: 44px; min-height: 44px; font-size: 21px; }
   }
   @media (max-width: 940px) {
     main.wrap { padding-top: var(--sp-4); padding-bottom: var(--sp-4); } /* kompakter vertikaler Rhythmus auf mobil */
@@ -356,6 +356,14 @@
   .composer button.ghost:hover { background: var(--border); filter: none; }
   .composer button:disabled { opacity: .55; cursor: default; transform: none; }
   .composer-status { min-height: 16px; margin: 0 4px; font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* Eingabe-Leiste (Prüfaufgaben): wie Composer — Glas, Fokus-Ring, 44px-Send */
+  .addbar { display: flex; gap: 10px; align-items: flex-end; padding: 10px; margin-bottom: var(--sp-3); border-radius: 16px;
+    background: var(--glass-strong); border: 1px solid var(--glass-border); box-shadow: var(--shadow), inset 0 1px 0 var(--glass-hi);
+    -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
+  .addbar:focus-within { border-color: color-mix(in srgb, var(--accent) 45%, var(--glass-border)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent), var(--shadow); }
+  .addbar textarea { flex: 1; font: inherit; font-size: 14px; line-height: 1.45; padding: 8px 4px; border: 0; background: transparent;
+    color: var(--text); resize: none; min-height: 24px; max-height: 140px; box-shadow: none; }
+  .addbar textarea:focus { outline: none; }
   #toast { position: fixed; left: 50%; bottom: calc(28px + env(safe-area-inset-bottom)); transform: translate(-50%, 16px); z-index: 90; font-size: 13px; font-weight: 600; color: var(--text);
     background: var(--glass-strong); border: 1px solid var(--glass-border); border-radius: 999px; padding: 10px 18px;
     box-shadow: var(--shadow), inset 0 1px 0 var(--glass-hi); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
@@ -577,7 +585,7 @@
         <div class="composer-status note" id="sendStatus" aria-live="polite"></div>
         <div class="composer">
           <div class="composer-row">
-            <textarea id="msgInput" rows="1" placeholder="Nachricht an den Forschungsagenten …" aria-label="Nachricht an den Forschungsagenten"></textarea>
+            <textarea id="msgInput" rows="1" placeholder="Nachricht an den Forschungsagenten …" aria-label="Nachricht an den Forschungsagenten" enterkeyhint="send"></textarea>
             <button type="button" id="sendBtn" class="sendbtn" title="Lokal protokollieren (Enter)" aria-label="Nachricht senden">↑</button>
           </div>
         </div>
@@ -623,9 +631,9 @@
       <span class="count" id="pcount" aria-live="polite"></span>
     </div>
     <div class="card" style="padding:var(--sp-4)">
-      <div class="composer" style="margin-bottom:var(--sp-3)">
-        <textarea id="pNew" rows="2" placeholder="Neue Prüfaufgabe …"></textarea>
-        <button id="pAdd">+ Hinzufügen</button>
+      <div class="addbar">
+        <textarea id="pNew" rows="2" placeholder="Neue Prüfaufgabe …" aria-label="Neue Prüfaufgabe" enterkeyhint="send"></textarea>
+        <button type="button" id="pAdd" class="sendbtn" title="Hinzufügen (Enter)" aria-label="Prüfaufgabe hinzufügen">+</button>
       </div>
       <div id="pruefList" class="prueflist"></div>
     </div>
@@ -1415,6 +1423,7 @@ $('#pAdd').addEventListener('click', async () => {
   if (r && r.ok) loadPruef(); else alert('Server nicht erreichbar (file://-Modus?)');
 });
 $('#pNew').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('#pAdd').click(); } });
+$('#pNew').addEventListener('focus', () => setTimeout(() => $('#pNew').scrollIntoView({ block: 'end' }), 60));
 
 /* ---- Bibliothek (alle Libraries, live) ---- */
 let curLib = null;
