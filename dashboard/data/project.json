@@ -8,36 +8,162 @@
   },
   "kstand": {
     "positionen": 378,
-    "gruppen_enden": [38, 80, 143, 57, 18, 20, 22],
-    "K": { "K1": 179, "K2": 111, "K3": 78, "K4": 1, "K5": 4, "V": 5 },
+    "gruppen_enden": [
+      38,
+      80,
+      143,
+      57,
+      18,
+      20,
+      22
+    ],
+    "K": {
+      "K1": 179,
+      "K2": 111,
+      "K3": 78,
+      "K4": 1,
+      "K5": 4,
+      "V": 5
+    },
     "vt_quote_prozent": 76.7,
     "vt_zaehler": "290/378"
   },
   "verzeichnis": [
-    { "id": "1/14", "titel": "Pariser Regelkette 1783/1784/1859 (Sammelposition)", "quelle": "Déclaration du roi 1783; Lettres patentes 1784; Décret 1859", "k": "K5", "rel": "A", "vermerk": "bibliografisch in drei Einzelnachweise getrennt (Abschlussbericht 12.11.2026)" },
-    { "id": "1/17", "titel": "Rouet, Paul (2024): La genèse du Grand Plan de Paris (1775–1799) d'Edme Verniquet", "quelle": "Revue d'histoire urbaine 2024/2 (Nr. 70), 15–37, shs.cairn.info", "k": "K4", "rel": "A", "vermerk": "W2 Campus-Lizenz Cairn; green OA (cc-by-nc-nd) am Publisher, automatisiert gesperrt (403/429)" },
-    { "id": "1/33", "titel": "Décret impérial vom 27. Juli 1859 (Höhenstaffelung Paris)", "quelle": "Bulletin des lois, XIe série, Tome XIV, S. 478", "k": "K4", "rel": "A", "vermerk": "W1 amtliche Fassung gesperrt; Wortlaut zeichenexakt via IA-Nachdrucke (Duvergier 1859, Alphand 1886)" },
-    { "id": "1/34", "titel": "Société centrale des architectes (Hg.) (1879): Manuel des lois du bâtiment", "quelle": "Gallica ark:/12148/bpt6k54944625, Bd. 2", "k": "K3", "rel": "B", "vermerk": "Metadaten/Sammlung verifiziert; manuell zu prüfen (W1)" },
-    { "id": "2/6", "titel": "Petersen / Schädlich: Systemvergleich Paris–Haussmann (Straßenkategorien)", "quelle": "Online-Quelle, verifiziert 12.11.2026", "k": "K2", "rel": "A", "vermerk": "Beleg in der Systemvergleichs-Tabelle" },
-    { "id": "2/10", "titel": "Hagen, Anna (2015): Wiener Bauordnungen und Planungsinstrumente im 19. Jahrhundert", "quelle": "BOKU ZUG MUOe_06 (PDF), boku.ac.at", "k": "K1", "rel": "A", "vermerk": "verifiziert (Volltext, 29.10.2026)" },
-    { "id": "2/75", "titel": "Hueber, Friedmund (2005): Farbgestaltung historischer Fassaden in Wien", "quelle": "Wienbibliothek-Digitalisat, Werkstattbericht 85 (2008)", "k": "K1", "rel": "B", "vermerk": "K4-Hebung via Digitalisat, OCR-geprüfter Volltext in der Ablage" },
-    { "id": "3/3", "titel": "Parish, Müller (2001): Procedural Modeling of Cities (CGA), SIGGRAPH 2001", "quelle": "CGL-ETHZ-Autoren-Repository, DOI 10.1145/383259.383292", "k": "K1", "rel": "A", "vermerk": "K3-Aushebung nach K1 (legaler Volltext)" },
-    { "id": "3/21", "titel": "Jaschke (2021) – Crossref-Ersatz (Clara Jaschke) oder Streichung", "quelle": "Crossref", "k": "K5", "rel": "C", "vermerk": "offen: Ersatz oder begründete Streichung" },
-    { "id": "7/6", "titel": "Sonnwendviertel Ost – Fallprofil", "quelle": "neu bestimmt als Quednau et al. 2024", "k": "K5", "rel": "B", "vermerk": "Neuvergabe im Abschlussbericht 12.11.2026" }
+    {
+      "id": "1/14",
+      "titel": "Pariser Regelkette 1783/1784/1859 (Sammelposition)",
+      "quelle": "Déclaration du roi 1783; Lettres patentes 1784; Décret 1859",
+      "k": "K5",
+      "rel": "A",
+      "vermerk": "bibliografisch in drei Einzelnachweise getrennt (Abschlussbericht 12.11.2026)",
+      "prio": "",
+      "updated": "2026-11-26"
+    },
+    {
+      "id": "1/17",
+      "titel": "Rouet, Paul (2024): La genèse du Grand Plan de Paris (1775–1799) d'Edme Verniquet",
+      "quelle": "Revue d'histoire urbaine 2024/2 (Nr. 70), 15–37, shs.cairn.info",
+      "k": "K4",
+      "rel": "A",
+      "vermerk": "W2 Campus-Lizenz Cairn; green OA (cc-by-nc-nd) am Publisher, automatisiert gesperrt (403/429)"
+    },
+    {
+      "id": "1/33",
+      "titel": "Décret impérial vom 27. Juli 1859 (Höhenstaffelung Paris)",
+      "quelle": "Bulletin des lois, XIe série, Tome XIV, S. 478",
+      "k": "K4",
+      "rel": "A",
+      "vermerk": "W1 amtliche Fassung gesperrt; Wortlaut zeichenexakt via IA-Nachdrucke (Duvergier 1859, Alphand 1886)"
+    },
+    {
+      "id": "1/34",
+      "titel": "Société centrale des architectes (Hg.) (1879): Manuel des lois du bâtiment",
+      "quelle": "Gallica ark:/12148/bpt6k54944625, Bd. 2",
+      "k": "K3",
+      "rel": "B",
+      "vermerk": "Metadaten/Sammlung verifiziert; manuell zu prüfen (W1)"
+    },
+    {
+      "id": "2/6",
+      "titel": "Petersen / Schädlich: Systemvergleich Paris–Haussmann (Straßenkategorien)",
+      "quelle": "Online-Quelle, verifiziert 12.11.2026",
+      "k": "K2",
+      "rel": "A",
+      "vermerk": "Beleg in der Systemvergleichs-Tabelle"
+    },
+    {
+      "id": "2/10",
+      "titel": "Hagen, Anna (2015): Wiener Bauordnungen und Planungsinstrumente im 19. Jahrhundert",
+      "quelle": "BOKU ZUG MUOe_06 (PDF), boku.ac.at",
+      "k": "K1",
+      "rel": "A",
+      "vermerk": "verifiziert (Volltext, 29.10.2026)"
+    },
+    {
+      "id": "2/75",
+      "titel": "Hueber, Friedmund (2005): Farbgestaltung historischer Fassaden in Wien",
+      "quelle": "Wienbibliothek-Digitalisat, Werkstattbericht 85 (2008)",
+      "k": "K1",
+      "rel": "B",
+      "vermerk": "K4-Hebung via Digitalisat, OCR-geprüfter Volltext in der Ablage"
+    },
+    {
+      "id": "3/3",
+      "titel": "Parish, Müller (2001): Procedural Modeling of Cities (CGA), SIGGRAPH 2001",
+      "quelle": "CGL-ETHZ-Autoren-Repository, DOI 10.1145/383259.383292",
+      "k": "K1",
+      "rel": "A",
+      "vermerk": "K3-Aushebung nach K1 (legaler Volltext)"
+    },
+    {
+      "id": "3/21",
+      "titel": "Jaschke (2021) – Crossref-Ersatz (Clara Jaschke) oder Streichung",
+      "quelle": "Crossref",
+      "k": "K5",
+      "rel": "C",
+      "vermerk": "offen: Ersatz oder begründete Streichung"
+    },
+    {
+      "id": "7/6",
+      "titel": "Sonnwendviertel Ost – Fallprofil",
+      "quelle": "neu bestimmt als Quednau et al. 2024",
+      "k": "K5",
+      "rel": "B",
+      "vermerk": "Neuvergabe im Abschlussbericht 12.11.2026"
+    }
   ],
   "glossar": [
-    { "begriff": "K1", "text": "Volltext liegt vor und wurde geprüft (beste Zugangsstufe)." },
-    { "begriff": "K2", "text": "Volltext über dokumentierten Beleg zugänglich (OA/DOI/Digitalisat/Campus)." },
-    { "begriff": "K3", "text": "Nur Metadaten/Abstract/Teiltext zugänglich; keine Volltextauswertung." },
-    { "begriff": "K4", "text": "Blockiert – kein freier Volltext identifiziert (W-Vermerk dokumentiert)." },
-    { "begriff": "K5", "text": "Offen/unklar – Klärung oder begründete Streichung ausstehend." },
-    { "begriff": "V", "text": "Vermerk (redaktioneller Hinweis ohne eigene K-Stufe)." },
-    { "begriff": "W1", "text": "Amtliche/primäre Quelle automatisiert gesperrt (403/429) – manuelle Sichtung nötig." },
-    { "begriff": "W2", "text": "Campus-Lizenz (z. B. Cairn) – Volltext nur innerhalb des Campus." },
-    { "begriff": "W4", "text": "Print-only / nicht digital verfügbar." },
-    { "begriff": "VT-Quote", "text": "Volltextquote = (K1+K2) / Gesamtpositionen; Zugangs- und Erschließungskennzahl, keine Quote geprüfter Volltexte." },
-    { "begriff": "G/Nr.", "text": "Positionsnotation: Gruppe/Nr. (z. B. 1/17 = Gruppe 1, Nr. 17)." },
-    { "begriff": "A/B/C/P", "text": "Relevanzstufen des Quellenverzeichnisses (A Kernbeleg … P peripher)." },
-    { "begriff": "Sammelposition", "text": "Position, die mehrere Einzelnachweise bündelt (z. B. 1/14 Regelkette)." }
+    {
+      "begriff": "K1",
+      "text": "Volltext liegt vor und wurde geprüft (beste Zugangsstufe)."
+    },
+    {
+      "begriff": "K2",
+      "text": "Volltext über dokumentierten Beleg zugänglich (OA/DOI/Digitalisat/Campus)."
+    },
+    {
+      "begriff": "K3",
+      "text": "Nur Metadaten/Abstract/Teiltext zugänglich; keine Volltextauswertung."
+    },
+    {
+      "begriff": "K4",
+      "text": "Blockiert – kein freier Volltext identifiziert (W-Vermerk dokumentiert)."
+    },
+    {
+      "begriff": "K5",
+      "text": "Offen/unklar – Klärung oder begründete Streichung ausstehend."
+    },
+    {
+      "begriff": "V",
+      "text": "Vermerk (redaktioneller Hinweis ohne eigene K-Stufe)."
+    },
+    {
+      "begriff": "W1",
+      "text": "Amtliche/primäre Quelle automatisiert gesperrt (403/429) – manuelle Sichtung nötig."
+    },
+    {
+      "begriff": "W2",
+      "text": "Campus-Lizenz (z. B. Cairn) – Volltext nur innerhalb des Campus."
+    },
+    {
+      "begriff": "W4",
+      "text": "Print-only / nicht digital verfügbar."
+    },
+    {
+      "begriff": "VT-Quote",
+      "text": "Volltextquote = (K1+K2) / Gesamtpositionen; Zugangs- und Erschließungskennzahl, keine Quote geprüfter Volltexte."
+    },
+    {
+      "begriff": "G/Nr.",
+      "text": "Positionsnotation: Gruppe/Nr. (z. B. 1/17 = Gruppe 1, Nr. 17)."
+    },
+    {
+      "begriff": "A/B/C/P",
+      "text": "Relevanzstufen des Quellenverzeichnisses (A Kernbeleg … P peripher)."
+    },
+    {
+      "begriff": "Sammelposition",
+      "text": "Position, die mehrere Einzelnachweise bündelt (z. B. 1/14 Regelkette)."
+    }
   ]
 }

@@ -1224,9 +1224,35 @@ class PwaAppTests(unittest.TestCase):
         self.assertEqual(s.count('<script'), 1)
         self.assertEqual(s.count('</script'), 1)
 
-    def test_sw_v29_app_shell(self):
+
+    def test_serve_py_security_haertung(self):
+        """Security-Härtung serve.py: fail-closed Host/Token, Log-Redaction, compare_digest, Security-Header."""
+        serve = self._read('serve.py')
+        # fail-closed: non-loopback ohne Token -> exit 2
+        self.assertIn('sys.exit(2)', serve)
+        self.assertRegex(serve, r'_loopback = args\.host in \("127\.0\.0\.1"')
+        self.assertIn('if not _loopback and not HUB_TOKEN:', serve)
+        # Token im Access-Log redacten
+        self.assertIn('token=[REDACTED]', serve)
+        self.assertIn('_access_log', serve)
+        # konstant-zeitlicher Vergleich
+        self.assertIn('hmac.compare_digest', serve)
+        # Security-Header in allen Antwort-Pfaden (_json, _file, _download rufen _sec)
+        self.assertIn('def _sec(self):', serve)
+        self.assertEqual(serve.count('self._sec()'), 3)
+        self.assertIn('"X-Frame-Options", "DENY"', serve)
+        self.assertIn('"Referrer-Policy", "no-referrer"', serve)
+        self.assertIn('"Permissions-Policy", "camera=(), microphone=(), geolocation=()"', serve)
+        self.assertIn("frame-ancestors 'none'; base-uri 'none'; form-action 'self'", serve)
+        # CSP darf das self-contained Inline-Skript nicht blocken (kein script-src ohne unsafe-inline)
+        csp = re.search(r'Content-Security-Policy", "([^"]+)"', serve).group(1)
+        self.assertNotIn('script-src', csp)
+
+    def test_sw_v30_app_shell(self):
         sw = self._read('sw.js')
-        self.assertIn("const CACHE = 'research-hub-v29';", sw)
+        self.assertIn("const CACHE = 'research-hub-v30';", sw)
+        self.assertIn('HAS_TOKEN', sw)                               # /data/* mit Token nie cachen
+        self.assertIn("url.pathname.startsWith('/data/')", sw)
         self.assertIn('icon-512-maskable.png', sw)                 # maskable Icon precachen
         self.assertIn('data/templates.json', sw)
         self.assertIn("e.request.mode === 'navigate'", sw)         # App-Shell: Navigation network-first

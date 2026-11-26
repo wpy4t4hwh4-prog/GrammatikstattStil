@@ -29,6 +29,7 @@ Kein Schreibzugriff nach außen; Default bindet der Server nur an 127.0.0.1. Sta
 """
 import argparse
 import datetime
+import hmac
 import json
 import os
 import re as _re
@@ -45,6 +46,8 @@ LOG_ACCESS = False  # via --log: Access-Log nach data/hub.log
 
 
 def _access_log(line):
+    # Secrets im Query-String (?token=...) duerfen nie ins Log landen
+    line = _re.sub(r"([?&])token=[^&\s\"']+", r"\1token=[REDACTED]", line, flags=_re.IGNORECASE)
     if LOG_ACCESS:
         try:
             with open(DATA / "hub.log", "a", encoding="utf-8") as f:
@@ -1224,6 +1227,7 @@ class Handler(BaseHTTPRequestHandler):
     def _json(self, obj, status=200, download_name=None):
         body = json.dumps(obj, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
+        self._sec()
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("X-Content-Type-Options", "nosniff")
         if download_name:
@@ -1245,6 +1249,7 @@ class Handler(BaseHTTPRequestHandler):
                  ".webmanifest": "application/manifest+json", ".png": "image/png", ".svg": "image/svg+xml",
                  ".ico": "image/x-icon", ".db": "application/octet-stream"}.get(path.suffix, "application/octet-stream")
         self.send_response(200)
+        self._sec()
         self.send_header("Content-Type", ctype)
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Content-Length", str(len(body)))
@@ -1256,6 +1261,7 @@ class Handler(BaseHTTPRequestHandler):
     def _download(self, text, name, ctype):
         body = text.encode("utf-8")
         self.send_response(200)
+        self._sec()
         self.send_header("Content-Type", ctype + "; charset=utf-8")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Content-Disposition", 'attachment; filename="%s"' % name)
@@ -1265,12 +1271,21 @@ class Handler(BaseHTTPRequestHandler):
         if not getattr(self, "_head_only", False):
             self.wfile.write(body)
 
+    def _sec(self):
+        # Haertung: kein Framing, keine Referrer, keine Device-APIs.
+        # CSP bewusst ohne default-src/script-src: die App ist self-contained mit einem
+        # Inline-Skript (wuerde sonst geblockt); frame-ancestors/base-uri/form-action greifen trotzdem.
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+        self.send_header("Content-Security-Policy", "frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
+
     def _check_token(self, u, qs):
         if not HUB_TOKEN:
             return True
         if u.path.startswith(("/api/", "/data/")):
             tok = qs.get("token", [""])[0] or self.headers.get("X-Hub-Token", "")
-            if tok != HUB_TOKEN:
+            if not hmac.compare_digest(tok.encode("utf-8"), HUB_TOKEN.encode("utf-8")):
                 self._json({"fehler": "token fehlt/ungueltig"}, 403)
                 return False
         return True
@@ -1478,6 +1493,13 @@ def main():
     args = ap.parse_args()
     HUB_TOKEN = args.token or None
     LOG_ACCESS = args.log
+    _loopback = args.host in ("127.0.0.1", "localhost", "::1", "0:0:0:0:0:0:0:1")
+    if not _loopback and not HUB_TOKEN:
+        print("FEHLER (fail-closed): --host %s ohne --token/DASHBOARD_TOKEN nicht erlaubt - "
+              "/api/* und /data/* waeren sonst ohne Auth im Netz sichtbar. "
+              "Abhilfe: --token setzen (oder DASHBOARD_TOKEN in der Umgebung) oder Default 127.0.0.1 nutzen."
+              % args.host, file=sys.stderr)
+        sys.exit(2)
     DATA.mkdir(exist_ok=True)
     fts = init_db()
     srv = ThreadingHTTPServer((args.host, args.port), Handler)
