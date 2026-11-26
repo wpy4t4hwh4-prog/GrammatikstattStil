@@ -3,3 +3,9 @@ data/qv.db
 data/project.json   # echter QV-Snapshot: nie committen (Live-Daten kommen serverseitig per API)
 __pycache__/
 *.pyc
+data/qv-export.json
+data/agent-conv.json
+data/hub.log
+data/debug-trace.log
+data/snapshots/
+data/*.db

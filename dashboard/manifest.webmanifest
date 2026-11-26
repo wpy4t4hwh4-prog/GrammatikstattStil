@@ -51,6 +51,17 @@
       ]
     },
     {
+      "name": "Prüfaufgaben",
+      "short_name": "Prüfung",
+      "url": "./?tab=pruef",
+      "icons": [
+        {
+          "src": "icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
       "name": "Ablage (live)",
       "short_name": "Ablage",
       "url": "./?tab=ablage",
@@ -62,9 +73,9 @@
       ]
     },
     {
-      "name": "Textproduktion",
-      "short_name": "Text",
-      "url": "./?tab=text",
+      "name": "Agent (Komm)",
+      "short_name": "Agent",
+      "url": "./?tab=komm",
       "icons": [
         {
           "src": "icons/icon-192.png",
