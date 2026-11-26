@@ -222,6 +222,7 @@
   .chat { min-height: 480px; height: calc(100vh - var(--header-h-live, var(--header-h)) - 110px); height: calc(100dvh - var(--header-h-live, var(--header-h)) - 110px); max-height: 880px; }
   .chathead { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   .chathead-right { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .chathead .chart-title { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } /* kein Rechts-Überlauf */
   .thread { display: flex; flex-direction: column; gap: 10px; flex: 1 1 auto; min-height: 0; height: auto; max-height: none; overflow-y: auto; padding: 8px 10px; scroll-behavior: smooth;
     scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
   .thread::-webkit-scrollbar { width: 8px; }
@@ -284,7 +285,23 @@
     font-size: 19px; line-height: 1; color: #fff; border: 0; background: linear-gradient(180deg, var(--accent-2), var(--accent));
     box-shadow: inset 0 1px 0 rgba(255,255,255,.35), 0 2px 6px rgba(0,122,255,.35); }
   .composer .sendbtn:active { transform: scale(.92); }
-  .sess-toggle { display: none; }
+  /* HIG Bottom-Sheet (Liquid Glass): Backdrop + Sheet mit Grabber, 22px-Radius, Blur, 44pt-Aktionen */
+  .backdrop { position: fixed; inset: 0; z-index: 55; background: rgba(0,0,0,.32);
+    -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+  .backdrop[hidden] { display: none; }
+  .sheet { position: fixed; left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom)); z-index: 56;
+    display: flex; flex-direction: column; gap: 10px; padding: 10px 16px calc(16px + env(safe-area-inset-bottom));
+    background: var(--glass-strong); border: 1px solid var(--glass-border); border-radius: 22px;
+    box-shadow: 0 24px 60px rgba(0,0,0,.35), inset 0 1px 0 var(--glass-hi);
+    -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
+  .sheet[hidden] { display: none; }
+  .grabber { width: 36px; height: 5px; border-radius: 999px; background: var(--muted); opacity: .5; margin: 0 auto; flex: none; }
+  .sheet-title { font-size: 12px; font-weight: 700; color: var(--muted); text-align: center; text-transform: uppercase; letter-spacing: .06em; }
+  .sheet-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .sheet-action { width: 100%; min-height: 44px; }
+  .iconbtn { min-width: 44px; min-height: 44px; padding: 0 8px; font-size: 18px; line-height: 1; letter-spacing: .5px; }
+  .sheet-x { border: 0; border-radius: 50%; width: 32px; height: 32px; display: none; place-items: center;
+    background: var(--glass); color: var(--muted); font-size: 14px; cursor: pointer; }
   /* Typing-Indicator (3 Punkte) */
   .typing { display: inline-flex; gap: 4px; padding: 5px 2px; }
   .typing span { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); opacity: .4; }
@@ -307,7 +324,8 @@
   @media (max-width: 560px) {
     .glossar .card { flex-direction: column; align-items: flex-start; gap: 4px; } /* mobil: Begriff über Text, statt 120px-Spalte */
     .glossar .begriff { min-width: 0; }
-    #page-komm .seg button { padding: 4px 10px; font-size: 11px; min-height: 28px; } /* kompakter im Composer */
+    #page-komm .seg button { padding: 6px 14px; font-size: 13px; min-height: 36px; } /* im Sheet: volle Touch-Größe */
+    #page-komm .chathead .count { display: none; } /*mobil: nur Titel + Menü-Button */
     #page-komm .card { padding: var(--sp-4); }        /* 16px statt 20px */
     #page-komm .thread { padding: 12px; gap: 8px; }    /* 4px-Raster */
     #page-komm .composer { padding: 12px; gap: 8px; }
@@ -318,7 +336,8 @@
     .session { display: none; position: fixed; left: 12px; right: 12px; top: calc(var(--header-h-live, var(--header-h)) + env(safe-area-inset-top) + 8px);
       z-index: 60; max-height: 72vh; max-height: 72dvh; overflow-y: auto; box-shadow: 0 24px 60px rgba(0,0,0,.35); }
     .kommgrid.show-sess .session { display: flex; }
-    .sess-toggle { display: inline-block; }
+    .session .sheet-x { display: grid; position: absolute; top: 8px; right: 8px; z-index: 2; }
+    .session { padding-top: 14px; }
     .chat { height: calc(100vh - var(--header-h-live, var(--header-h)) - 32px); height: calc(100dvh - var(--header-h-live, var(--header-h)) - 32px); }
   }
   .msg.system { align-self: center; max-width: 88%; background: transparent; border-style: dashed; box-shadow: none; font-size: 12.5px; color: var(--muted); text-align: center; }
@@ -327,8 +346,6 @@
     -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
   .composer:focus-within { border-color: color-mix(in srgb, var(--accent) 45%, var(--glass-border)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent), var(--shadow); }
   .composer-row { display: flex; gap: 10px; align-items: flex-end; }
-  .composer-bar { display: flex; align-items: center; gap: 8px; min-height: 32px; }
-  .composer-bar .seg { flex: none; }
   .composer-row textarea { flex: 1; font: inherit; font-size: 14px; line-height: 1.45; padding: 8px 4px; border: 0; border-radius: 0; resize: none; min-height: 24px; max-height: 180px;
     background: transparent; color: var(--text); box-shadow: none; }
   .composer-row textarea:focus { outline: none; }
@@ -338,7 +355,7 @@
   .composer button.ghost { color: var(--text); background: transparent; border: 1px solid var(--border); box-shadow: none; }
   .composer button.ghost:hover { background: var(--border); filter: none; }
   .composer button:disabled { opacity: .55; cursor: default; transform: none; }
-  .composer-hint { flex: 1; min-width: 0; margin: 0; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .composer-status { min-height: 16px; margin: 0 4px; font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #toast { position: fixed; left: 50%; bottom: calc(28px + env(safe-area-inset-bottom)); transform: translate(-50%, 16px); z-index: 90; font-size: 13px; font-weight: 600; color: var(--text);
     background: var(--glass-strong); border: 1px solid var(--glass-border); border-radius: 999px; padding: 10px 18px;
     box-shadow: var(--shadow), inset 0 1px 0 var(--glass-hi); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
@@ -519,7 +536,10 @@
   <section class="page" id="page-komm">
     <div class="kommgrid">
       <aside class="card session">
-        <div class="chart-title">Session</div>
+        <div class="chathead">
+          <div class="chart-title" style="margin:0">Session</div>
+          <button type="button" class="sheet-x" id="btnSessClose" aria-label="Session-Panel schließen">✕</button>
+        </div>
         <div class="srow"><span class="slbl">Verbindung</span>
           <span class="badge" id="agentBadge"><span class="dot"></span><span id="agentLabel">lokal</span></span></div>
         <div class="srow"><span class="slbl">Agent</span><span class="sval" id="agentName">grammatik-statt-stil-research</span></div>
@@ -550,21 +570,15 @@
           <div class="chart-title" style="margin:0">Kommunikation mit dem Forschungsagenten</div>
           <div class="chathead-right">
             <span class="count" id="threadCount"></span>
-            <button type="button" class="btn sess-toggle" id="btnSessToggle" aria-expanded="false" title="Session-Panel ein-/ausblenden">Session</button>
+            <button type="button" class="btn iconbtn" id="btnKommMenu" aria-haspopup="dialog" aria-expanded="false" aria-label="Optionen öffnen (Ziel, Session)" title="Optionen (Ziel, Session)">···</button>
           </div>
         </div>
         <div class="thread" id="thread" role="log" aria-live="polite" aria-label="Nachrichtenverlauf"></div>
+        <div class="composer-status note" id="sendStatus" aria-live="polite"></div>
         <div class="composer">
           <div class="composer-row">
             <textarea id="msgInput" rows="1" placeholder="Nachricht an den Forschungsagenten …" aria-label="Nachricht an den Forschungsagenten"></textarea>
             <button type="button" id="sendBtn" class="sendbtn" title="Lokal protokollieren (Enter)" aria-label="Nachricht senden">↑</button>
-          </div>
-          <div class="composer-bar">
-            <div class="seg" role="group" aria-label="Ziel der Nachricht">
-              <button type="button" id="segLocal" class="on">Lokal</button>
-              <button type="button" id="segAgent">Agent</button>
-            </div>
-            <span class="composer-hint note" id="sendStatus" aria-live="polite"></span>
           </div>
         </div>
       </div>
@@ -665,6 +679,19 @@
   </section>
 
 </main>
+<div class="backdrop" id="backdrop" hidden></div>
+<div class="sheet" id="kommSheet" role="dialog" aria-modal="true" aria-label="Kommunikation-Optionen" hidden>
+  <div class="grabber" aria-hidden="true"></div>
+  <div class="sheet-title">Optionen</div>
+  <div class="sheet-row"><span class="slbl">Ziel</span>
+    <div class="seg" role="group" aria-label="Ziel der Nachricht">
+      <button type="button" id="segLocal" class="on">Lokal</button>
+      <button type="button" id="segAgent">Agent</button>
+    </div>
+  </div>
+  <button type="button" class="btn sheet-action" id="btnOpenSession">Session-Panel öffnen</button>
+  <button type="button" class="btn sheet-action" id="btnCloseSheet">Schließen</button>
+</div>
 <footer><div class="wrap">Grammatik statt Stil — lokales Research-Dashboard · Daten: <span id="dataSrc">data/project.json</span> · kein Netzwerk nötig (außer optionaler Live-Modus) · aktualisiert <span id="upd">–</span></div></footer>
 
 <script>
@@ -1769,8 +1796,7 @@ async function loadSessions() {
 /* Session-Wechsel: Verlauf der gewählten Session sofort laden (nicht erst beim nächsten Poll) */
 $('#sessSel').addEventListener('change', async e => {
   curSess = e.target.value;
-  document.querySelector('.kommgrid').classList.remove('show-sess');
-  $('#btnSessToggle').setAttribute('aria-expanded', 'false');
+  closeSheets();
   const h = await api('/api/agent/history?session_id=' + encodeURIComponent(curSess));
   if (h && h.live && h.messages) agentMsgs = h.messages.map(m => ({ role: m.role, kind: m.kind, name: m.name, args: m.args, ts: m.ts, text: m.text }));
   await loadMessages();
@@ -1912,11 +1938,30 @@ function setDest(m) {
 $('#segLocal').addEventListener('click', () => setDest('local'));
 $('#segAgent').addEventListener('click', () => setDest('agent'));
 $('#sendBtn').addEventListener('click', () => (destMode === 'agent' ? sendAgent() : sendLocal()));
-$('#btnSessToggle').addEventListener('click', () => {
-  const g = document.querySelector('.kommgrid');
-  const open = g.classList.toggle('show-sess');
-  $('#btnSessToggle').setAttribute('aria-expanded', String(open));
+/* HIG: Bottom-Sheets (Optionen + Session) — Backdrop-Klick, Escape und ✕ schließen */
+const backdrop = $('#backdrop');
+function closeSheets() {
+  $('#kommSheet').hidden = true;
+  backdrop.hidden = true;
+  document.querySelector('.kommgrid').classList.remove('show-sess');
+  $('#btnKommMenu').setAttribute('aria-expanded', 'false');
+}
+function openKommSheet() {
+  closeSheets();
+  $('#kommSheet').hidden = false;
+  backdrop.hidden = false;
+  $('#btnKommMenu').setAttribute('aria-expanded', 'true');
+}
+$('#btnKommMenu').addEventListener('click', () => { $('#kommSheet').hidden ? openKommSheet() : closeSheets(); });
+$('#btnCloseSheet').addEventListener('click', closeSheets);
+$('#btnOpenSession').addEventListener('click', () => {
+  closeSheets();
+  document.querySelector('.kommgrid').classList.add('show-sess');
+  backdrop.hidden = false;
 });
+$('#btnSessClose').addEventListener('click', closeSheets);
+backdrop.addEventListener('click', closeSheets);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSheets(); });
 $('#msgInput').addEventListener('input', e => autoresize(e.target));
 $('#msgInput').addEventListener('focus', () => setTimeout(() => $('#msgInput').scrollIntoView({ block: 'end', behavior: 'smooth' }), 60));
 /* iOS-Tastatur: bei visualViewport-Resize (Tastatur auf/zu) Composer in Sicht halten + Thread nach unten */
