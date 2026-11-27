@@ -1598,6 +1598,18 @@ class ZusammenfassungVolltextTests(unittest.TestCase):
         # Notiz enthaelt keine Tool-/Protokoll-Aufzaehlung mehr (nur noch im 00-projektstand, nicht in der note)
         self.assertIsNone(re.search(r'note = f"[^"\n]*Tools im Turn', src))
 
+    def test_cron_startprompt_punkt6_volltext_regel(self):
+        # Cron-Startprompt (background_check.TASK Punkt 6) ist an die Volltext-Regel angeglichen
+        src = open(os.path.join(self._repo(), 'forschungsagent', 'background_check.py'), encoding='utf-8').read()
+        self.assertIn('zusammenfassung (max. 500 Z., knapper Volltext: AUSSCHLIESSLICH (1) Thema der Runde in einem Satz', src)
+        self.assertIn('(2) die gesicherten Quellen (Autor Jahr, kurzer Titel, G/Nr. der Position)', src)
+        self.assertIn('KEINE Tool-/ID-/URL-/Seiten-Aufzählung', src)
+        # alte Aufzaehlungs-Formulierung ist im Cron-Prompt nicht mehr vorhanden
+        self.assertNotIn('eigene Kernzusammenfassung in eigenen Worten', src)
+        # bestehende Marker von test_background_check_uses_startprompt_v4 bleiben unberuehrt
+        self.assertIn('GESAMTES JSON max. 3000 Zeichen', src)
+        self.assertIn('notiz_id', src)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
