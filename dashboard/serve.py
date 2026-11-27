@@ -1189,6 +1189,30 @@ def projects_list_live():
     r = libraries_live()
     r = dict(r)
     r["password_mode"] = bool(HUB_PASSWORD_HASH)
+    # Projekte und Bibliotheken sind verschiedene Sachen: ein Projekt ist eine Library MIT projekt.json.
+    # is_project pro Library erkennen (gecached ueber "projects"), damit der Projekt-Picker im Header
+    # nur echte Projekte zeigt; reine Bibliotheken bleiben im Tab "Bibliothek".
+    try:
+        client, err = _client()
+        libs = r.get("libs") or []
+        if client is not None and libs:
+            import asyncio
+
+            async def _go():
+                out = []
+                for l in libs[:20]:
+                    l = dict(l)
+                    try:
+                        dl = await client.beta.libraries.documents.list_async(library_id=l.get("id"), search="projekt.json", page_size=5)
+                        l["is_project"] = any((d.name or "").endswith("projekt.json") for d in (dl.data or []))
+                    except Exception:
+                        l["is_project"] = False
+                    out.append(l)
+                return out
+
+            r["libs"] = asyncio.run(_go())
+    except Exception:
+        pass
     return r
 
 
