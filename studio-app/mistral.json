@@ -1,0 +1,17 @@
+{
+  "name": "research-hub",
+  "version": "0.1.0",
+  "description": "Research-Dashboard 'Grammatik statt Stil' als Mistral Studio App (Gateway stellt Auth/Access Control)",
+  "modules": {
+    "api": {
+      "path": "apps/api",
+      "platform": "docker",
+      "dockerfile": "apps/api/Dockerfile",
+      "port": 8080,
+      "dev": "python3 apps/api/main.py"
+    }
+  },
+  "routes": {
+    "/": "api"
+  }
+}
