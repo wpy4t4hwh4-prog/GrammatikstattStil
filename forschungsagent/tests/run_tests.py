@@ -512,7 +512,8 @@ class AblageInkrementellTests(unittest.TestCase):
         self.assertIn('len(str(data.get("arbeitsupdate", ""))) > 800', s)
         # Regeltext: eigene Kernzusammenfassung, KEIN Tool-/Quellen-Protokoll in der Antwort
         self.assertIn("zusammenfassung max. 500 Zeichen, arbeitsupdate max. 800 Zeichen", s)
-        self.assertIn("KEINE Aufzaehlung von Tool-Calls, Quellen-IDs, DOIs, URLs", s)
+        # 2026-11-27: INHALT = knapper Volltext (Thema + gesicherte Quellen + Kernaussage), IDs/URLs weiter verboten
+        self.assertIn("KEINE Aufzaehlung von Tool-Calls, Dokument-IDs, DOIs, URLs", s)
 
 
 class AntwortKurzCapsTests(unittest.TestCase):
@@ -1570,6 +1571,29 @@ class LoopFixR9R11Tests(unittest.TestCase):
         self.assertIn('ref: main', src)                                   # Cron laeuft auf main (bereits umgestellt)
         self.assertNotIn('ref: vibe/forschungsagent-b21b74', src)
         self.assertIn('concurrency:', src)                                # Overlap-Schutz (Queue) bleibt
+
+
+class ZusammenfassungVolltextTests(unittest.TestCase):
+    """Zusammenfassung = knapper Volltext (Thema + gesicherte Quellen + Kernaussage), keine technische Aufzaehlung (2026-11-27, Philipp)."""
+
+    def _repo(self):
+        return os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + '/..'
+
+    def test_prompt_inhalt_thema_quellen_kernaussage(self):
+        src = open(os.path.join(self._repo(), 'forschungsagent', 'main.py'), encoding='utf-8').read()
+        self.assertIn('(1) Thema der Runde in einem Satz', src)
+        self.assertIn('(2) die gesicherten Quellen', src)
+        self.assertIn('(3) die Kernaussage der Quellen in 2-4 Saetzen', src)
+        self.assertIn('Knapper Volltext (max. 500 Zeichen)', src)     # ResearchAnswer-Feld
+        # alte Cap-Regel bleibt bestehen
+        self.assertIn('zusammenfassung max. 500 Zeichen, arbeitsupdate max. 800 Zeichen', src)
+
+    def test_session_summary_note_knapper_volltext(self):
+        src = open(os.path.join(self._repo(), 'forschungsagent', 'main.py'), encoding='utf-8').read()
+        self.assertIn('## Zusammenfassung', src)
+        self.assertIn('summary = str(data["zusammenfassung"])', src)
+        # Notiz enthaelt keine Tool-/Protokoll-Aufzaehlung mehr (nur noch im 00-projektstand, nicht in der note)
+        self.assertIsNone(re.search(r'note = f"[^"\n]*Tools im Turn', src))
 
 
 if __name__ == "__main__":
