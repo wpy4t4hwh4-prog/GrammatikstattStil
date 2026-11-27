@@ -1279,6 +1279,20 @@ def _new_session(project=None):
     return sid
 
 
+_GW_SESSION = None
+
+
+def _gateway_session():
+    """Studio-App (DASHBOARD_TRUST_GATEWAY_AUTH=1): eine gemeinsame Singleton-Session fuer alle
+    Requests - das Gateway authentifiziert ohnehin jede Anfrage. Cookie-unabhaengig, damit
+    /api/projects/select & Co. auch dann funktionieren, wenn das Gateway keine Cookie-Header
+    zum Modul durchreicht."""
+    global _GW_SESSION
+    if _GW_SESSION is None or _GW_SESSION not in _SESSIONS:
+        _GW_SESSION = _new_session(project=os.environ.get("PROJECT_LIBRARY_ID") or None)
+    return (_GW_SESSION, _SESSIONS[_GW_SESSION])
+
+
 def _default_config(lib_id):
     return {"projekt": lib_id,
             "agenten": [{"name": "grammatik-statt-stil-research",
@@ -1624,6 +1638,8 @@ class Handler(BaseHTTPRequestHandler):
         return True
 
     def _session(self):
+        if TRUST_GATEWAY:
+            return _gateway_session()
         ck = self.headers.get("Cookie", "")
         m = _re.search(r"(?:^|;\s*)hub_sid=([A-Za-z0-9_\-]{16,})", ck)
         if not m:
@@ -1729,19 +1745,7 @@ class Handler(BaseHTTPRequestHandler):
         if u.path == "/api/messages":
             return self._json(load_outbox())
         if u.path == "/api/auth/me":
-            sess = self._session()
-            if not sess and TRUST_GATEWAY:
-                # Studio-App: das Gateway authentifiziert jede Anfrage - implizite Session anlegen,
-                # damit serverseitige Session-Zustaende (aktives Projekt via /api/projects/select, CSRF)
-                # auch ohne Passwort-Login funktionieren. Kein zweites Passwort im App-Pfad.
-                sid = _new_session(project=os.environ.get("PROJECT_LIBRARY_ID") or None)
-                sess = (sid, _SESSIONS[sid])
-                return self._json({"authenticated": True,
-                                   "password_mode": False,
-                                   "token_mode": bool(HUB_TOKEN),
-                                   "csrf": sess[1]["csrf"],
-                                   "project": self._active_lib()},
-                                  200, extra_headers=[("Set-Cookie", self._cookie(sid, _SESSION_TTL))])
+            sess = self._session()  # Gateway-Modus: Singleton-Session via _gateway_session()
             return self._json({"authenticated": bool(sess),
                                "password_mode": bool(HUB_PASSWORD_HASH),
                                "token_mode": bool(HUB_TOKEN),
