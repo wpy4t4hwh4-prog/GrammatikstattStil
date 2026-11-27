@@ -1,0 +1,1 @@
+mistralai-agents[sessions-client]==1.1.0

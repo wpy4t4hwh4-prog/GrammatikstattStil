@@ -61,6 +61,7 @@ BASE = Path(__file__).resolve().parent
 HUB_TOKEN = None   # via --token; schuetzt /api/* und /data/* (Query ?token= oder Header X-Hub-Token)
 HUB_PASSWORD_HASH = None  # sha256("hub-v1:"+password) via --password/DASHBOARD_PASSWORD; Klartext wird nie gehalten/geloggt
 ALLOWED_HOSTS = set()     # zusaetzliche erlaubte Host-Header (DNS-Rebinding-Guard) via --allowed-hosts/DASHBOARD_ALLOWED_HOSTS
+TRUST_GATEWAY = os.environ.get("DASHBOARD_TRUST_GATEWAY_AUTH", "") == "1"  # Studio-App (studio-app/): Auth liegt am Studio-Gateway vor dem Modul
 LOG_ACCESS = False  # via --log: Access-Log nach data/hub.log
 _SESSIONS = {}            # sid -> {"created","last","csrf","project"} (In-Memory; Neustart = Logout)
 _SESSION_TTL = 12 * 3600  # 12 h
@@ -1977,12 +1978,15 @@ def main():
     ALLOWED_HOSTS.update(h.strip().lower() for h in args.allowed_hosts.split(",") if h.strip())
     LOG_ACCESS = args.log
     _loopback = args.host in ("127.0.0.1", "localhost", "::1", "0:0:0:0:0:0:0:1")
-    if not _loopback and not HUB_TOKEN and not HUB_PASSWORD_HASH:
+    if not _loopback and not HUB_TOKEN and not HUB_PASSWORD_HASH and not TRUST_GATEWAY:
         print("FEHLER (fail-closed): --host %s ohne --token/DASHBOARD_TOKEN und ohne --password/DASHBOARD_PASSWORD nicht erlaubt - "
               "/api/* und /data/* waeren sonst ohne Auth im Netz sichtbar. "
               "Abhilfe: --token oder --password setzen (oder Env DASHBOARD_TOKEN/DASHBOARD_PASSWORD) oder Default 127.0.0.1 nutzen."
               % args.host, file=sys.stderr)
         sys.exit(2)
+    if not _loopback and not HUB_TOKEN and not HUB_PASSWORD_HASH and TRUST_GATEWAY:
+        print("HINWEIS: bind an %s ohne Token/Passwort (DASHBOARD_TRUST_GATEWAY_AUTH=1) - nur hinter authentifiziertem Gateway betreiben (Studio-App, siehe studio-app/)"
+              % args.host, file=sys.stderr)
     DATA.mkdir(exist_ok=True)
     fts = init_db()
     srv = ThreadingHTTPServer((args.host, args.port), Handler)

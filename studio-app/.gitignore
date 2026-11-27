@@ -1,0 +1,4 @@
+.env
+.mistral/
+__pycache__/
+*.pyc
