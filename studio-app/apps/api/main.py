@@ -8,7 +8,7 @@ fail-closed-Pruefung fuer exponierte Hosts aussetzt. Ohne Gateway-Auth niemals s
 Env:
   PORT                    Listener-Port (Default 8080)
   DASHBOARD_DIR           Pfad zum dashboard/-Verzeichnis (Default <repo>/dashboard; im Container /app/dashboard)
-  DASHBOARD_PASSWORD      optional: zusaetzlicher Passwort-Login im Dashboard (als Secret in Studio setzen)
+  DASHBOARD_PASSWORD      wirkungslos im App-Modus: serve.py ignoriert es bei DASHBOARD_TRUST_GATEWAY_AUTH=1 (Auth liegt am Gateway; kein zweites Passwort im App-Pfad)
   DASHBOARD_TOKEN         optional: zusaetzlicher Token (Back-Compat)
   DASHBOARD_ALLOWED_HOSTS optional: zusaetzliche Host-Header (DNS-Rebinding-Guard)
   MISTRAL_API_KEY         Secret in Studio: Live-Endpunkte (Ablage, Bibliothek, Agent-Tab)

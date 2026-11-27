@@ -25,6 +25,7 @@ APIs:
   POST /api/render           {"template","context"} -> gerenderter Text ({{key}}-Ersetzung)
   POST /api/diff             {"a","b"} -> zeilenweiser Diff als JSON
   POST /api/auth/login       {"password"} -> Session-Cookie (HttpOnly, SameSite=Strict, CSRF-Token); nur wenn --password/DASHBOARD_PASSWORD gesetzt
+                             (im Studio-App-Modus DASHBOARD_TRUST_GATEWAY_AUTH=1 wird das Passwort IGNORIERT - Auth liegt am Gateway)
   GET  /api/auth/me          {authenticated, csrf, project, password_mode, token_mode}
   POST /api/auth/logout      Session loeschen (Cookie ablaufen lassen)
   GET  /api/projects         Libraries des Workspace = Projekte; {libs, active, live}
@@ -1974,6 +1975,13 @@ def main():
                     help="komma-getrennte zusaetzliche Host-Header (DNS-Rebinding-Guard), z. B. dashboard.deinedomain.at")
     args = ap.parse_args()
     HUB_TOKEN = args.token or None
+    if args.password and TRUST_GATEWAY:
+        # Studio-App: Auth liegt am Studio-Gateway. Ein DASHBOARD_PASSWORD in der Env (z. B. versehentlich
+        # als App-/Workspace-Secret gesetzt) darf im App-Pfad NIEMALS einen Passwort-Login aktivieren -
+        # sonst verdeckt das Login-Overlay den Tab-Header und verlangt ein zweites Passwort.
+        print("HINWEIS: --password/DASHBOARD_PASSWORD wird im Studio-App-Modus (DASHBOARD_TRUST_GATEWAY_AUTH=1) IGNORIERT - "
+              "Auth liegt am Studio-Gateway; im App-Pfad gibt es keinen Passwort-Login.", file=sys.stderr)
+        args.password = ""
     HUB_PASSWORD_HASH = _pass_hash(args.password) if args.password else None
     ALLOWED_HOSTS.update(h.strip().lower() for h in args.allowed_hosts.split(",") if h.strip())
     LOG_ACCESS = args.log
