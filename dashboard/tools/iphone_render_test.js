@@ -105,6 +105,7 @@ function makeDom(url) {
   assert(!!d.querySelector('nav button[data-page="agent"]'), 'Agent-Nav-Button vorhanden');
   assert(!!d.querySelector('#liveBadge #liveDetail'), 'Badge: kompaktes #liveLabel + #liveDetail (Stats nur Desktop)');
   assert(html.includes('.hright nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;'), 'iPhone: Tab-Nav als fixe Bottom-Tab-Bar (HIG)');
+  assert(html.includes('header { -webkit-backdrop-filter: none; backdrop-filter: none; }'), 'iPhone: backdrop-filter mobil AUS (sonst klebt die fixed Tab-Bar am Header statt am Viewport)');
   assert(!!d.querySelector('#page-agent'), 'Agent-Seite vorhanden');
   assert(!!d.querySelector('#page-agent #wfRun') && !!d.querySelector('#page-agent #noteSend') && !!d.querySelector('#page-agent #btnQvLive'), 'Agent-Tab: Run/Notiz/QV-live Buttons');
   assert(/@media \(max-width: 760px\) \{ #agentGrid \{ grid-template-columns: 1fr !important; \}/.test(html), 'Agent-Grid mobil 1 Spalte');

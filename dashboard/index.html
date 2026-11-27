@@ -84,6 +84,10 @@
   @media (max-width: 900px) {
     /* iPhone (Apple HIG): schlanker einzeiliger Header (56px) - Titel + Projekt-Picker + kompakter Live-Badge.
        Die Tab-Nav wandert als fixe Bottom-Tab-Bar nach unten (iOS-idiomatisch, safe-area-aware). */
+    /* WICHTIG: backdrop-filter auf dem Header abschalten! backdrop-filter macht das Header-Element zum
+       Containing Block fuer position:fixed-Nachfahren -> die Bottom-Tab-Bar wuerde sonst am Header kleben
+       und ihn komplett ueberdecken (nur Tab-Leiste oben sichtbar). */
+    header { -webkit-backdrop-filter: none; backdrop-filter: none; }
     header .wrap { height: 56px; flex-wrap: nowrap; padding-top: 8px; padding-bottom: 8px; gap: 8px; }
     h1 { flex: 0 1 auto; }
     .hright { flex: 1 1 auto; width: auto; justify-content: flex-end; gap: 8px; }

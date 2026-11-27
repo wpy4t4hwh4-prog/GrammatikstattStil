@@ -1181,6 +1181,8 @@ class PwaAppTests(unittest.TestCase):
         self.assertIn('h1 { font-size: 17px; font-weight: 650; letter-spacing: -.01em; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }', s)
         # mobil: schlanker Header + Bottom-Tab-Bar
         self.assertIn('header .wrap { height: 56px; flex-wrap: nowrap;', s)
+        # backdrop-filter am Header MUSS mobil aus sein, sonst ist der Header Containing-Block der fixed Tab-Bar
+        self.assertIn('header { -webkit-backdrop-filter: none; backdrop-filter: none; }', s)
         self.assertIn('.hright nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;', s)
         self.assertIn('calc(8px + env(safe-area-inset-bottom))', s)
         self.assertIn('.badge .badge-detail { display: none; }', s)
