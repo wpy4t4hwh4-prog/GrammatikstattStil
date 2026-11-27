@@ -382,6 +382,9 @@ class SessionStartRegelTests(unittest.TestCase):
         self.assertIn("NIEMALS eine ID raten", s)
         self.assertIn("NICHT blind ein neues Projektstand-Dokument anlegen", s)
         self.assertIn("GENAU EINES", s)
+        # 2026-11-27 (R9-R11): Idle-Timeout ~1 h erwaehnt; session-summary-Notizen = knappe Volltexte, 00-projektstand bleibt kanonisch
+        self.assertIn("Idle-Timeout ~1 h", s)
+        self.assertIn("knappe Volltexte (Thema + gesicherte Quellen + Kernaussage", s)
 
 
 class _FakeDoc:
