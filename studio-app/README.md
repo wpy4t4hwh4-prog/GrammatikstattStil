@@ -37,21 +37,22 @@ Browser ──> Studio-Gateway (Sign-in, Access Control) ──> Modul "api" (0.
 ```bash
 curl -fsSL https://mistral.ai/cli/install.sh | bash
 mistral login
-cd studio-app
+cd <repo-root>       # App-Root ist das Repo-Root: das kanonische Manifest liegt in mistral.json (Root)
 # MISTRAL_API_KEY in .env eintragen (gitignored) fuer lokalen Betrieb
 mistral dev          # lokaler Stack inkl. Gateway, z. B. http://research-hub.apps.localhost:8080
 ```
 
-Falls `mistral dev` das Manifest anpasst: `mistral modules` zeigt die aufgeloesten Module aus
-`mistral.json`. Das mitgelieferte `mistral.json` ist ein Startpunkt - die CLI (`mistral init
---preset app` bzw. `mistral apps capability select --caps apps`) erzeugt/validiert das kanonische
-Manifest; Modul-Quelle (`apps/api/`) und Dockerfile bleiben als Drop-in erhalten.
+Das Manifest `mistral.json` am **Repo-Root** folgt dem kanonischen Schema (schemaVersion 2, kind
+`app`, `modules` als Array - validiert mit `mistral apps modules`); Modul-Quelle
+(`studio-app/apps/api/`) und Dockerfile bleiben als Drop-in erhalten. Build-Kontext des Moduls ist
+das Repo-Root (`build.context: "."`), damit das Dockerfile `dashboard/` kopieren kann.
 
 ## Deploy
 
 ```bash
 git add -A && git commit -m "feat(studio-app): Research-Dashboard als Studio-App" && git push
-mistral deploy       # baut den gepushten Commit, legt DB/Module an, druckt die App-URL
+mistral deploy       # aus dem Repo-Root: baut den gepushten Commit, legt Module an, druckt die App-URL
+# Alternative ohne Git/Push (experimental): mistral deploy --from-disk  (uploaded das App-Verzeichnis)
 ```
 
 - Erster Deploy schreibt das Deployment-Binding in `mistral.json` (mit committen/pushen).
