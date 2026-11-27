@@ -1651,9 +1651,47 @@ class LoopFixR9R11Tests(unittest.TestCase):
     def test_r9_dockerfile_execution_caps(self):
         src = open(os.path.join(self._repo(), 'forschungsagent', 'Dockerfile'), encoding='utf-8').read()
         self.assertIn('AGENTS_SDK_IDLE_TIMEOUT_SECONDS=3600', src)        # idle 1 h statt 24 h
-        self.assertIn('AGENTS_SDK_EXECUTION_TIMEOUT_SECONDS=7200', src)   # hartes Cap 2 h statt 8 d
+        self.assertIn('AGENTS_SDK_LIFETIME_LIMIT_SECONDS=3600', src)      # R12: Session-Lebenszeit 1 h (Loop-Cap)
+        self.assertIn('AGENTS_SDK_EXECUTION_TIMEOUT_SECONDS=10800', src)  # R12: Temporal-Backstop 3 h
+        self.assertNotIn('AGENTS_SDK_LIFETIME_LIMIT_SECONDS=604800', src) # R12: verletzt SDK-Invariante
+        self.assertNotIn('AGENTS_SDK_EXECUTION_TIMEOUT_SECONDS=7200', src) # R12: 9900 (sandbox_prov) >= 7200
         self.assertNotIn('AGENTS_SDK_IDLE_TIMEOUT_SECONDS=86400', src)
         self.assertNotIn('AGENTS_SDK_EXECUTION_TIMEOUT_SECONDS=691200', src)
+
+    def test_r12_dockerfile_caps_erfuellen_sdk_invariante(self):
+        """R12 (2026-11-27): mistralai-agents 1.1.0 AppSettings verlangt lifetime+grace < execution
+        sowie callback < execution und sandbox_provisioning < execution; sonst startet der Worker
+        nicht (ValidationError -> Deployment phase=failed, gesehen 2026-11-27 23:37Z)."""
+        src = open(os.path.join(self._repo(), 'forschungsagent', 'Dockerfile'), encoding='utf-8').read()
+        def cap(name):
+            m = re.search(rf'AGENTS_SDK_{name}=(\d+)', src)
+            self.assertIsNotNone(m, f'AGENTS_SDK_{name} fehlt im Dockerfile')
+            return int(m.group(1))
+        idle = cap('IDLE_TIMEOUT_SECONDS')
+        lifetime = cap('LIFETIME_LIMIT_SECONDS')
+        execution = cap('EXECUTION_TIMEOUT_SECONDS')
+        self.assertLess(lifetime + 300, execution)      # limit_grace Default 300
+        self.assertLess(3600, execution)                 # DEFAULT_CALLBACK_TIMEOUT = 1 h
+        self.assertLess(9900, execution)                 # DEFAULT_SANDBOX_PROVISIONING_TIMEOUT
+        self.assertLessEqual(lifetime, 604800)           # MANAGED_MAX_LIFETIME_LIMIT_SECONDS
+        self.assertLessEqual(idle, 86400)                # MANAGED_MAX_IDLE_TIMEOUT_SECONDS
+        # gegen die echte SDK-Validierung pruefen (falls mistralai installiert)
+        try:
+            from mistralai.vibe_agents.sdk.app.config import AppSettings
+        except Exception:
+            self.skipTest('mistralai nicht installiert')
+        env = {'AGENTS_SDK_IDLE_TIMEOUT_SECONDS': str(idle),
+               'AGENTS_SDK_LIFETIME_LIMIT_SECONDS': str(lifetime),
+               'AGENTS_SDK_EXECUTION_TIMEOUT_SECONDS': str(execution)}
+        for k, v in env.items():
+            os.environ[k] = v
+        try:
+            s = AppSettings()
+            self.assertEqual(s.lifetime_limit_seconds, lifetime)
+            self.assertEqual(s.execution_timeout_seconds, execution)
+        finally:
+            for k in env:
+                os.environ.pop(k, None)
 
     def test_r11_session_turn_limit_enforced(self):
         hook = main.QuoteAuditHook()
