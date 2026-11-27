@@ -24,7 +24,7 @@ Browser ──> Studio-Gateway (Sign-in, Access Control) ──> Modul "api" (0.
 - `MISTRAL_API_KEY` kommt als **Secret** in Studio (Secrets-Tab der App, Modul `api`) - die CLI laedt
   `.env` nie hoch. Damit werden die Live-Endpunkte aktiv (Ablage, Bibliothek, Agent-Tab via
   `grammatik-statt-stil-research`).
-- Optional zusaetzlicher Dashboard-Login hinter dem Gateway: Secret `DASHBOARD_PASSWORD`.
+- **Kein zusaetzliches Dashboard-Passwort in der App**: `serve.py` ignoriert `DASHBOARD_PASSWORD` im App-Modus (`DASHBOARD_TRUST_GATEWAY_AUTH=1`) — Auth liegt am Gateway. Ein versehentlich gesetztes `DASHBOARD_PASSWORD`-Secret (App-Secrets oder Secrets Manager) hat daher keine Wirkung; bitte trotzdem dort entfernen.
 
 ## Voraussetzung
 

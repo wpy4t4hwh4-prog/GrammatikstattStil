@@ -1434,6 +1434,74 @@ class PwaAppTests(unittest.TestCase):
         self.assertEqual(r.returncode, 2)
         self.assertIn(b'fail-closed', r.stderr)
 
+    def test_serve_py_gateway_modus_ignoriert_passwort(self):
+        """Studio-App (DASHBOARD_TRUST_GATEWAY_AUTH=1): ein DASHBOARD_PASSWORD in der Env wird IGNORIERT -
+        kein Passwort-Login (password_mode:false), /api/* ohne Session-Cookie erreichbar (Gateway schuetzt),
+        Login-Overlay im Frontend bleibt hidden -> Tab-Header sichtbar."""
+        import subprocess, socket, time, urllib.request, urllib.error, json as _json
+        dash = self._dash()
+        data_dir = os.path.join(dash, 'data')
+        _artifacts = ('outbox.jsonl', 'qv.db', 'hub.log', 'debug-trace.log', 'agent-conv.json', 'qv-export.json')
+        _saved = {}
+        for fn in _artifacts:
+            p = os.path.join(data_dir, fn)
+            if os.path.exists(p):
+                with open(p, 'rb') as f:
+                    _saved[fn] = f.read()
+                os.remove(p)
+        s = socket.socket(); s.bind(('127.0.0.1', 0)); port = s.getsockname()[1]; s.close()
+        env = dict(os.environ)
+        env['DASHBOARD_TRUST_GATEWAY_AUTH'] = '1'
+        env['DASHBOARD_PASSWORD'] = 'testpw-f32362'  # darf im Gateway-Modus nicht greifen
+        env.pop('DASHBOARD_TOKEN', None)
+        p = subprocess.Popen([sys.executable, 'serve.py', '--host', '127.0.0.1', '--port', str(port)],
+                             cwd=dash, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        base = 'http://127.0.0.1:%d' % port
+
+        def req(path):
+            r = urllib.request.Request(base + path, method='GET')
+            try:
+                with urllib.request.urlopen(r, timeout=5) as resp:
+                    return resp.status, resp.read().decode()
+            except urllib.error.HTTPError as e:
+                return e.code, e.read().decode()
+
+        try:
+            up = False
+            for _ in range(60):
+                try:
+                    urllib.request.urlopen(base + '/', timeout=1); up = True; break
+                except Exception:
+                    time.sleep(0.1)
+            self.assertTrue(up, 'Server startet nicht')
+            st, b = req('/api/auth/me')
+            self.assertEqual(st, 200)
+            me = _json.loads(b)
+            self.assertFalse(me['password_mode'])  # PW wurde ignoriert
+            st, _ = req('/api/stats')
+            self.assertEqual(st, 200)  # ohne Cookie/Session erreichbar - im App-Pfad schuetzt das Gateway
+            # Quelle: hartes Ignorieren im Gateway-Modus
+            src = self._read('serve.py')
+            self.assertIn('if args.password and TRUST_GATEWAY:', src)
+            self.assertIn('IGNORIERT', src)
+        finally:
+            p.terminate()
+            try:
+                p.wait(timeout=5)
+            except Exception:
+                p.kill()
+            if os.path.isdir(data_dir):
+                for fn in _artifacts:
+                    pth = os.path.join(data_dir, fn)
+                    if os.path.exists(pth):
+                        try:
+                            os.remove(pth)
+                        except OSError:
+                            pass
+                    if fn in _saved:
+                        with open(pth, 'wb') as f:
+                            f.write(_saved[fn])
+
     def test_index_login_projekte_agent_tab(self):
         """Login-Overlay, Projekt-Picker, Agent-Tab, CSRF-Wiring — weiter genau 1 <script>-Tag, iOS 16px-Inputs."""
         s = self._read('index.html')
