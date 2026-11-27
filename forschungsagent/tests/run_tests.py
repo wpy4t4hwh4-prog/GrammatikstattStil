@@ -1183,7 +1183,21 @@ class PwaAppTests(unittest.TestCase):
         self.assertIn('header .wrap { height: 56px; flex-wrap: nowrap;', s)
         # backdrop-filter am Header MUSS mobil aus sein, sonst ist der Header Containing-Block der fixed Tab-Bar
         self.assertIn('header { -webkit-backdrop-filter: none; backdrop-filter: none; }', s)
-        self.assertIn('.hright nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;', s)
+        # iOS 26 Liquid Glass: schwebende Glas-Kapsel als Tab-Bar (inset, 999px, blur, specular)
+        self.assertIn('.hright nav { position: fixed; left: 12px; right: 12px; bottom: calc(8px + env(safe-area-inset-bottom)); z-index: 20;', s)
+        self.assertIn('max-width: none; border-radius: 999px; border: 1px solid var(--glass-border);', s)
+        self.assertIn('box-shadow: inset 0 1px 0 var(--glass-hi), var(--shadow), 0 16px 40px rgba(0,0,0,.22);', s)
+        # aktiver Tab = getintete Glas-Kapsel (iOS 26), Buttons als Kapsel, Badge als Glas-Pill
+        self.assertIn('nav button.active { background: color-mix(in srgb, var(--accent) 18%, var(--glass-strong)); color: var(--accent);', s)
+        self.assertIn('border-radius: 999px; padding: var(--sp-2) var(--sp-4);', s)
+        self.assertIn('.btn.primary { background: linear-gradient(180deg, var(--accent-2), var(--accent));', s)
+        # Projekt != Bibliothek: Picker filtert auf is_project, Wechsel laedt ALLE Tabs neu inkl. Agent
+        self.assertIn('libs.filter(l => l.is_project)', s)
+        self.assertIn("toast('Projekt gewechselt: ' + name)", s)
+        self.assertIn('loadData(); liveTick(); checkMeta(false); loadAgent();', s)
+        # serve.py: is_project-Erkennung pro Library
+        serve = self._read('serve.py')
+        self.assertIn('l["is_project"] = any((d.name or "").endswith("projekt.json")', serve)
         self.assertIn('calc(8px + env(safe-area-inset-bottom))', s)
         self.assertIn('.badge .badge-detail { display: none; }', s)
         self.assertIn('main.wrap { padding-bottom: calc(110px + env(safe-area-inset-bottom)); }', s)

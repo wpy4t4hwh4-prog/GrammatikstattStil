@@ -70,8 +70,9 @@
   .hright { display: flex; gap: 10px; align-items: center; min-width: 0; }
   @media (max-width: 640px) { h1 span { display: none; } }
   h1 { font-size: 17px; font-weight: 650; letter-spacing: -.01em; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .badge { font-size: 11px; font-weight: 600; color: var(--muted); border: 1px solid var(--border);
-           border-radius: 999px; padding: 3px 10px; display: inline-flex; align-items: center; gap: 6px; }
+  .badge { font-size: 11px; font-weight: 600; color: var(--muted); border: 1px solid var(--glass-border); background: var(--glass);
+           border-radius: 999px; padding: 3px 10px; display: inline-flex; align-items: center; gap: 6px;
+           box-shadow: inset 0 1px 0 var(--glass-hi), var(--shadow); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
   .badge .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--k1); }
   .badge.off .dot { background: var(--muted); }
   .badge .badge-detail { max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } /* Live-Stats im Badge: Desktop only, mobil siehe <=900px */
@@ -92,18 +93,21 @@
     h1 { flex: 0 1 auto; }
     .hright { flex: 1 1 auto; width: auto; justify-content: flex-end; gap: 8px; }
     .badge .badge-detail { display: none; } /* mobil: nur Dot + "live"/"lokal"; Stats via title-Attribut + Uebersicht */
-    .hright nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
-                  max-width: none; border-radius: 0; border: 0; border-top: 1px solid var(--border);
-                  background: color-mix(in srgb, var(--bg) 82%, transparent);
+    /* iOS 26 Liquid Glass: schwebende Tab-Bar als Glas-Kapsel, inset vom Rand, ueber dem Home-Indicator */
+    .hright nav { position: fixed; left: 12px; right: 12px; bottom: calc(8px + env(safe-area-inset-bottom)); z-index: 20;
+                  max-width: none; border-radius: 999px; border: 1px solid var(--glass-border);
+                  background: color-mix(in srgb, var(--bg) 52%, transparent);
+                  -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+                  box-shadow: inset 0 1px 0 var(--glass-hi), var(--shadow), 0 16px 40px rgba(0,0,0,.22);
                   justify-content: flex-start;
-                  padding: 8px max(12px, env(safe-area-inset-left)) calc(8px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-right)); }
+                  padding: 6px max(6px, env(safe-area-inset-left)) 6px max(6px, env(safe-area-inset-right)); }
   }
   nav button { border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 14px; font-weight: 500;
                padding: 7px 14px; border-radius: 999px; cursor: pointer; white-space: nowrap; flex: none;
                transition: background var(--dur) var(--ease-out), color var(--dur) var(--ease-out), box-shadow var(--dur) var(--ease-spring), transform var(--dur) var(--ease-spring); }
   nav button:hover { color: var(--text); }
   nav button:active { transform: scale(.96); }
-  nav button.active { background: var(--glass-strong); color: var(--text); box-shadow: var(--shadow), inset 0 1px 0 var(--glass-hi); }
+  nav button.active { background: color-mix(in srgb, var(--accent) 18%, var(--glass-strong)); color: var(--accent); box-shadow: var(--shadow), inset 0 1px 0 var(--glass-hi), inset 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent); } /* iOS 26: aktiver Tab = getintete Glas-Kapsel */
   main.wrap { padding-top: var(--sp-12); padding-bottom: var(--sp-10); }
   section.page { display: none; }
   section.page.active { display: block; animation: pageIn var(--dur) var(--ease-spring); }
@@ -387,7 +391,7 @@
     box-shadow: var(--shadow), inset 0 1px 0 var(--glass-hi); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
     opacity: 0; pointer-events: none; transition: opacity var(--dur) var(--ease-out), transform var(--dur) var(--ease-spring); }
   #toast.show { opacity: 1; transform: translate(-50%, 0); }
-  .btn { font: inherit; font-size: 13px; font-weight: 600; color: var(--text); background: var(--glass-strong); border: 1px solid var(--glass-border); border-radius: 12px; padding: var(--sp-2) var(--sp-4); cursor: pointer; box-shadow: var(--shadow), inset 0 1px 0 var(--glass-hi); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  .btn { font: inherit; font-size: 13px; font-weight: 600; color: var(--text); background: var(--glass-strong); border: 1px solid var(--glass-border); border-radius: 999px; padding: var(--sp-2) var(--sp-4); cursor: pointer; box-shadow: var(--shadow), inset 0 1px 0 var(--glass-hi); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); /* iOS 26: Glas-Kapsel-Button */
          transition: transform var(--dur) var(--ease-spring), background var(--dur) var(--ease-out), box-shadow var(--dur) var(--ease-out); }
   .btn:hover { background: color-mix(in srgb, var(--accent) 8%, var(--glass-strong)); }
   .btn:active { transform: scale(.97); }
@@ -476,7 +480,7 @@
   .login-card { width: 100%; max-width: 360px; padding: var(--sp-6); background: var(--glass-strong); border: 1px solid var(--glass-border); border-radius: var(--radius-lg); box-shadow: var(--shadow); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
   .login-card h2 { font-size: 20px; margin-bottom: 4px; }
   #loginPw { width: 100%; font: inherit; font-size: 16px; min-height: 44px; padding: var(--sp-2) var(--sp-3); margin: var(--sp-3) 0; border-radius: 12px; border: 1px solid var(--border); background: var(--bg); color: var(--text); }
-  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary { background: linear-gradient(180deg, var(--accent-2), var(--accent)); border-color: transparent; color: #fff; box-shadow: inset 0 1px 0 rgba(255,255,255,.35), 0 2px 8px rgba(10,132,255,.30); } /* iOS 26 glassProminent: getintetes Glas mit Specular-Highlight */
   .btn.primary:disabled { opacity: .6; }
   #loginBtn { width: 100%; min-height: 44px; }
   #loginErr { color: var(--k4); font-size: 13px; min-height: 1.2em; margin-top: var(--sp-2); }
@@ -882,20 +886,34 @@ async function loadProjects() {
   const sel = $('#projSel');
   if (!r || !sel) return;
   const libs = r.libs || [];
+  // Projekte und Bibliotheken sind verschiedene Sachen: im Projekt-Picker nur echte Projekte
+  // (Library MIT projekt.json, serverseitig als is_project markiert). Bibs sicht man im Tab "Bibliothek".
+  const projects = libs.filter(l => l.is_project);
   const active = r.active || PROJ;
-  sel.innerHTML = libs.map(l => '<option value="' + escapeHtml(l.id) + '">' + escapeHtml(l.name) + (l.docs != null ? ' (' + l.docs + ')' : '') + '</option>').join('');
-  if (active) { sel.value = active; PROJ = active; }
+  if (projects.length) {
+    sel.innerHTML = projects.map(l => '<option value="' + escapeHtml(l.id) + '">' + escapeHtml(l.name) + (l.docs != null ? ' (' + l.docs + ')' : '') + '</option>').join('');
+    if (active && projects.some(p => p.id === active)) { sel.value = active; PROJ = active; }
+    else { PROJ = projects[0].id; sel.value = PROJ; }
+  } else {
+    sel.innerHTML = '<option value="" disabled selected>Kein Projekt vorhanden — ＋ Neu anlegen</option>';
+  }
   $('#projWrap').style.display = libs.length ? '' : 'none';
 }
 $('#projSel').addEventListener('change', async e => {
   const lib = e.target.value;
   const r = await api('/api/projects/select', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ library_id: lib }) });
   if (r && r.ok) {
-    PROJ = lib; toast('Projekt gewechselt');
-    loadData(); liveTick(); checkMeta(false);
+    PROJ = lib;
+    const name = (e.target.selectedOptions[0] && e.target.selectedOptions[0].textContent) || lib;
+    toast('Projekt gewechselt: ' + name);
+    // ALLE projekt-bezogenen Daten neu laden (sonst aendert sich sichtbar nichts):
+    loadData(); liveTick(); checkMeta(false); loadAgent();
+    if ($('#page-verzeichnis').classList.contains('active')) loadQv();
+    if ($('#page-quellen').classList.contains('active')) loadQuellen();
+    if ($('#page-pruef').classList.contains('active')) loadPruef();
     if ($('#page-ablage').classList.contains('active')) loadAblage();
     if ($('#page-bib').classList.contains('active')) loadLibs();
-    if ($('#page-agent').classList.contains('active')) loadAgent();
+    if ($('#page-text').classList.contains('active')) loadTextTab();
   } else toast('Projektwechsel fehlgeschlagen: ' + ((r && (r.fehler || r.grund)) || 'Server nicht erreichbar'));
 });
 $('#projNew').addEventListener('click', async () => {
@@ -913,15 +931,18 @@ $('#projNew').addEventListener('click', async () => {
 /* ---- Agent-Tab: Workflow-Status, Läufe, Logs, Schedules, Write-Through-Notiz, QV live (A1) ---- */
 let wfDepSel = '';
 async function loadAgent() {
-  const cfg = await api('/api/project');
-  const agents = (cfg && cfg.config && cfg.config.agenten) || [];
+  let agents = [];
+  try {
+    const cfg = await api('/api/project');
+    agents = (cfg && cfg.config && cfg.config.agenten) || [];
+  } catch (e) { agents = []; } // Projekt-Config darf den Agent-Tab nicht blockieren
   const depSel = $('#wfDep');
   if (depSel) {
     depSel.innerHTML = (agents.length ? agents : [{ name: 'grammatik-statt-stil-research', deployment: 'grammatik-statt-stil-research' }])
       .map(a => '<option value="' + escapeHtml(a.deployment || '') + '">' + escapeHtml(a.name || a.deployment || '') + '</option>').join('');
     if (wfDepSel) depSel.value = wfDepSel;
   }
-  await wfRefresh();
+  try { await wfRefresh(); } catch (e) {} // Status immer aktualisieren, auch wenn /api/project fehlschlug
   await loadWfSchedules();
 }
 async function wfRefresh() {

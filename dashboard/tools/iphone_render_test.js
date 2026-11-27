@@ -104,7 +104,8 @@ function makeDom(url) {
   assert(!!d.querySelector('#projWrap #projSel') && !!d.querySelector('#projWrap #projNew'), 'Projekt-Picker im Header');
   assert(!!d.querySelector('nav button[data-page="agent"]'), 'Agent-Nav-Button vorhanden');
   assert(!!d.querySelector('#liveBadge #liveDetail'), 'Badge: kompaktes #liveLabel + #liveDetail (Stats nur Desktop)');
-  assert(html.includes('.hright nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;'), 'iPhone: Tab-Nav als fixe Bottom-Tab-Bar (HIG)');
+  assert(html.includes('.hright nav { position: fixed; left: 12px; right: 12px; bottom: calc(8px + env(safe-area-inset-bottom)); z-index: 20;'), 'iPhone: Tab-Bar als schwebende Glas-Kapsel (iOS 26 Liquid Glass)');
+  assert(html.includes('max-width: none; border-radius: 999px; border: 1px solid var(--glass-border);'), 'iPhone: Tab-Bar-Kapsel mit Glas-Rand (999px)');
   assert(html.includes('header { -webkit-backdrop-filter: none; backdrop-filter: none; }'), 'iPhone: backdrop-filter mobil AUS (sonst klebt die fixed Tab-Bar am Header statt am Viewport)');
   assert(!!d.querySelector('#page-agent'), 'Agent-Seite vorhanden');
   assert(!!d.querySelector('#page-agent #wfRun') && !!d.querySelector('#page-agent #noteSend') && !!d.querySelector('#page-agent #btnQvLive'), 'Agent-Tab: Run/Notiz/QV-live Buttons');
