@@ -1167,6 +1167,30 @@ class PwaAppTests(unittest.TestCase):
         # Safe-Area an allen kritischen Stellen
         self.assertGreaterEqual(len(re.findall(r'env\(safe-area-inset', s)), 4)
         self.assertIn('padding-top: env(safe-area-inset-top)', s)
+
+    def test_index_header_hig_bottom_tabbar(self):
+        """Header-Redesign (Apple HIG, 2026-11-27): mobil schlanker 56px-Header, Tab-Nav als fixe
+        Bottom-Tab-Bar mit safe-area-inset-bottom, kompakter Live-Badge (Dot + kurzes Label, Stats nur
+        Desktop via #liveDetail), h1 mit Ellipsis, main mit Platz fuer die Bottom-Tab-Bar."""
+        s = self._read('index.html')
+        # kompakter Badge mit Detail-Span
+        self.assertIn('id="liveDetail"', s)
+        self.assertIn('.badge .badge-detail', s)
+        self.assertIn("$('#liveLabel').textContent = 'live';", s)
+        # h1 ellipsis
+        self.assertIn('h1 { font-size: 17px; font-weight: 650; letter-spacing: -.01em; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }', s)
+        # mobil: schlanker Header + Bottom-Tab-Bar
+        self.assertIn('header .wrap { height: 56px; flex-wrap: nowrap;', s)
+        self.assertIn('.hright nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;', s)
+        self.assertIn('calc(8px + env(safe-area-inset-bottom))', s)
+        self.assertIn('.badge .badge-detail { display: none; }', s)
+        self.assertIn('main.wrap { padding-bottom: calc(110px + env(safe-area-inset-bottom)); }', s)
+        # unveraendert: 10 Nav-Buttons mit data-page, Projekt-Picker im Header
+        self.assertEqual(len(re.findall(r'<button data-page="', s)), 10)
+        self.assertEqual(len(re.findall(r'nav button', s)) >= 1, True)
+        self.assertIn('id="projWrap"', s)
+        self.assertIn('id="projSel"', s)
+        self.assertIn('id="projNew"', s)
         # Safari-Quirks
         self.assertIn('-webkit-backdrop-filter', s)
         self.assertIn('-webkit-tap-highlight', s)

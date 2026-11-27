@@ -69,11 +69,12 @@
   header .wrap { display: flex; align-items: center; justify-content: space-between; gap: 12px; height: 60px; }
   .hright { display: flex; gap: 10px; align-items: center; min-width: 0; }
   @media (max-width: 640px) { h1 span { display: none; } }
-  h1 { font-size: 17px; font-weight: 650; letter-spacing: -.01em; }
+  h1 { font-size: 17px; font-weight: 650; letter-spacing: -.01em; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .badge { font-size: 11px; font-weight: 600; color: var(--muted); border: 1px solid var(--border);
            border-radius: 999px; padding: 3px 10px; display: inline-flex; align-items: center; gap: 6px; }
   .badge .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--k1); }
   .badge.off .dot { background: var(--muted); }
+  .badge .badge-detail { max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } /* Live-Stats im Badge: Desktop only, mobil siehe <=900px */
   nav { display: flex; gap: var(--sp-1); overflow-x: auto; max-width: 100%; scrollbar-width: none; -webkit-overflow-scrolling: touch;
         background: var(--glass); border: 1px solid var(--glass-border); border-radius: 999px; padding: var(--sp-1);
         -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
@@ -81,9 +82,17 @@
   nav::-webkit-scrollbar { display: none; }
   nav.scrollable { -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 30px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 30px), transparent); }
   @media (max-width: 900px) {
-    header .wrap { flex-wrap: wrap; height: auto; padding-top: 10px; padding-bottom: 10px; row-gap: 6px; }
-    .hright { width: 100%; }
-    .hright nav { flex: 1; min-width: 0; }
+    /* iPhone (Apple HIG): schlanker einzeiliger Header (56px) - Titel + Projekt-Picker + kompakter Live-Badge.
+       Die Tab-Nav wandert als fixe Bottom-Tab-Bar nach unten (iOS-idiomatisch, safe-area-aware). */
+    header .wrap { height: 56px; flex-wrap: nowrap; padding-top: 8px; padding-bottom: 8px; gap: 8px; }
+    h1 { flex: 0 1 auto; }
+    .hright { flex: 1 1 auto; width: auto; justify-content: flex-end; gap: 8px; }
+    .badge .badge-detail { display: none; } /* mobil: nur Dot + "live"/"lokal"; Stats via title-Attribut + Uebersicht */
+    .hright nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+                  max-width: none; border-radius: 0; border: 0; border-top: 1px solid var(--border);
+                  background: color-mix(in srgb, var(--bg) 82%, transparent);
+                  justify-content: flex-start;
+                  padding: 8px max(12px, env(safe-area-inset-left)) calc(8px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-right)); }
   }
   nav button { border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 14px; font-weight: 500;
                padding: 7px 14px; border-radius: 999px; cursor: pointer; white-space: nowrap; flex: none;
@@ -322,6 +331,9 @@
   @media (max-width: 940px) {
     main.wrap { padding-top: var(--sp-4); padding-bottom: var(--sp-4); } /* kompakter vertikaler Rhythmus auf mobil */
   }
+  @media (max-width: 900px) {
+    main.wrap { padding-bottom: calc(110px + env(safe-area-inset-bottom)); } /* Platz fuer die fixe Bottom-Tab-Bar (nach dem 940px-Block, damit es gewinnt) */
+  }
   @media (max-height: 500px) { .chat { min-height: 0; } } /* Landscape iPhone: keine min-height -> kein Springen */
   @media (max-width: 560px) {
     .glossar .card { flex-direction: column; align-items: flex-start; gap: 4px; } /* mobil: Begriff über Text, statt 120px-Spalte */
@@ -491,7 +503,7 @@
         <select id="projSel" aria-label="Projekt wählen"></select>
         <button class="btn" id="projNew" title="Neues Projekt anlegen (neue Library + Seed-Dokumente)">＋ Neu</button>
       </label>
-      <span class="badge" id="liveBadge" aria-live="polite"><span class="dot"></span><span id="liveLabel">lokal</span></span>
+      <span class="badge" id="liveBadge" aria-live="polite" title="lokal"><span class="dot"></span><span id="liveLabel">lokal</span><span class="badge-detail" id="liveDetail"></span></span>
       <nav aria-label="Hauptnavigation">
         <button data-page="uebersicht" class="active" title="Übersicht (⌘1)">Übersicht</button>
         <button data-page="verzeichnis" title="Verzeichnis (⌘2)">Verzeichnis</button>
@@ -2274,15 +2286,17 @@ async function liveTick() {
   const b = $('#liveBadge');
   if (live && live.live) {
     b.classList.remove('off');
-    let label = 'live · ' + (live.anzahl || 0) + ' Ablage-Docs · ' + (live.zeitstempel || '');
+    let detail = (live.anzahl || 0) + ' Ablage-Docs · ' + (live.zeitstempel || '');
     if (live.qv && live.qv.k) {
       const K = live.qv.k;
-      label = 'live · QV ' + (live.qv.positionen || '?') + ' Pos. · K1 ' + K.K1 + ' K2 ' + K.K2 + ' K3 ' + K.K3 + ' K4 ' + K.K4 + ' K5 ' + K.K5 + ' · ' + (live.zeitstempel || '');
+      detail = 'QV ' + (live.qv.positionen || '?') + ' Pos. · K1 ' + K.K1 + ' K2 ' + K.K2 + ' K3 ' + K.K3 + ' K4 ' + K.K4 + ' K5 ' + K.K5 + ' · ' + (live.zeitstempel || '');
       const mn = $('#metaNote');
       if (mn && live.qv.stand) mn.textContent = 'Live-Stand (Apparat): ' + live.qv.stand + (live.qv.erschliessung ? ' · Erschließungsquote ' + live.qv.erschliessung.zaehler : '');
     }
-    $('#liveLabel').textContent = label;
-  } else { b.classList.add('off'); $('#liveLabel').textContent = 'lokal'; }
+    $('#liveLabel').textContent = 'live';                       // Header bleibt kompakt: Dot + kurzes Label
+    const ld = $('#liveDetail'); if (ld) ld.textContent = '· ' + detail;  // Stats nur Desktop (>= 900px)
+    b.title = 'live · ' + detail;                               // mobil: Details via title/Tooltip + Uebersicht
+  } else { b.classList.add('off'); $('#liveLabel').textContent = 'lokal'; const ld = $('#liveDetail'); if (ld) ld.textContent = ''; b.title = 'lokal (keine Live-Verbindung)'; }
   touchUpd();
   if (SERVER && !editorAktiv()) { // bei offenem Inline-Editor kein Rebuild (Eingaben wuerden verworfen)
     if ($('#page-verzeichnis').classList.contains('active')) loadQv();
