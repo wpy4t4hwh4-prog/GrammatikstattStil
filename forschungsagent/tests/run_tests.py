@@ -1523,5 +1523,54 @@ class PwaAppTests(unittest.TestCase):
                 self.assertIsNone(secret_re.search(txt), 'Secret in ' + p)
 
 
+class LoopFixR9R11Tests(unittest.TestCase):
+    """R9-R11 (2026-11-27): Runaway-/Loop-Schutz auf Execution- und Session-Ebene.
+    Evidenz: Executions 01a2166d / 01a213a3 liefen exakt ~24 h (86,4 Mio. ms = AGENTS_SDK_IDLE_TIMEOUT_SECONDS=86400)
+    als CONTINUED_AS_NEW-Kette bis zum Timeout; Hook-Reject feuerte (Logs 01a21bb0: 'hook reject',
+    'iteration soft-warning at llm_calls=15'), die Session lief danach aber bis zum Idle-Timeout weiter."""
+
+    def _repo(self):
+        return os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + '/..'
+
+    def test_r9_dockerfile_execution_caps(self):
+        src = open(os.path.join(self._repo(), 'forschungsagent', 'Dockerfile'), encoding='utf-8').read()
+        self.assertIn('AGENTS_SDK_IDLE_TIMEOUT_SECONDS=3600', src)        # idle 1 h statt 24 h
+        self.assertIn('AGENTS_SDK_EXECUTION_TIMEOUT_SECONDS=7200', src)   # hartes Cap 2 h statt 8 d
+        self.assertNotIn('AGENTS_SDK_IDLE_TIMEOUT_SECONDS=86400', src)
+        self.assertNotIn('AGENTS_SDK_EXECUTION_TIMEOUT_SECONDS=691200', src)
+
+    def test_r11_session_turn_limit_enforced(self):
+        hook = main.QuoteAuditHook()
+        ctx = types.SimpleNamespace(session=types.SimpleNamespace(id='s-test-123'))
+        self.assertIsNone(asyncio.run(hook.pre_agent_turn(ctx, None)))
+        self.assertEqual(hook.session_id, 's-test-123')
+        hook.turns_by_session['s-test-123'] = main.SESSION_TURN_LIMIT
+        res = asyncio.run(hook.pre_agent_turn(ctx, None))                # naechster Turn -> reject
+        self.assertIsNotNone(res)
+        self.assertTrue(hook.turn_rejected)
+        # ctx=None (session_id='unknown') darf nicht crashen und nicht limitieren
+        hook2 = main.QuoteAuditHook()
+        self.assertIsNone(asyncio.run(hook2.pre_agent_turn(None, None)))
+        # andere Session nicht betroffen
+        ctx2 = types.SimpleNamespace(session=types.SimpleNamespace(id='s-other'))
+        self.assertIsNone(asyncio.run(hook.pre_agent_turn(ctx2, None)))
+
+    def test_r10_r11_main_py_markers(self):
+        src = open(os.path.join(self._repo(), 'forschungsagent', 'main.py'), encoding='utf-8').read()
+        self.assertIn('SESSION_TURN_LIMIT', src)
+        self.assertIn('turns_by_session', src)
+        self.assertIn('self.turns_by_session[sid] = self.turns_by_session.get(sid, 0) + 1', src)
+        self.assertIn('search="session-summary " + sid[:8]', src)          # R10: Dedup-Check vor Upload
+        self.assertIn('startswith("session-summary " + sid[:8])', src)
+        self.assertIn('R10-Dedup', src)
+        self.assertIn('hook reject session-limit', src)
+
+    def test_r12_cron_uses_main_and_concurrency(self):
+        src = open(os.path.join(self._repo(), '.github', 'workflows', 'agent-daily-check.yml'), encoding='utf-8').read()
+        self.assertIn('ref: main', src)                                   # Cron laeuft auf main (bereits umgestellt)
+        self.assertNotIn('ref: vibe/forschungsagent-b21b74', src)
+        self.assertIn('concurrency:', src)                                # Overlap-Schutz (Queue) bleibt
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

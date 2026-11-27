@@ -948,6 +948,11 @@ _SEARCH_TOOLS = {"dokument_lesen", "zitat_pruefen", "web_zitat_pruefen", "ablage
 _NOTE_TOOLS = {"research_note_ablegen", "research_note_aktualisieren"}
 
 
+# R11 (2026-11-27): hartes Limit an Turns pro Session — Schutz gegen Session-Endlosschleifen
+# (Runaway-Executions, die per continue-as-new bis zum Idle-/Execution-Timeout durchlaufen).
+SESSION_TURN_LIMIT = 8
+
+
 class QuoteAuditHook(agents.Hook):
     """Sichert Zitate UND Negativbefunde ab. Pro Turn (State wird in pre_agent_turn zurueckgesetzt):
     - sammelt verifizierte Zitate (zitat_pruefen/web_zitat_pruefen found=True) und alle Tool-Calls
@@ -990,11 +995,18 @@ class QuoteAuditHook(agents.Hook):
     check_urls: bool = True
     url_checks: dict = Field(default_factory=dict)
     url404_warned: dict = Field(default_factory=dict)
+    # R11 (2026-11-27): Turns pro Session zaehlen (LRU, max 50) — ueberlebt den pre_agent_turn-Reset
+    turns_by_session: dict = Field(default_factory=dict)
 
 
     async def pre_agent_turn(self, ctx, request):
         # B3-1: Session-ID setzen; URL-Check-State pro Turn zuruecksetzen
         self.session_id = str(getattr(getattr(ctx, "session", None), "id", "unknown"))
+        # R11: Session-Turn-Limit (state ueberlebt den Reset) — Runaway-Sessions hart stoppen
+        if self.session_id != "unknown" and self.turns_by_session.get(self.session_id, 0) >= SESSION_TURN_LIMIT:
+            self.turn_rejected = True
+            logger.warning("hook reject session-limit sid=%s turns=%d", self.session_id[:8], self.turns_by_session[self.session_id])
+            return agents.reject("Session-Limit erreicht (%d Turns in dieser Session) — bitte neue Session/neuen Auftrag stellen; keine Endlosschleife." % SESSION_TURN_LIMIT)
         self.url_checks = {}
         self.url404_warned = {}
         self.verified = []
@@ -1413,10 +1425,21 @@ class QuoteAuditHook(agents.Hook):
                 _ABLAGE_WRITE_LOCK = _aio.Lock()
             async with _ABLAGE_WRITE_LOCK:
                 client = _client()
-                await client.beta.libraries.documents.upload_async(
-                    library_id=NOTES_LIBRARY_ID,
-                    file=File(fileName=(titel[:80] + ".md"), content=note.encode("utf-8")),
-                )
+                # R11: Turns pro Session zaehlen (LRU — max 50 Sessions im Hook-State)
+                self.turns_by_session[sid] = self.turns_by_session.get(sid, 0) + 1
+                if len(self.turns_by_session) > 50:
+                    for _k in list(self.turns_by_session)[:len(self.turns_by_session) - 50]:
+                        self.turns_by_session.pop(_k, None)
+                # R10: session-summary pro Session nur EINMAL in die Ablage (Dedup gegen Summary-Wiederholungs-Loop)
+                _prev = await client.beta.libraries.documents.list_async(
+                    library_id=NOTES_LIBRARY_ID, search="session-summary " + sid[:8], page_size=5)
+                if any((d.name or "").startswith("session-summary " + sid[:8]) for d in (_prev.data or [])):
+                    logger.info("session-summary %s bereits vorhanden — Upload uebersprungen (R10-Dedup)", sid[:8])
+                else:
+                    await client.beta.libraries.documents.upload_async(
+                        library_id=NOTES_LIBRARY_ID,
+                        file=File(fileName=(titel[:80] + ".md"), content=note.encode("utf-8")),
+                    )
                 stand = f"# 00-projektstand (automatisch aktualisiert)\n\n- Aktualisiert: {now.isoformat()} UTC (Session {sid[:8]})\n- Tools im Turn: {', '.join(self.tools_called[:20])}\n\n## Letzter Stand\n{summary[:2500]}\n"
                 await _upsert_document(client, NOTES_LIBRARY_ID, "00-projektstand.md", stand)
                 logger.info("session-summary + 00-projektstand aktualisiert (session %s)", sid[:8])
