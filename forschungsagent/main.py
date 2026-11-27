@@ -128,7 +128,7 @@ Dein dauerhaftes Gedächtnis ist die Research-Ablage. Innerhalb einer laufenden 
 
 TURN-ABSCHLUSS (verbindlich): Sobald der Arbeitsauftrag vollständig abgearbeitet und die Abschluss-Zusammenfassung geliefert ist, beendest du den Turn sofort und vollständig: genau eine Abschlussnachricht, keine weiteren Werkzeugaufrufe, kein Nachschieben weiterer Abschluss-Bekundungen oder ähnlich klingender Wiederholungen. Der Turn endet von selbst, sobald du keine weiteren Ausgaben mehr erzeugst; versuche nicht, den Prozess von innen zu beenden, und verfalle nicht in eine Schleife aus wiederholten Abschluss-Aussagen. Bleibt eine Aufgabe offen oder blockiert, dokumentiere das nach E6 und schließe dann ebenfalls mit einer einzigen Abschlussnachricht.
 
-ABSCHLUSS-ANTWORT-FORMAT (verbindlich): Die letzte Antwort eines Turns ist AUSSCHLIEßLICH ein einzelnes nacktes JSON-Objekt (ResearchAnswer) — KEIN Markdown-Fence (```json), KEIN Text davor oder danach, KEINE zweite oder dritte JSON-Antwort. Alle Keys und String-Werte nur mit ASCII-Double-Quotes (U+0022 "), niemals typografische Anführungszeichen („ “ ‚ ‘). zusammenfassung max. 500 Zeichen, arbeitsupdate max. 800 Zeichen (Harte QA im Hook). UMFANG: Die sichtbare Abschlussantwort bleibt KURZ - zusammenfassung/arbeitsupdate sind eine EIGENE Kernzusammenfassung in eigenen Worten fuer den Auftraggeber: KEINE Aufzaehlung von Tool-Calls, Quellen-IDs, DOIs, URLs oder Seitenangaben in diesen beiden Feldern; das ausfuehrliche Protokoll (was wurde gemacht) liegt AUSSCHLIESSLICH in der Ablage-Notiz. Das AUSFUEHRLICHE, praezise Protokoll gehoert AUSSCHLIESSLICH in die Research-Ablage (research_note_ablegen / research_note_aktualisieren; session-summary schreibt der Hook automatisch) - niemals als langer Text in die Abschlussantwort. GESAMTES JSON max. 3000 Zeichen (harte Hook-QA); offene_punkte max. 5 Eintraege; notiz_id = Dokument-ID der Ablage-Notiz. belegte_aussagen/double_check/quellen/verbatim_zitate/deutungen existieren NICHT mehr im Schema - komplettes Protokoll AUSSCHLIESSLICH in der Ablage-Notiz. Klarstellung: Die Hook-Transparenzmeldung gibst du als EIGENE fruehere Assistant-Nachricht im selben Turn (reiner Text, kein JSON, enthaelt nicht das Wort 'zusammenfassung'); die LETZTE Nachricht des Turns ist AUSSCHLIESSLICH das nackte JSON - 'kein Text davor/danach' bezieht sich auf diese letzte Nachricht, nicht auf den ganzen Turn.
+ABSCHLUSS-ANTWORT-FORMAT (verbindlich): Die letzte Antwort eines Turns ist AUSSCHLIEßLICH ein einzelnes nacktes JSON-Objekt (ResearchAnswer) — KEIN Markdown-Fence (```json), KEIN Text davor oder danach, KEINE zweite oder dritte JSON-Antwort. Alle Keys und String-Werte nur mit ASCII-Double-Quotes (U+0022 "), niemals typografische Anführungszeichen („ “ ‚ ‘). zusammenfassung max. 500 Zeichen, arbeitsupdate max. 800 Zeichen (Harte QA im Hook). UMFANG: Die sichtbare Abschlussantwort bleibt KURZ. INHALT von zusammenfassung (knapper Volltext, eigene Worte, mehr nicht): AUSSCHLIESSLICH (1) Thema der Runde in einem Satz, (2) die gesicherten Quellen (Autor Jahr, kurzer Titel, G/Nr. der Position), (3) die Kernaussage der Quellen in 2-4 Saetzen. KEINE Aufzaehlung von Tool-Calls, Dokument-IDs, DOIs, URLs oder Seitenangaben in zusammenfassung/arbeitsupdate; das ausfuehrliche Protokoll (was wurde gemacht) liegt AUSSCHLIESSLICH in der Ablage-Notiz. Das AUSFUEHRLICHE, praezise Protokoll gehoert AUSSCHLIESSLICH in die Research-Ablage (research_note_ablegen / research_note_aktualisieren; session-summary schreibt der Hook automatisch) - niemals als langer Text in die Abschlussantwort. GESAMTES JSON max. 3000 Zeichen (harte Hook-QA); offene_punkte max. 5 Eintraege; notiz_id = Dokument-ID der Ablage-Notiz. belegte_aussagen/double_check/quellen/verbatim_zitate/deutungen existieren NICHT mehr im Schema - komplettes Protokoll AUSSCHLIESSLICH in der Ablage-Notiz. Klarstellung: Die Hook-Transparenzmeldung gibst du als EIGENE fruehere Assistant-Nachricht im selben Turn (reiner Text, kein JSON, enthaelt nicht das Wort 'zusammenfassung'); die LETZTE Nachricht des Turns ist AUSSCHLIESSLICH das nackte JSON - 'kein Text davor/danach' bezieht sich auf diese letzte Nachricht, nicht auf den ganzen Turn.
 
 ABLAGE & PROTOKOLL (verbindlich) - ABLAGE-PFLICHT: Jeder Turn, in dem du Recherche-Werkzeuge aufgerufen hast (ablage_durchsuchen, projektquellen_suchen, web_recherche, dokument_lesen, in_dokument_suchen, zitat_pruefen, web_zitat_pruefen, projektdateien_auflisten, dokument_finden, bibliotheken_auflisten, aktuelles_datum, pdf_ocr, pdf_in_ablage_speichern, json_api_abfrage, webseite_lesen, doi_pruefen, url_status_pruefen), MUSS vor der JSON-Abschlussantwort GENAU EINE Notiz per research_note_ablegen in der Research-Ablage ablegen. INKREMENTELL ABLEGEN: Lege die Notiz SOFORT ab, sobald substantielle Befunde vorliegen - NICHT erst unmittelbar vor der JSON-Antwort. Weitere Befunde im selben Turn sicherst du per research_note_aktualisieren IM SELBEN Dokument (nie stille Zweitablage unter neuem Namen). Grosse Aufgaben SPLITTEN auf die Turn-/Session-Grenze: ein Teilschritt pro Turn - so geht bei einem Turn-Limit-Stopp (Hook-Reject ab Iteration 17/18) kein Befund verloren. NOTIZ-AUFBAU (kompakt, Notiz gesamt max. ca. 4000 Zeichen): Titel mit Datum, Thema/Forschungsfrage, Quellen mit Kurzbeschreibung + Zugangsstufe (+ license_access: lizenz/zugang/abgerufen_am - PFLICHT fuer jeden Volltext in der Notiz), Befunde mit Fundstellen, kurze Analyse, Synthese, Bezug zum Projekt, offene Punkte. RECHERCHE-PROTOKOLL kompakt: max. 10 Zeilen (Suchbegriffe, URLs/IDs, HTTP-Status/Zugriffsdatum via aktuelles_datum, verworfene Quellen mit Grund) - reproduzierbar, aber KURZ; bestehende Notizen nie ueberschreiben (Korrekturen markiert per research_note_aktualisieren). Das AUSFUEHRLICHE Protokoll liegt AUSSCHLIESSLICH in dieser Notiz - niemals in der JSON-Antwort.
 
@@ -164,7 +164,7 @@ Projektkontext (die zentrale Datei und der Projektstand, die du dir merken solls
 
 HINWEIS: Dieser INSTRUCTIONS-Block im Code (forschungsagent/main.py) ist die autoritative Systemanweisung (Single Source of Truth); der Registry-Prompt ist nur Fallback.
 
-SESSION-START-REGEL (bei jeder neuen Session zuerst ausfuehren, schlank - nur Metadaten + EIN Volltext-Dokument): parallel aufrufen: bibliotheken_auflisten, aktuelles_datum, projektdateien_auflisten(library="research_ablage_agent", search="00-projektstand"). Kanonisches Dokument "00-projektstand.md" in der Research-Ablage (research_ablage_agent): ID direkt aus diesem gefilterten Listing entnehmen (research_ablage_agent -> Eintrag name="00-projektstand.md"), dann dokument_lesen mit dieser ID (Volltext, automatisch gekappt). NIEMALS eine ID raten. ablage_durchsuchen mit Stichworten wie "Projektstand"/"letzter Stand"/"offene Punkte"/"Anweisung" erst als FALLBACK aufrufen, wenn 00-projektstand.md nicht auffindbar/unklar ist ODER die Aufgabe explizit aeltere Notizen braucht. Falls 00-projektstand.md dort nicht auffindbar ist: NICHT blind ein neues Projektstand-Dokument anlegen und NICHT ein Ersatzdokument unter anderem Namen basteln - zuerst ablage_durchsuchen "Projektstand"/"letzter Stand" und projektdateien_auflisten(library="research_ablage_agent") ungefiltert pruefen; existiert wirklich keines, lege GENAU EINES mit research_note_ablegen (Titel "00-projektstand") an und dokumentiere das als Erstbefuellung. Den bisherigen Stand in die Antwort einbeziehen. Session-Verlauf ist fluechtig (Redeploys terminieren alte Sessions) - die Research-Ablage ist das dauerhafte Gedaechtnis; post_agent_turn aktualisiert 00-projektstand.md automatisch nach jedem Turn.
+SESSION-START-REGEL (bei jeder neuen Session zuerst ausfuehren, schlank - nur Metadaten + EIN Volltext-Dokument): parallel aufrufen: bibliotheken_auflisten, aktuelles_datum, projektdateien_auflisten(library="research_ablage_agent", search="00-projektstand"). Kanonisches Dokument "00-projektstand.md" in der Research-Ablage (research_ablage_agent): ID direkt aus diesem gefilterten Listing entnehmen (research_ablage_agent -> Eintrag name="00-projektstand.md"), dann dokument_lesen mit dieser ID (Volltext, automatisch gekappt). NIEMALS eine ID raten. ablage_durchsuchen mit Stichworten wie "Projektstand"/"letzter Stand"/"offene Punkte"/"Anweisung" erst als FALLBACK aufrufen, wenn 00-projektstand.md nicht auffindbar/unklar ist ODER die Aufgabe explizit aeltere Notizen braucht. Falls 00-projektstand.md dort nicht auffindbar ist: NICHT blind ein neues Projektstand-Dokument anlegen und NICHT ein Ersatzdokument unter anderem Namen basteln - zuerst ablage_durchsuchen "Projektstand"/"letzter Stand" und projektdateien_auflisten(library="research_ablage_agent") ungefiltert pruefen; existiert wirklich keines, lege GENAU EINES mit research_note_ablegen (Titel "00-projektstand") an und dokumentiere das als Erstbefuellung. Den bisherigen Stand in die Antwort einbeziehen. Session-Verlauf ist fluechtig (Redeploys und Idle-Timeout ~1 h terminieren alte Sessions, R9) - die Research-Ablage ist das dauerhafte Gedaechtnis; post_agent_turn aktualisiert 00-projektstand.md automatisch nach jedem Turn. session-summary-Notizen sind seit 2026-11-27 knappe Volltexte (Thema + gesicherte Quellen + Kernaussage, max. 1 pro Session, R10) - kanonischer Stand bleibt 00-projektstand.md.
 
 Arbeitsweise bei jeder Anfrage:
  0. Verzeichnisse: Vor jedem Download/Entpacken/Extrahieren Zielverzeichnis mit `mkdir -p` anlegen (z. B. `mkdir -p /tmp/ext`); nie in ein nicht existierendes Verzeichnis wechseln oder schreiben.
@@ -357,7 +357,7 @@ class SourceRecord(BaseModel):
 
 
 class ResearchAnswer(BaseModel):
-    zusammenfassung: str = Field(description="Praegnanate Zusammenfassung der Antwort (max. 500 Zeichen; eigene Kernzusammenfassung in eigenen Worten, KEINE Tool-/Quellen-Aufzaehlung - Details nur in der Ablage-Notiz).")
+    zusammenfassung: str = Field(description="Knapper Volltext (max. 500 Zeichen), AUSSCHLIESSLICH: (1) Thema der Runde, (2) gesicherte Quellen (Autor Jahr, kurzer Titel, G/Nr.), (3) Kernaussage der Quellen in 2-4 Saetzen. Keine Tool-/ID-/URL-/Seiten-Aufzaehlung.")
     arbeitsupdate: str = Field(default="", description="PFLICHT nach jeder Arbeitsrunde: Kernpunkte in eigenen Worten als kurze Klartext-Saetze (max. 800 Zeichen; KEIN Tool-/Quellen-Protokoll, keine Aufzaehlung von Rechercheschritten - das ausfuehrliche Protokoll liegt AUSSCHLIESSLICH in der Ablage-Notiz).")
     offene_punkte: list[str] = Field(default_factory=list, description="Ungeklaerte Fragen / nicht belegbare Punkte (max. 5 Eintraege; der Rest steht in der Ablage-Notiz).")
     notiz_id: str = Field(default="", description="Dokument-ID (UUID) der in diesem Turn per research_note_ablegen abgelegten Ablage-Notiz - aus der Tool-Ausgabe kopieren, nie raten. Leer nur wenn der Turn keine Notiz abgelegt hat.")
@@ -948,6 +948,11 @@ _SEARCH_TOOLS = {"dokument_lesen", "zitat_pruefen", "web_zitat_pruefen", "ablage
 _NOTE_TOOLS = {"research_note_ablegen", "research_note_aktualisieren"}
 
 
+# R11 (2026-11-27): hartes Limit an Turns pro Session — Schutz gegen Session-Endlosschleifen
+# (Runaway-Executions, die per continue-as-new bis zum Idle-/Execution-Timeout durchlaufen).
+SESSION_TURN_LIMIT = 8
+
+
 class QuoteAuditHook(agents.Hook):
     """Sichert Zitate UND Negativbefunde ab. Pro Turn (State wird in pre_agent_turn zurueckgesetzt):
     - sammelt verifizierte Zitate (zitat_pruefen/web_zitat_pruefen found=True) und alle Tool-Calls
@@ -990,11 +995,18 @@ class QuoteAuditHook(agents.Hook):
     check_urls: bool = True
     url_checks: dict = Field(default_factory=dict)
     url404_warned: dict = Field(default_factory=dict)
+    # R11 (2026-11-27): Turns pro Session zaehlen (LRU, max 50) — ueberlebt den pre_agent_turn-Reset
+    turns_by_session: dict = Field(default_factory=dict)
 
 
     async def pre_agent_turn(self, ctx, request):
         # B3-1: Session-ID setzen; URL-Check-State pro Turn zuruecksetzen
         self.session_id = str(getattr(getattr(ctx, "session", None), "id", "unknown"))
+        # R11: Session-Turn-Limit (state ueberlebt den Reset) — Runaway-Sessions hart stoppen
+        if self.session_id != "unknown" and self.turns_by_session.get(self.session_id, 0) >= SESSION_TURN_LIMIT:
+            self.turn_rejected = True
+            logger.warning("hook reject session-limit sid=%s turns=%d", self.session_id[:8], self.turns_by_session[self.session_id])
+            return agents.reject("Session-Limit erreicht (%d Turns in dieser Session) — bitte neue Session/neuen Auftrag stellen; keine Endlosschleife." % SESSION_TURN_LIMIT)
         self.url_checks = {}
         self.url404_warned = {}
         self.verified = []
@@ -1392,31 +1404,35 @@ class QuoteAuditHook(agents.Hook):
             summary = text[:4000]
             try:
                 data = _json2.loads(text)
-                if isinstance(data, dict):
-                    parts = []
-                    if data.get("zusammenfassung"):
-                        parts.append("Zusammenfassung: " + str(data["zusammenfassung"]))
-                    if data.get("arbeitsupdate"):
-                        parts.append("Arbeitsupdate: " + str(data["arbeitsupdate"]))
-                    if data.get("offene_punkte"):
-                        parts.append("Offene Punkte: " + "; ".join(map(str, data["offene_punkte"]))[:1500])
-                    if parts:
-                        summary = "\n".join(parts)
+                if isinstance(data, dict) and data.get("zusammenfassung"):
+                    # knapper Volltext: Thema der Runde + gesicherte Quellen + Kernaussage — mehr nicht
+                    summary = str(data["zusammenfassung"])
             except Exception:
                 pass
             sid = str(getattr(getattr(ctx, "session", None), "id", "unknown"))
             titel = f"session-summary {sid[:8]} {now.strftime('%Y-%m-%dT%H-%M-%S')}"
-            note = f"# {titel}\n\n- Session: {sid}\n- Datum (UTC): {now.isoformat()}\n- Tools im Turn: {', '.join(self.tools_called[:20])}\n\n## Summary\n{summary}\n"
+            note = f"# {titel}\n\n- Session: {sid}\n- Datum (UTC): {now.isoformat()}\n\n## Zusammenfassung\n{summary}\n"
             global _ABLAGE_WRITE_LOCK
             if _ABLAGE_WRITE_LOCK is None:
                 import asyncio as _aio
                 _ABLAGE_WRITE_LOCK = _aio.Lock()
             async with _ABLAGE_WRITE_LOCK:
                 client = _client()
-                await client.beta.libraries.documents.upload_async(
-                    library_id=NOTES_LIBRARY_ID,
-                    file=File(fileName=(titel[:80] + ".md"), content=note.encode("utf-8")),
-                )
+                # R11: Turns pro Session zaehlen (LRU — max 50 Sessions im Hook-State)
+                self.turns_by_session[sid] = self.turns_by_session.get(sid, 0) + 1
+                if len(self.turns_by_session) > 50:
+                    for _k in list(self.turns_by_session)[:len(self.turns_by_session) - 50]:
+                        self.turns_by_session.pop(_k, None)
+                # R10: session-summary pro Session nur EINMAL in die Ablage (Dedup gegen Summary-Wiederholungs-Loop)
+                _prev = await client.beta.libraries.documents.list_async(
+                    library_id=NOTES_LIBRARY_ID, search="session-summary " + sid[:8], page_size=5)
+                if any((d.name or "").startswith("session-summary " + sid[:8]) for d in (_prev.data or [])):
+                    logger.info("session-summary %s bereits vorhanden — Upload uebersprungen (R10-Dedup)", sid[:8])
+                else:
+                    await client.beta.libraries.documents.upload_async(
+                        library_id=NOTES_LIBRARY_ID,
+                        file=File(fileName=(titel[:80] + ".md"), content=note.encode("utf-8")),
+                    )
                 stand = f"# 00-projektstand (automatisch aktualisiert)\n\n- Aktualisiert: {now.isoformat()} UTC (Session {sid[:8]})\n- Tools im Turn: {', '.join(self.tools_called[:20])}\n\n## Letzter Stand\n{summary[:2500]}\n"
                 await _upsert_document(client, NOTES_LIBRARY_ID, "00-projektstand.md", stand)
                 logger.info("session-summary + 00-projektstand aktualisiert (session %s)", sid[:8])
