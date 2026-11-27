@@ -18,7 +18,16 @@ import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-DASHBOARD_DIR = Path(os.environ.get("DASHBOARD_DIR", str(HERE.parents[3] / "dashboard"))).resolve()
+# DASHBOARD_DIR lazy aufloesen: im Container liegt main.py unter /app/main.py (Dockerfile setzt
+# DASHBOARD_DIR=/app/dashboard als ENV), im Repo unter studio-app/apps/api/main.py (parents[3] =
+# Repo-Root). Die Default-Auswertung darf nicht eager passieren (IndexError bei /app/main.py).
+_env_dir = os.environ.get("DASHBOARD_DIR")
+if _env_dir:
+    DASHBOARD_DIR = Path(_env_dir).resolve()
+elif len(HERE.parents) > 3:
+    DASHBOARD_DIR = (HERE.parents[3] / "dashboard").resolve()
+else:
+    DASHBOARD_DIR = (HERE.parent / "dashboard").resolve()
 PORT = os.environ.get("PORT", "8080")
 
 

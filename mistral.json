@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 2,
+  "kind": "app",
+  "name": "research-hub",
+  "deployment": {
+    "organizationId": "c94325af-993a-4829-a0fd-8630f285b0fe",
+    "workspaceId": "344b3a80-acd2-41e0-8a9a-7601295c2b9f",
+    "appId": "01a21ec5-395e-71db-a667-d1e23b2731a0"
+  },
+  "modules": [
+    {
+      "type": "app",
+      "name": "api",
+      "path": "studio-app/apps/api",
+      "routes": [
+        {
+          "path": "/"
+        }
+      ],
+      "port": 8080,
+      "serve": "server",
+      "runtime": "python",
+      "build": {
+        "context": ".",
+        "dockerfile": "studio-app/apps/api/Dockerfile"
+      },
+      "dev": {
+        "startCommand": "PORT=8080 python3 studio-app/apps/api/main.py"
+      },
+      "deploy": {
+        "startCommand": "python3 /app/main.py"
+      }
+    }
+  ]
+}

@@ -1289,7 +1289,11 @@ class PwaAppTests(unittest.TestCase):
         # fail-closed: non-loopback ohne Token UND ohne Passwort -> exit 2
         self.assertIn('sys.exit(2)', serve)
         self.assertRegex(serve, r'_loopback = args\.host in \("127\.0\.0\.1"')
-        self.assertIn('if not _loopback and not HUB_TOKEN and not HUB_PASSWORD_HASH:', serve)
+        # fail-closed inkl. Studio-App-Schalter: ohne Token/Passwort UND ohne TRUST_GATEWAY -> exit 2
+        self.assertIn('if not _loopback and not HUB_TOKEN and not HUB_PASSWORD_HASH and not TRUST_GATEWAY:', serve)
+        self.assertIn('TRUST_GATEWAY = os.environ.get("DASHBOARD_TRUST_GATEWAY_AUTH", "") == "1"', serve)
+        # Gateway-Modus warnt beim Binden ohne Token/Passwort (nur hinter authentifiziertem Gateway)
+        self.assertIn('DASHBOARD_TRUST_GATEWAY_AUTH=1) - nur hinter authentifiziertem Gateway betreiben', serve)
         # Token/Passwort im Access-Log redacten
         self.assertIn('token=[REDACTED]', serve)
         self.assertIn('password=[REDACTED]', serve)
@@ -1609,6 +1613,36 @@ class ZusammenfassungVolltextTests(unittest.TestCase):
         # bestehende Marker von test_background_check_uses_startprompt_v4 bleiben unberuehrt
         self.assertIn('GESAMTES JSON max. 3000 Zeichen', src)
         self.assertIn('notiz_id', src)
+
+
+class StudioAppTests(unittest.TestCase):
+    """Mistral Studio App (2026-11-27): kanonisches Manifest am Repo-Root (schemaVersion 2, kind app,
+    modules als Array) + Modul-Runner mit lazy DASHBOARD_DIR (Container-Layout /app/main.py darf
+    nicht mit IndexError crashen)."""
+
+    def _root(self):
+        return os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + '/..'
+
+    def test_root_manifest_kanonisch(self):
+        import json
+        m = json.load(open(os.path.join(self._root(), 'mistral.json'), encoding='utf-8'))
+        self.assertEqual(m['schemaVersion'], 2)
+        self.assertEqual(m['kind'], 'app')
+        self.assertIsInstance(m['modules'], list)
+        mod = m['modules'][0]
+        self.assertEqual(mod['name'], 'api')
+        self.assertEqual([r['path'] for r in mod['routes']], ['/'])
+        self.assertEqual(mod['port'], 8080)
+        self.assertEqual(mod['build']['context'], '.')
+        self.assertIn('studio-app/apps/api/Dockerfile', mod['build']['dockerfile'])
+        # altes, ungueltiges Manifest in studio-app/ ist entfernt
+        self.assertFalse(os.path.exists(os.path.join(self._root(), 'studio-app', 'mistral.json')))
+
+    def test_runner_lazy_dashboard_dir(self):
+        src = open(os.path.join(self._root(), 'studio-app', 'apps', 'api', 'main.py'), encoding='utf-8').read()
+        self.assertIn('_env_dir = os.environ.get("DASHBOARD_DIR")', src)
+        # eager Default-Auswertung (IndexError bei /app/main.py) darf nicht mehr vorkommen
+        self.assertNotIn('os.environ.get("DASHBOARD_DIR", str(HERE.parents[3]', src)
 
 
 if __name__ == "__main__":
