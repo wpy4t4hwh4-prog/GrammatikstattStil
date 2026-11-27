@@ -1458,13 +1458,14 @@ class PwaAppTests(unittest.TestCase):
                              cwd=dash, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         base = 'http://127.0.0.1:%d' % port
 
-        def req(path):
-            r = urllib.request.Request(base + path, method='GET')
+        def req(path, method='GET', body=None, headers=None):
+            r = urllib.request.Request(base + path, data=_json.dumps(body).encode() if body is not None else None,
+                                       method=method, headers=headers or {})
             try:
                 with urllib.request.urlopen(r, timeout=5) as resp:
-                    return resp.status, resp.read().decode()
+                    return resp.status, dict(resp.headers), resp.read().decode()
             except urllib.error.HTTPError as e:
-                return e.code, e.read().decode()
+                return e.code, dict(e.headers), e.read().decode()
 
         try:
             up = False
@@ -1474,16 +1475,31 @@ class PwaAppTests(unittest.TestCase):
                 except Exception:
                     time.sleep(0.1)
             self.assertTrue(up, 'Server startet nicht')
-            st, b = req('/api/auth/me')
+            st, h, b = req('/api/auth/me')
             self.assertEqual(st, 200)
             me = _json.loads(b)
             self.assertFalse(me['password_mode'])  # PW wurde ignoriert
-            st, _ = req('/api/stats')
-            self.assertEqual(st, 200)  # ohne Cookie/Session erreichbar - im App-Pfad schuetzt das Gateway
-            # Quelle: hartes Ignorieren im Gateway-Modus
+            self.assertTrue(me['authenticated'])   # implizite Gateway-Session
+            self.assertTrue(me['csrf'])
+            ck = h.get('Set-Cookie', '')
+            self.assertIn('hub_sid=', ck)
+            cookie = 'hub_sid=' + ck.split('hub_sid=')[1].split(';')[0]
+            st, _, _ = req('/api/stats')
+            self.assertEqual(st, 200)  # ohne Cookie erreichbar - im App-Pfad schuetzt das Gateway
+            # Projekt-Wechsel ohne Passwort-Login: mit impliziter Session + CSRF -> 200 (nicht 401/Overlay)
+            st, _, b2 = req('/api/projects/select', 'POST', {'library_id': '01a1b7a7-d3b3-7603-9601-7efb317d38ee'},
+                            {'Content-Type': 'application/json', 'Cookie': cookie, 'X-Hub-CSRF': me['csrf']})
+            self.assertEqual(st, 200)
+            self.assertIn('"ok": true', b2)
+            st, _, b3 = req('/api/auth/me', 'GET', None, {'Cookie': cookie})
+            me2 = _json.loads(b3)
+            self.assertTrue(me2['authenticated'])
+            self.assertEqual(me2['project'], '01a1b7a7-d3b3-7603-9601-7efb317d38ee')
+            # Quelle: hartes Ignorieren im Gateway-Modus + implizite Session
             src = self._read('serve.py')
             self.assertIn('if args.password and TRUST_GATEWAY:', src)
             self.assertIn('IGNORIERT', src)
+            self.assertIn('if not sess and TRUST_GATEWAY:', src)
         finally:
             p.terminate()
             try:

@@ -1730,6 +1730,18 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(load_outbox())
         if u.path == "/api/auth/me":
             sess = self._session()
+            if not sess and TRUST_GATEWAY:
+                # Studio-App: das Gateway authentifiziert jede Anfrage - implizite Session anlegen,
+                # damit serverseitige Session-Zustaende (aktives Projekt via /api/projects/select, CSRF)
+                # auch ohne Passwort-Login funktionieren. Kein zweites Passwort im App-Pfad.
+                sid = _new_session(project=os.environ.get("PROJECT_LIBRARY_ID") or None)
+                sess = (sid, _SESSIONS[sid])
+                return self._json({"authenticated": True,
+                                   "password_mode": False,
+                                   "token_mode": bool(HUB_TOKEN),
+                                   "csrf": sess[1]["csrf"],
+                                   "project": self._active_lib()},
+                                  200, extra_headers=[("Set-Cookie", self._cookie(sid, _SESSION_TTL))])
             return self._json({"authenticated": bool(sess),
                                "password_mode": bool(HUB_PASSWORD_HASH),
                                "token_mode": bool(HUB_TOKEN),
