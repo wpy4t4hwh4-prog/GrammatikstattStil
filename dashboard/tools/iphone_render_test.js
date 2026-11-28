@@ -118,6 +118,10 @@ function makeDom(url) {
   assert(html.includes('@media (prefers-reduced-motion: reduce)'), 'HIG a11y: Reduce-Motion-Override');
   assert(/nav button\.active \{[^}]*color: var\(--accent\)/.test(html), 'HIG: aktiver Tab in Akzentfarbe (einzige Toentung in der Bar)');
   assert(html.includes('class="btn primary" id="projNew"'), 'HIG: eine prominente Primaeraktion im Header (＋ Neu)');
+  // SW-Update-Fix v33: kein Stale durch HTTP-Cache/CDN (Pages max-age=600)
+  assert(html.includes("updateViaCache: 'none'") && html.includes("'sw.js?v=' + SW_VER"), 'SW-Registrierung: versionierte URL + updateViaCache none');
+  assert(html.includes('controllerchange') && html.includes('__swReloaded'), 'controllerchange -> einmaliges Reload (neue Shell ohne manuelles Neuladen)');
+  assert(html.includes("postMessage({ type: 'SKIP_WAITING' })"), 'SKIP_WAITING an wartenden SW');
   assert(!!d.querySelector('#page-agent'), 'Agent-Seite vorhanden');
   assert(!!d.querySelector('#page-agent #wfRun') && !!d.querySelector('#page-agent #noteSend') && !!d.querySelector('#page-agent #btnQvLive'), 'Agent-Tab: Run/Notiz/QV-live Buttons');
   assert(/@media \(max-width: 760px\) \{ #agentGrid \{ grid-template-columns: 1fr !important; \}/.test(html), 'Agent-Grid mobil 1 Spalte');

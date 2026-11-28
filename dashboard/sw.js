@@ -2,7 +2,7 @@
    Strategie: /api/* = network-only und NIEMALS cachen (Session-/Passwort-Modus: API-Antworten
    duerfen nicht im SW-Cache landen); /data/* = nur cachen ohne Token;
    statische Assets = cache-first mit Runtime-Caching. Version bei Aenderungen erhoehen. */
-const CACHE = 'research-hub-v32'; // v32: HIG-Audit — Content-Layer ohne Glas (Cards/Bubbles solid), Toolbar als Glas-Container, a11y-Overrides (reduced-transparency/contrast)
+const CACHE = 'research-hub-v33'; // v33: SW-Update-Fix — SKIP_WAITING per Message + Navigationen mit cache:'no-store' (Pages-CDN max-age=600 umgehen)
 // Token aktiv (URL ?token= oder sessionStorage) -> echte Daten (/data/*) nie cachen
 const HAS_TOKEN = new URLSearchParams(location.search).has('token') || !!sessionStorage.getItem('hubToken');
 const PRECACHE = [
@@ -18,6 +18,11 @@ self.addEventListener('install', e => {
       Promise.all(PRECACHE.map(u => c.add(u).catch(() => {})))
     ).then(() => self.skipWaiting())
   );
+});
+
+// v33: Seite signalisiert SKIP_WAITING -> neuer SW sofort aktiv (sonst wartet er, bis alle Tabs zu sind)
+self.addEventListener('message', e => {
+  if (e.data && e.data.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
 self.addEventListener('activate', e => {
@@ -62,10 +67,11 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // App-Shell: Navigationen network-first, Offline-Fallback auf gecachte index.html
+  // App-Shell: Navigationen network-first mit cache:'no-store' (HTTP-Cache/CDN umgehen, sonst
+  // max-age=600 auf GitHub Pages -> alte Shell bis zu 10 min), Offline-Fallback auf gecachte index.html
   if (e.request.mode === 'navigate') {
     e.respondWith(
-      fetch(e.request).then(res => {
+      fetch(e.request, { cache: 'no-store' }).then(res => {
         if (res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put('index.html', copy)); }
         return res;
       }).catch(() => caches.match('index.html').then(c => c || caches.match('./')))
