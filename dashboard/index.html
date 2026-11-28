@@ -69,8 +69,9 @@
   header .wrap { display: flex; align-items: center; justify-content: space-between; gap: 12px; height: 60px; }
   .hright { display: flex; gap: 10px; align-items: center; min-width: 0; }
   @media (max-width: 640px) { h1 span { display: none; } }
+  @media (max-width: 1100px) { .projwrap > span { display: none; } #projSel { max-width: 150px; } } /* schmaler Desktop: Projekt-Label kollabiert */
   h1 { font-size: 17px; font-weight: 650; letter-spacing: -.01em; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .badge { font-size: 11px; font-weight: 600; color: var(--muted); border: 1px solid var(--glass-border); background: var(--glass);
+  .badge { font-size: 11px; font-weight: 600; color: var(--muted); border: 1px solid var(--glass-border); background: var(--glass-strong); /* Fill auf Glas-Header — kein Glass-on-Glass (HIG) */
            border-radius: 999px; padding: 3px 10px; display: inline-flex; align-items: center; gap: 6px;
            box-shadow: inset 0 1px 0 var(--glass-hi), var(--shadow); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
   .badge .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--k1); }
@@ -88,7 +89,7 @@
     /* WICHTIG: backdrop-filter auf dem Header abschalten! backdrop-filter macht das Header-Element zum
        Containing Block fuer position:fixed-Nachfahren -> die Bottom-Tab-Bar wuerde sonst am Header kleben
        und ihn komplett ueberdecken (nur Tab-Leiste oben sichtbar). */
-    header { -webkit-backdrop-filter: none; backdrop-filter: none; }
+    header { -webkit-backdrop-filter: none; backdrop-filter: none; background: var(--bg); } /* ohne Blur: solide Flaeche, sonst unsaubere Transluzenz ueber Content */
     header .wrap { height: 56px; flex-wrap: nowrap; padding-top: 8px; padding-bottom: 8px; gap: 8px; }
     h1 { flex: 0 1 auto; }
     .hright { flex: 1 1 auto; width: auto; justify-content: flex-end; gap: 8px; }
@@ -120,6 +121,24 @@
   input[type="search"]:focus, select:focus, textarea:focus, dialog input:focus, dialog select:focus {
     outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(10,132,255,.25); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
   @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+  /* HIG Accessibility: Reduce Transparency -> Glas wird opak (Standard-Material), kein Blur */
+  @media (prefers-reduced-transparency: reduce) {
+    header, nav, .toolbar, .sheet, dialog, .login-card, .composer, .addbar, #toast, #chartTip, th, .session {
+      background: var(--card) !important; border-color: var(--border) !important;
+      -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+    .backdrop { background: rgba(0,0,0,.5) !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+    .btn, .badge, .seg { background: var(--bg) !important; }
+    .seg button.on { background: var(--card) !important; }
+  }
+  /* HIG Accessibility: Increase Contrast -> staerkere Raender, staerkerer Fokus-Ring */
+  @media (prefers-contrast: more) {
+    :root { --border: rgba(0,0,0,.38); --glass-border: rgba(0,0,0,.5); --shadow: 0 1px 3px rgba(0,0,0,.2), 0 10px 28px rgba(0,0,0,.2); }
+    :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+    .card, .btn, .msg, .doclist button, input, select, textarea, .sheet, dialog, .toolbar, nav, .badge { border-width: 1.5px; }
+  }
+  @media (prefers-contrast: more) and (prefers-color-scheme: dark) {
+    :root { --border: rgba(255,255,255,.45); --glass-border: rgba(255,255,255,.55); }
+  }
   @media (pointer: coarse) {
     nav button { padding: 10px 16px; }
     .btn { padding: 10px 16px; }
@@ -133,12 +152,14 @@
   }
   .grid { display: grid; gap: var(--sp-4); }
   .stats { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
-  .card { min-width: 0; background: var(--glass-strong); border: 1px solid var(--glass-border); border-radius: var(--radius-lg);
-          box-shadow: var(--shadow), inset 0 1px 0 var(--glass-hi);
-          -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  /* Content-Schicht = Standard-Material, NICHT Liquid Glass (HIG Materials: "Don't use Liquid Glass in the
+     content layer"). Opakere ("thicker") Materialien -> Kontrast & Legibility. Glas nur auf der funktionalen
+     Schicht (Header, Tab-Bar, Toolbar, Buttons, Sheets, Dialogs, Composer). */
+  .card { min-width: 0; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg);
+          box-shadow: var(--shadow);
           padding: var(--sp-5);
           transition: transform var(--dur) var(--ease-spring), box-shadow var(--dur) var(--ease-out); }
-  .card.lift:hover { transform: translateY(-2px); box-shadow: 0 2px 4px rgba(0,0,0,.06), 0 16px 40px rgba(0,0,0,.10), inset 0 1px 0 var(--glass-hi); }
+  .card.lift:hover { transform: translateY(-2px); box-shadow: 0 2px 4px rgba(0,0,0,.06), 0 16px 40px rgba(0,0,0,.10); }
   .card h3 { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 8px; }
   .card .big { font-size: 30px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
   .card .sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
@@ -191,11 +212,15 @@
        box-shadow: inset 0 1px 0 rgba(255,255,255,.35), 0 1px 2px rgba(0,0,0,.15); }
   .k.K1 { background: var(--k1); } .k.K2 { background: var(--k2); color: #111; } .k.K3 { background: var(--k3); color: #111; }
   .k.K4 { background: var(--k4); } .k.K5 { background: var(--k5); } .k.V { background: var(--v); }
-  .toolbar { display: flex; gap: var(--sp-3); align-items: center; margin-bottom: var(--sp-4); flex-wrap: wrap; }
-  input[type="search"], select { font: inherit; font-size: 14px; padding: var(--sp-2) var(--sp-3); border-radius: 12px;
-    border: 1px solid var(--border); background-color: var(--glass); color: var(--text);
+  /* Toolbar = funktionale Schicht -> EINE Glasflaeche (iOS 26: Bar-Items gruppieren auf Glas).
+     Controls DARIN sind solide Fills — kein Glass-on-Glass (HIG: "avoid stacking glass on glass"). */
+  .toolbar { display: flex; gap: var(--sp-2); align-items: center; margin-bottom: var(--sp-4); flex-wrap: wrap;
+    background: var(--glass); border: 1px solid var(--glass-border); border-radius: var(--radius);
     -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
-    box-shadow: inset 0 1px 0 var(--glass-hi);
+    box-shadow: var(--shadow), inset 0 1px 0 var(--glass-hi);
+    padding: var(--sp-2); }
+  input[type="search"], select { font: inherit; font-size: 14px; padding: var(--sp-2) var(--sp-3); border-radius: 12px;
+    border: 1px solid var(--border); background-color: var(--card); color: var(--text);
     transition: border-color var(--dur) var(--ease-out), box-shadow var(--dur) var(--ease-out), background-color var(--dur) var(--ease-out); }
   select { -webkit-appearance: none; appearance: none; padding-right: 32px; cursor: pointer;
     background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%2386868b' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
@@ -208,7 +233,7 @@
   .glossar .text { font-size: 14px; line-height: 1.5; }
   .chat { display: flex; flex-direction: column; gap: 12px; }
   .thread { display: flex; flex-direction: column; gap: 8px; max-height: 380px; overflow-y: auto; padding: 4px; }
-  .msg { background: var(--glass-strong); border: 1px solid var(--glass-border); border-radius: 16px; padding: var(--sp-3) var(--sp-4); font-size: 14px; max-width: 80%; box-shadow: var(--shadow), inset 0 1px 0 var(--glass-hi); animation: pageIn var(--dur) var(--ease-spring); }
+  .msg { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: var(--sp-3) var(--sp-4); font-size: 14px; max-width: 80%; box-shadow: var(--shadow); animation: pageIn var(--dur) var(--ease-spring); } /* Bubble = Content: solid (nur .msg.user ist Akzent-Fill) */
   .msg .ts { font-size: 11px; color: var(--muted); margin-bottom: var(--sp-1); }
   .msg.mine { align-self: flex-end; background: linear-gradient(180deg, var(--accent-2), var(--accent)); color: #fff; border-color: transparent; box-shadow: inset 0 1px 0 rgba(255,255,255,.3), 0 2px 8px rgba(10,132,255,.3); }
   .msg.mine .ts { color: rgba(255,255,255,.75); }
@@ -247,8 +272,8 @@
   .thread::-webkit-scrollbar { width: 8px; }
   .thread::-webkit-scrollbar-thumb { background: var(--border); border-radius: 8px; }
   .thread .empty { margin: auto; text-align: center; color: var(--muted); font-size: 13px; max-width: 340px; line-height: 1.6; padding: 24px; }
-  .daysep { align-self: center; font-size: 11px; font-weight: 600; color: var(--muted); background: var(--glass-strong); border: 1px solid var(--glass-border);
-    border-radius: 999px; padding: 4px 12px; -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
+  .daysep { align-self: center; font-size: 11px; font-weight: 600; color: var(--muted); background: var(--card); border: 1px solid var(--border);
+    border-radius: 999px; padding: 4px 12px; }
   .msg { max-width: 76%; border-radius: 18px; animation: pageIn var(--dur) var(--ease-spring); word-break: break-word; }
   .msg .who { font-size: 11px; font-weight: 700; color: var(--muted); margin-bottom: 2px; letter-spacing: .02em; }
   .msg .mtext { white-space: pre-wrap; line-height: 1.55; overflow-wrap: anywhere; } /* lange Links/JSON sprengen die Breite nicht */
@@ -277,7 +302,7 @@
   .trace { align-self: flex-start; max-width: 76%; font-size: 12px; color: var(--muted); }
   .trace summary { cursor: pointer; user-select: none; display: inline-block; font: 600 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
     color: var(--muted); padding: 4px 12px; border: 1px dashed var(--border); border-radius: 999px;
-    background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
+    background: var(--card); }
   .trace summary:hover { color: var(--text); }
   .trace pre { margin-top: 6px; max-height: 240px; overflow: auto; font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
     background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 10px; white-space: pre-wrap; word-break: break-word; color: var(--text); }
@@ -297,9 +322,9 @@
   .msg + .msg.cont { margin-top: -6px; }
   .msg.cont .who { display: none; }
   /* Segmented Control (Ziel: Lokal/Agent) + runder Send-Button (iMessage-Pattern) */
-  .seg { display: inline-flex; background: var(--glass); border: 1px solid var(--glass-border); border-radius: 999px; padding: 2px; gap: 2px; flex: none; }
+  .seg { display: inline-flex; background: var(--glass-strong); border: 1px solid var(--glass-border); border-radius: 999px; padding: 2px; gap: 2px; flex: none; } /* Fill im Glas-Sheet — kein Glass-on-Glass */
   .seg button { border: 0; background: transparent; font: inherit; font-size: 12px; font-weight: 600; color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; min-height: 28px; }
-  .seg button.on { background: var(--glass-strong); color: var(--text); box-shadow: var(--shadow); }
+  .seg button.on { background: var(--card); color: var(--text); box-shadow: var(--shadow); }
   .sendbtn { flex: none; width: 38px; height: 38px; min-height: 38px; border-radius: 50%; padding: 0; display: grid; place-items: center;
     font-size: 19px; line-height: 1; color: #fff; border: 0; background: linear-gradient(180deg, var(--accent-2), var(--accent));
     box-shadow: inset 0 1px 0 rgba(255,255,255,.35), 0 2px 6px rgba(0,122,255,.35); }
@@ -356,7 +381,10 @@
   @media (max-width: 940px) {
     /* Session-Sidebar wird auf kompakten Screens zum einblendbaren Sheet (statt die Chat-Spalte zu verdrängen) */
     .session { display: none; position: fixed; left: 12px; right: 12px; top: calc(var(--header-h-live, var(--header-h)) + env(safe-area-inset-top) + 8px);
-      z-index: 60; max-height: 72vh; max-height: 72dvh; overflow-y: auto; box-shadow: 0 24px 60px rgba(0,0,0,.35); }
+      z-index: 60; max-height: 72vh; max-height: 72dvh; overflow-y: auto;
+      background: var(--glass); border: 1px solid var(--glass-border);
+      -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+      box-shadow: 0 24px 60px rgba(0,0,0,.35), inset 0 1px 0 var(--glass-hi); } /* schwebendes Sheet = Glas (HIG: Sheets sind Glass) */
     .kommgrid.show-sess .session { display: flex; }
     .session .sheet-x { display: grid; position: absolute; top: 8px; right: 8px; z-index: 2; }
     .session { padding-top: 14px; }
@@ -391,7 +419,7 @@
     box-shadow: var(--shadow), inset 0 1px 0 var(--glass-hi); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
     opacity: 0; pointer-events: none; transition: opacity var(--dur) var(--ease-out), transform var(--dur) var(--ease-spring); }
   #toast.show { opacity: 1; transform: translate(-50%, 0); }
-  .btn { font: inherit; font-size: 13px; font-weight: 600; color: var(--text); background: var(--glass-strong); border: 1px solid var(--glass-border); border-radius: 999px; padding: var(--sp-2) var(--sp-4); cursor: pointer; box-shadow: var(--shadow), inset 0 1px 0 var(--glass-hi); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); /* iOS 26: Glas-Kapsel-Button */
+  .btn { font: inherit; font-size: 13px; font-weight: 600; color: var(--text); background: var(--glass-strong); border: 1px solid var(--glass-border); border-radius: 999px; padding: var(--sp-2) var(--sp-4); cursor: pointer; box-shadow: var(--shadow), inset 0 1px 0 var(--glass-hi); /* iOS 26: Kapsel-Button als Fill (kein eigener Blur — kein Glass-on-Glass); .btn.primary = einzige Toentung pro Bar (HIG Color) */
          transition: transform var(--dur) var(--ease-spring), background var(--dur) var(--ease-out), box-shadow var(--dur) var(--ease-out); }
   .btn:hover { background: color-mix(in srgb, var(--accent) 8%, var(--glass-strong)); }
   .btn:active { transform: scale(.97); }
@@ -486,7 +514,7 @@
   #loginErr { color: var(--k4); font-size: 13px; min-height: 1.2em; margin-top: var(--sp-2); }
   .projwrap { display: inline-flex; align-items: center; gap: 6px; margin-right: 10px; }
   .projwrap > span { font-size: 11px; color: var(--muted); font-weight: 600; }
-  #projSel { font: inherit; font-size: 13px; max-width: 210px; min-height: 32px; padding: 4px 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--card); color: var(--text); }
+  #projSel { font: inherit; font-size: 13px; max-width: 210px; min-height: 32px; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--glass-border); background: var(--glass-strong); color: var(--text); } /* Kapsel-Fill im Glas-Header */
   #projNew { min-height: 32px; padding: 4px 10px; }
   @media (max-width: 760px) { #agentGrid { grid-template-columns: 1fr !important; } .projwrap > span { display: none; } #projSel { max-width: 130px; } }
   footer { border-top: 1px solid var(--border); padding: 18px 0 calc(28px + env(safe-area-inset-bottom)); font-size: 12px; color: var(--muted); }
@@ -509,7 +537,7 @@
       <label class="projwrap" id="projWrap" style="display:none" title="Projekt = Mistral-Library (serverseitig pro Session)">
         <span>Projekt</span>
         <select id="projSel" aria-label="Projekt wählen"></select>
-        <button class="btn" id="projNew" title="Neues Projekt anlegen (neue Library + Seed-Dokumente)">＋ Neu</button>
+        <button class="btn primary" id="projNew" title="Neues Projekt anlegen (neue Library + Seed-Dokumente) — prominente Primaeraktion (HIG: eine getoente Aktion pro Bar)">＋ Neu</button>
       </label>
       <span class="badge" id="liveBadge" aria-live="polite" title="lokal"><span class="dot"></span><span id="liveLabel">lokal</span><span class="badge-detail" id="liveDetail"></span></span>
       <nav aria-label="Hauptnavigation">
@@ -522,7 +550,7 @@
         <button data-page="text" title="Text (⌘7)">Text</button>
         <button data-page="glossar" title="Glossar (⌘8)">Glossar</button>
         <button data-page="komm" title="Kommunikation (⌘9)">Kommunikation</button>
-        <button data-page="agent" title="Agent (Workflows, Live-QV, Notizen)">Agent</button>
+        <button data-page="agent" title="Agent (Workflows, Live-QV, Notizen, ⌘0)">Agent</button>
       </nav>
     </div>
   </div>
@@ -2369,6 +2397,8 @@ window.addEventListener('load', navScrollAffordance);
 navScrollAffordance();
 document.querySelectorAll('nav button').forEach(b => b.addEventListener('click', () => {
   document.querySelectorAll('nav button').forEach(x => { x.classList.toggle('active', x === b); if (x === b) x.setAttribute('aria-current', 'page'); else x.removeAttribute('aria-current'); });
+  /* aktiven Tab in der Tab-Bar zentrieren (mobil: Kapsel scrollt evtl. horizontal) */
+  if (b.scrollIntoView) b.scrollIntoView({ block: 'nearest', inline: 'center', behavior: (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) ? 'auto' : 'smooth' });
   document.querySelectorAll('section.page').forEach(s => s.classList.toggle('active', s.id === 'page-' + b.dataset.page));
   if (b.dataset.page === 'ablage') loadAblage();
   if (b.dataset.page === 'verzeichnis') loadQv();
@@ -2450,13 +2480,13 @@ document.addEventListener('keydown', e => {
   }
 });
 
-/* ---- Tastatur: ⌘/Strg+1..8 = Tab, / = Suche im aktiven Tab ---- */
+/* ---- Tastatur: ⌘/Strg+1..9,0 = Tab (0 = Agent, 10. Tab), / = Suche im aktiven Tab ---- */
 document.addEventListener('keydown', e => {
   const ae = document.activeElement;
   const typing = ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName);
-  if ((e.metaKey || e.ctrlKey) && /^[1-9]$/.test(e.key)) {
+  if ((e.metaKey || e.ctrlKey) && /^[0-9]$/.test(e.key)) {
     const btns = document.querySelectorAll('nav button');
-    const b = btns[Number(e.key) - 1];
+    const b = btns[e.key === '0' ? 9 : Number(e.key) - 1];   /* ⌘0 = 10. Tab (Agent) */
     if (b) { e.preventDefault(); b.click(); }
     return;
   }

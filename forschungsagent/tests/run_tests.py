@@ -1182,7 +1182,7 @@ class PwaAppTests(unittest.TestCase):
         # mobil: schlanker Header + Bottom-Tab-Bar
         self.assertIn('header .wrap { height: 56px; flex-wrap: nowrap;', s)
         # backdrop-filter am Header MUSS mobil aus sein, sonst ist der Header Containing-Block der fixed Tab-Bar
-        self.assertIn('header { -webkit-backdrop-filter: none; backdrop-filter: none; }', s)
+        self.assertIn('header { -webkit-backdrop-filter: none; backdrop-filter: none; background: var(--bg); }', s)
         # iOS 26 Liquid Glass: schwebende Glas-Kapsel als Tab-Bar (inset, 999px, blur, specular)
         self.assertIn('.hright nav { position: fixed; left: 12px; right: 12px; bottom: calc(8px + env(safe-area-inset-bottom)); z-index: 20;', s)
         self.assertIn('max-width: none; border-radius: 999px; border: 1px solid var(--glass-border);', s)
@@ -1576,9 +1576,9 @@ class PwaAppTests(unittest.TestCase):
         # Mobile: Agent-Grid kollabiert auf 1 Spalte
         self.assertIn('@media (max-width: 760px) { #agentGrid { grid-template-columns: 1fr !important; }', s)
 
-    def test_sw_v31_app_shell(self):
+    def test_sw_v32_app_shell(self):
         sw = self._read('sw.js')
-        self.assertIn("const CACHE = 'research-hub-v31';", sw)
+        self.assertIn("const CACHE = 'research-hub-v32';", sw)
         self.assertIn('HAS_TOKEN', sw)                               # /data/* mit Token nie cachen
         self.assertIn("url.pathname.startsWith('/data/')", sw)
         self.assertIn('icon-512-maskable.png', sw)                 # maskable Icon precachen
@@ -1803,6 +1803,93 @@ class StudioAppTests(unittest.TestCase):
         self.assertIn('_env_dir = os.environ.get("DASHBOARD_DIR")', src)
         # eager Default-Auswertung (IndexError bei /app/main.py) darf nicht mehr vorkommen
         self.assertNotIn('os.environ.get("DASHBOARD_DIR", str(HERE.parents[3]', src)
+
+
+class LiquidGlassAuditTests(unittest.TestCase):
+    """iOS-26-Liquid-Glass-Audit (HIG Materials/Color/Tab bars/Toolbars + WWDC25 219/356;
+    Volldoku in Hub-Uebergabe: 2026-11-28-apple-liquid-glass-hig-recherche.md).
+
+    Kernregeln: Glas NUR auf der funktionalen Schicht (Header/Tab-Bar/Toolbar/Buttons/Sheets/Dialogs/Composer),
+    nie im Content (Cards, Bubbles, Dayseps, Traces); kein Glass-on-Glass (Controls darin = solide Fills);
+    Buttons = Kapsel (999px); eine getonte Primaeraktion pro Bar; a11y-Overrides fuer
+    reduced-transparency / increased-contrast / reduced-motion."""
+
+    def _repo(self):
+        return os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + '/..'
+
+    def _read(self, name):
+        return open(os.path.join(self._repo(), 'dashboard', name), encoding='utf-8').read()
+
+    def _rule(self, s, sel):
+        i = s.find(sel)
+        self.assertGreaterEqual(i, 0, 'Regel fehlt: ' + sel)
+        return s[i:s.find('}', i)]
+
+    def test_content_layer_kein_glass(self):
+        s = self._read('index.html')
+        card = self._rule(s, '.card { min-width: 0;')
+        self.assertIn('background: var(--card)', card)
+        self.assertNotIn('backdrop-filter', card)
+        self.assertNotIn('var(--glass', card)
+        msg = self._rule(s, '.msg { background:')
+        self.assertIn('var(--card)', msg)
+        self.assertNotIn('backdrop-filter', msg)
+        self.assertNotIn('backdrop-filter', self._rule(s, '.daysep {'))
+        trace = self._rule(s, '.trace summary {')
+        self.assertNotIn('backdrop-filter', trace)
+        self.assertIn('var(--card)', trace)
+
+    def test_funktionale_schicht_glas(self):
+        s = self._read('index.html')
+        for sel in ('header { position: sticky', 'nav { display: flex', '.toolbar { display: flex',
+                    '.sheet { position: fixed', 'dialog { border:', '.hright nav { position: fixed'):
+            self.assertIn('backdrop-filter: var(--glass-blur)', self._rule(s, sel), sel)
+        navmob = self._rule(s, '.hright nav { position: fixed')
+        self.assertIn('left: 12px; right: 12px; bottom: calc(8px + env(safe-area-inset-bottom))', navmob)
+        self.assertIn('border-radius: 999px', navmob)
+        act = self._rule(s, 'nav button.active {')
+        self.assertIn('color: var(--accent)', act)                      # aktiver Tab in Akzentfarbe
+        self.assertIn('var(--accent)', act.split('background:')[1])     # ... als akzent-getoente Kapsel
+
+    def test_kein_glass_auf_glass_controls_sind_fills(self):
+        s = self._read('index.html')
+        btn = self._rule(s, '.btn { font: inherit;')
+        self.assertIn('border-radius: 999px', btn)          # Kapsel (iOS 26)
+        self.assertNotIn('backdrop-filter', btn)            # Fill, kein eigener Blur
+        inp = self._rule(s, 'input[type="search"], select {')
+        self.assertIn('background-color: var(--card)', inp)
+        self.assertNotIn('backdrop-filter', inp)
+        seg = self._rule(s, '.seg { display: inline-flex;')
+        self.assertIn('var(--glass-strong)', seg)
+        self.assertNotIn('backdrop-filter', seg)
+        self.assertIn('var(--glass-strong)', self._rule(s, '.badge { font-size: 11px;'))
+        self.assertIn('var(--glass-strong)', self._rule(s, '#projSel { font: inherit;'))
+        self.assertIn('border-radius: 999px', self._rule(s, '#projSel { font: inherit;'))
+
+    def test_a11y_overrides(self):
+        s = self._read('index.html')
+        self.assertIn('@media (prefers-reduced-motion: reduce)', s)
+        self.assertIn('@media (prefers-reduced-transparency: reduce)', s)
+        rt = s.split('@media (prefers-reduced-transparency: reduce)')[1][:900]
+        self.assertIn('backdrop-filter: none !important', rt)
+        self.assertIn('background: var(--card) !important', rt)
+        self.assertIn('@media (prefers-contrast: more)', s)
+        ct = s.split('@media (prefers-contrast: more)')[1][:400]
+        self.assertIn('outline: 3px solid var(--accent)', ct)
+        self.assertIn('@media (prefers-contrast: more) and (prefers-color-scheme: dark)', s)
+
+    def test_funktional_kohaerent(self):
+        s = self._read('index.html')
+        self.assertEqual(len(re.findall(r'<button data-page="', s)), 10)
+        self.assertIn('title="Agent (Workflows, Live-QV, Notizen, ⌘0)"', s)
+        self.assertIn("/^[0-9]$/.test(e.key)", s)
+        self.assertIn("e.key === '0' ? 9 : Number(e.key) - 1", s)
+        self.assertIn("inline: 'center'", s)                 # aktiver Tab wird in der Bar zentriert
+        self.assertIn('<button class="btn primary" id="projNew"', s)   # eine prominente Primaeraktion im Header
+        self.assertIn('.btn.primary { background: linear-gradient(180deg, var(--accent-2), var(--accent));', s)
+        self.assertEqual(s.count('<script'), 1)              # weiterhin self-contained
+        sw = self._read('sw.js')
+        self.assertIn("const CACHE = 'research-hub-v32';", sw)
 
 
 if __name__ == "__main__":
