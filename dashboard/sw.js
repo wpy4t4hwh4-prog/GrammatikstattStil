@@ -2,7 +2,7 @@
    Strategie: /api/* = network-only und NIEMALS cachen (Session-/Passwort-Modus: API-Antworten
    duerfen nicht im SW-Cache landen); /data/* = nur cachen ohne Token;
    statische Assets = cache-first mit Runtime-Caching. Version bei Aenderungen erhoehen. */
-const CACHE = 'research-hub-v31';
+const CACHE = 'research-hub-v32'; // v32: HIG-Audit — Content-Layer ohne Glas (Cards/Bubbles solid), Toolbar als Glas-Container, a11y-Overrides (reduced-transparency/contrast)
 // Token aktiv (URL ?token= oder sessionStorage) -> echte Daten (/data/*) nie cachen
 const HAS_TOKEN = new URLSearchParams(location.search).has('token') || !!sessionStorage.getItem('hubToken');
 const PRECACHE = [

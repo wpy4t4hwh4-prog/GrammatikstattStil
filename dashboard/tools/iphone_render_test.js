@@ -106,7 +106,18 @@ function makeDom(url) {
   assert(!!d.querySelector('#liveBadge #liveDetail'), 'Badge: kompaktes #liveLabel + #liveDetail (Stats nur Desktop)');
   assert(html.includes('.hright nav { position: fixed; left: 12px; right: 12px; bottom: calc(8px + env(safe-area-inset-bottom)); z-index: 20;'), 'iPhone: Tab-Bar als schwebende Glas-Kapsel (iOS 26 Liquid Glass)');
   assert(html.includes('max-width: none; border-radius: 999px; border: 1px solid var(--glass-border);'), 'iPhone: Tab-Bar-Kapsel mit Glas-Rand (999px)');
-  assert(html.includes('header { -webkit-backdrop-filter: none; backdrop-filter: none; }'), 'iPhone: backdrop-filter mobil AUS (sonst klebt die fixed Tab-Bar am Header statt am Viewport)');
+  assert(html.includes('header { -webkit-backdrop-filter: none; backdrop-filter: none; background: var(--bg); }'), 'iPhone: backdrop-filter mobil AUS + solide Flaeche (sonst klebt die fixed Tab-Bar am Header statt am Viewport)');
+  // HIG-Audit 2026-11-28 (Volldoku: Hub-Uebergabe 2026-11-28-apple-liquid-glass-hig-recherche.md)
+  assert(/\.card \{[^}]*background: var\(--card\)[^}]*\}/.test(html) && !/\.card \{[^}]*backdrop-filter/.test(html), 'HIG: Card = solides Standard-Material — KEIN Glass in der Content-Schicht');
+  assert(/\.btn \{[^}]*border-radius: 999px[^}]*\}/.test(html) && !/\.btn \{[^}]*backdrop-filter/.test(html), 'HIG: Buttons = Kapsel-Fill (999px, kein eigener Blur — kein Glass-on-Glass)');
+  assert(/\.toolbar \{[^}]*backdrop-filter: var\(--glass-blur\)[^}]*\}/.test(html), 'HIG: Toolbar = eine Glasflaeche (funktionale Schicht)');
+  assert(/input\[type="search"\], select \{[^}]*background-color: var\(--card\)[^}]*\}/.test(html) && !/input\[type="search"\], select \{[^}]*backdrop-filter/.test(html), 'HIG: Inputs im Toolbar = solide Fills');
+  assert(/\.msg \{ background: var\(--card\)/.test(html), 'HIG: Chat-Bubbles (Content) solid — nur .msg.user Akzent');
+  assert(html.includes('@media (prefers-reduced-transparency: reduce)'), 'HIG a11y: Reduce-Transparency-Override (Glas -> opak)');
+  assert(html.includes('@media (prefers-contrast: more)'), 'HIG a11y: Increase-Contrast-Override (staerkere Raender/Fokus)');
+  assert(html.includes('@media (prefers-reduced-motion: reduce)'), 'HIG a11y: Reduce-Motion-Override');
+  assert(/nav button\.active \{[^}]*color: var\(--accent\)/.test(html), 'HIG: aktiver Tab in Akzentfarbe (einzige Toentung in der Bar)');
+  assert(html.includes('class="btn primary" id="projNew"'), 'HIG: eine prominente Primaeraktion im Header (＋ Neu)');
   assert(!!d.querySelector('#page-agent'), 'Agent-Seite vorhanden');
   assert(!!d.querySelector('#page-agent #wfRun') && !!d.querySelector('#page-agent #noteSend') && !!d.querySelector('#page-agent #btnQvLive'), 'Agent-Tab: Run/Notiz/QV-live Buttons');
   assert(/@media \(max-width: 760px\) \{ #agentGrid \{ grid-template-columns: 1fr !important; \}/.test(html), 'Agent-Grid mobil 1 Spalte');
