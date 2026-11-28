@@ -1576,9 +1576,9 @@ class PwaAppTests(unittest.TestCase):
         # Mobile: Agent-Grid kollabiert auf 1 Spalte
         self.assertIn('@media (max-width: 760px) { #agentGrid { grid-template-columns: 1fr !important; }', s)
 
-    def test_sw_v32_app_shell(self):
+    def test_sw_v33_app_shell(self):
         sw = self._read('sw.js')
-        self.assertIn("const CACHE = 'research-hub-v32';", sw)
+        self.assertIn("const CACHE = 'research-hub-v33';", sw)
         self.assertIn('HAS_TOKEN', sw)                               # /data/* mit Token nie cachen
         self.assertIn("url.pathname.startsWith('/data/')", sw)
         self.assertIn('icon-512-maskable.png', sw)                 # maskable Icon precachen
@@ -1889,7 +1889,30 @@ class LiquidGlassAuditTests(unittest.TestCase):
         self.assertIn('.btn.primary { background: linear-gradient(180deg, var(--accent-2), var(--accent));', s)
         self.assertEqual(s.count('<script'), 1)              # weiterhin self-contained
         sw = self._read('sw.js')
-        self.assertIn("const CACHE = 'research-hub-v32';", sw)
+        self.assertIn("const CACHE = 'research-hub-v33';", sw)
+
+    def test_sw_update_fix_v33(self):
+        """SW-Update robust gegen HTTP-Cache/CDN (GitHub Pages: max-age=600): versionierte SW-URL
+        (?v=N), updateViaCache:'none', SKIP_WAITING per Message, controllerchange -> einmaliges Reload,
+        Navigationen mit cache:'no-store'. SW_VER in index.html muss zur CACHE-Version in sw.js passen."""
+        s = self._read('index.html')
+        sw = self._read('sw.js')
+        self.assertIn("updateViaCache: 'none'", s)
+        self.assertIn("'sw.js?v=' + SW_VER", s)
+        self.assertIn('controllerchange', s)
+        self.assertIn('__swReloaded', s)
+        self.assertIn("postMessage({ type: 'SKIP_WAITING' })", s)
+        self.assertIn("'SKIP_WAITING'", sw)
+        self.assertIn("{ cache: 'no-store' }", sw)          # Navigationen umgehen HTTP-Cache
+        m_html = re.search(r'const SW_VER = (\d+);', s)
+        m_sw = re.search(r'research-hub-v(\d+)', sw)
+        self.assertIsNotNone(m_html)
+        self.assertIsNotNone(m_sw)
+        self.assertEqual(m_html.group(1), m_sw.group(1))     # SW_VER == CACHE-Version
+        # App-Server stellt statische Dateien ohnehin no-store (kein HTTP-Cache auf der App-Origin)
+        serve = self._read('serve.py')
+        file_block = serve.split('def _file(self, path):')[1].split('def _download')[0]
+        self.assertIn('Cache-Control", "no-store"', file_block)
 
 
 if __name__ == "__main__":

@@ -2464,7 +2464,16 @@ boot();
 
 /* ---- PWA: Service Worker registrieren (nur http/https, nicht file://) ---- */
 if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
-  navigator.serviceWorker.register('sw.js').catch(() => {});
+  // v33 SW-Update-Fix: versionierte SW-URL (?v=N umgeht HTTP-Cache/CDN, z. B. Pages max-age=600)
+  // + updateViaCache:'none' + SKIP_WAITING + einmaliges Reload bei controllerchange ->
+  // neue App-Shell landet ohne manuelles Neuladen. SW_VER muss zur CACHE-Version in sw.js passen (Test).
+  const SW_VER = 33;
+  navigator.serviceWorker.register('sw.js?v=' + SW_VER, { updateViaCache: 'none' }).then(reg => {
+    if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!window.__swReloaded) { window.__swReloaded = true; location.reload(); }
+    });
+  }).catch(() => {});
 }
 
 /* ---- lange Zellen per Klick auf-/zuklappen (nicht bei Link-Klick) ---- */
